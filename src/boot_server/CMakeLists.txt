@@ -1,0 +1,5 @@
+message(STATUS "Compiling with the default server port set to ${SERVER_PORT}")
+add_executable(boot_server main.c server.c sp_manager.c server_sock.c)
+target_link_libraries(boot_server PUBLIC fsnp struct)
+target_compile_definitions(boot_server PRIVATE SERVER_PORT=${SERVER_PORT})
+target_compile_options(boot_server PRIVATE ${COMMON_COMPILER_FLAGS})

@@ -1,0 +1,5 @@
+This files are taken from the libhl library (https://github.com/xant/libhl).
+
+I've only fixed the header position and switched the compilation from
+gnu autotools to cmake, keeping all the compiler flags used in the automake
+file.

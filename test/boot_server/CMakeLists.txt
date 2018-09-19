@@ -1,0 +1,2 @@
+add_executable(boot_query_test boot_server_test.c)
+target_link_libraries(boot_query_test PUBLIC fsnp struct)
