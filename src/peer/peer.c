@@ -102,7 +102,6 @@ void rm_peer_sock(void)
 	}
 
 	if (state.fds[POLL_PEER_TCP].fd != 0) {
-
 		close(state.fds[POLL_PEER_TCP].fd);
 
 		state.fds[POLL_PEER_TCP].fd = 0;
@@ -290,22 +289,32 @@ static void setup_poll(void)
 
 static void peer_sock_event(short revents)
 {
+	bool print_peer = false;
+
 	if (revents & POLLERR) {
 		printf("An exceptional error has occurred on the peer socket. Try to"
 		       " reconnect with a superpeer\n");
 		rm_peer_sock();
+		print_peer = true;
 	} else if (revents & POLLHUP) {
 		printf("The superpeer has disconnected itself.\nPlease join another"
 		       " one\n");
 		rm_peer_sock();
+		print_peer = true;
 	} else if (revents & POLLIN || revents & POLLRDBAND || revents & POLLPRI) {
 		fprintf(stderr, "pollin/pollrdband/pollpri\n");
 	} else {
 #ifdef FSNP_DEBUG
 		fprintf(stderr, "peer TCP. Case not covered!\n");
 		printf("revents: %hd\n", revents);
+		print_peer = true;
 #endif
 		rm_peer_sock();
+	}
+
+	if (print_peer) {
+		printf("\nPeer: ");
+		fflush(stdout);
 	}
 }
 
@@ -314,19 +323,23 @@ static void handle_poll_ret(int ret)
 	if (ret > 0) {
 		if (state.fds[POLL_STDIN].revents) {
 			stdin_event();
+			state.fds[POLL_STDIN].revents = 0;
 		}
 
 		if (!is_superpeer()) {
 			if (state.fds[POLL_PEER_TCP].revents) {
 				peer_sock_event(state.fds[POLL_PEER_TCP].revents);
+				state.fds[POLL_PEER_TCP].revents = 0;
 			}
 		} else {
 			if (state.fds[POLL_SP_UDP].revents) {
 				sp_udp_sock_event(state.fds[POLL_SP_UDP].revents);
+				state.fds[POLL_SP_UDP].revents = 0;
 			}
 
 			if (state.fds[POLL_SP_TCP].revents) {
 				sp_tcp_sock_event(state.fds[POLL_SP_TCP].revents);
+				state.fds[POLL_SP_TCP].revents = 0;
 			}
 		}
 

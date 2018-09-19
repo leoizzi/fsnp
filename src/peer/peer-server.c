@@ -105,6 +105,8 @@ static void first_peer(int sock)
 	}
 
 	printf("\nYou're the first peer in the network!\n");
+	printf("\nPeer: ");
+	fflush(stdout);
 }
 
 /*

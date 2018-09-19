@@ -48,7 +48,6 @@ void stop_update_thread(void)
 		pthread_mutex_lock(&pd.mtx);
 		pd.closing = true;
 		pthread_mutex_unlock(&pd.mtx);
-		pthread_mutex_destroy(&pd.mtx);
 		pd.is_running = false;
 	}
 }
@@ -154,6 +153,8 @@ static void periodic_update(void *data)
 		unslept.tv_sec = SEC_TO_SLEEP;
 		unslept.tv_nsec = 0;
 	}
+
+	pthread_mutex_destroy(&pd.mtx);
 }
 
 #undef SEC_TO_SLEEP
@@ -292,6 +293,8 @@ static int read_join_res(int sock)
 
 	free(msg);
 	printf("Superpeer join successfully!\n");
+	printf("\nPeer: ");
+	fflush(stdout);
 
 #ifndef FSNP_MEM_DEBUG
 	// launch the periodic update thread
