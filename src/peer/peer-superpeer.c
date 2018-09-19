@@ -309,6 +309,7 @@ static int read_join_res(int sock)
 	pd.is_running = true;
 	start_new_thread(periodic_update, NULL, "periodic_update");
 #endif
+	return 0;
 }
 
 void join_sp(const struct fsnp_query_res *query_res)
