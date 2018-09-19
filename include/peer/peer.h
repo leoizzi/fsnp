@@ -46,27 +46,21 @@ int get_peer_sock(void);
 void rm_peer_sock(void);
 
 /*
- * Add to poll the superpeer sockets
+ * Add to poll the superpeer TCP socket
  */
-void add_sp_socks(int udp_sock, int tcp_sock);
+void add_poll_sp_sock(int tcp_sock);
 
 /*
- * Remove from the poll the superpeers socket. The descriptors will
+ * Remove from the poll the superpeer's socket. The descriptor will
  * be closed.
  */
-void rm_sp_socks(void);
+void rm_poll_sp_sock(void);
 
 /*
  * Get the TCP superpeer's socket. If the socket is unset the function will
  * return 0
  */
 int get_sp_tcp_sock(void);
-
-/*
- * Get the UDP superpeer's socket. If the socket is unset the function will
- * return 0
- */
-int get_sp_udp_sock(void);
 
 /*
  * Return true if the peer is also a superpeer, false otherwise

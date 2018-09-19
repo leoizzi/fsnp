@@ -35,7 +35,7 @@
 
 #include "fsnp/fsnp.h"
 
-#define POLLFD_NUM 3
+#define POLLFD_NUM 2
 
 #define PEER_POLLFD_NUM 2
 #define SP_POLLFD_NUM POLLFD_NUM
@@ -43,7 +43,6 @@
 #define POLL_STDIN 0
 #define POLL_PEER_TCP 1
 #define POLL_SP_TCP 1
-#define POLL_SP_UDP 2
 
 struct state {
 	bool should_exit;
@@ -53,6 +52,7 @@ struct state {
 	in_port_t tcp_sp_port;
 	in_port_t udp_sp_port;
 	bool localhost;
+	bool sp;
 };
 
 static struct state state;
@@ -120,7 +120,7 @@ void rm_peer_sock(void)
 
 }
 
-void add_sp_socks(int udp_sock, int tcp_sock)
+void add_poll_sp_sock(int tcp_sock)
 {
 	if (pthread_mutex_lock(&state.state_mtx)) {
 		fprintf(stderr, err_lock_msg);
@@ -128,8 +128,7 @@ void add_sp_socks(int udp_sock, int tcp_sock)
 
 	state.fds[POLL_SP_TCP].fd = tcp_sock;
 	state.fds[POLL_SP_TCP].events = POLLIN | POLLPRI;
-	state.fds[POLL_SP_UDP].fd = udp_sock;
-	state.fds[POLL_SP_UDP].events = POLLIN | POLLPRI;
+	state.sp = true;
 
 	state.num_fd = SP_POLLFD_NUM; // add the sockets from the poll count
 
@@ -138,7 +137,7 @@ void add_sp_socks(int udp_sock, int tcp_sock)
 	}
 }
 
-void rm_sp_socks(void)
+void rm_poll_sp_sock(void)
 {
 	if (!is_superpeer()) { // it's here to avoid to lock twice the same mtx
 		return;
@@ -148,16 +147,14 @@ void rm_sp_socks(void)
 		fprintf(stderr, err_lock_msg);
 	}
 
-	close(state.fds[POLL_SP_UDP].fd);
 	close(state.fds[POLL_SP_TCP].fd);
 
-	state.fds[POLL_SP_UDP].fd = 0;
-	state.fds[POLL_SP_UDP].events = 0;
 	state.fds[POLL_SP_TCP].fd = 0;
 	state.fds[POLL_SP_TCP].events = 0;
+	state.sp = false;
 
 	// remove the sockets from the poll interface
-	state.num_fd = SP_POLLFD_NUM - 2;
+	state.num_fd = SP_POLLFD_NUM - 1;
 
 	if (pthread_mutex_unlock(&state.state_mtx)) {
 		fprintf(stderr, err_unlock_msg);
@@ -186,25 +183,6 @@ int get_sp_tcp_sock(void)
 	return sock;
 }
 
-int get_sp_udp_sock(void)
-{
-	if (!is_superpeer()) {
-		return 0;
-	}
-
-	if (pthread_mutex_lock(&state.state_mtx)) {
-		fprintf(stderr, err_lock_msg);
-	}
-
-	int sock = state.fds[POLL_SP_UDP].fd;
-
-	if (pthread_mutex_unlock(&state.state_mtx)) {
-		fprintf(stderr, err_unlock_msg);
-	}
-
-	return sock;
-}
-
 bool is_superpeer(void)
 {
 	bool res;
@@ -213,7 +191,7 @@ bool is_superpeer(void)
 		fprintf(stderr, err_lock_msg);
 	}
 
-	res = state.num_fd == SP_POLLFD_NUM ? true : false;
+	res = state.sp;
 
 	if (pthread_mutex_unlock(&state.state_mtx)) {
 		fprintf(stderr, err_unlock_msg);
@@ -332,11 +310,6 @@ static void handle_poll_ret(int ret)
 				state.fds[POLL_PEER_TCP].revents = 0;
 			}
 		} else {
-			if (state.fds[POLL_SP_UDP].revents) {
-				sp_udp_sock_event(state.fds[POLL_SP_UDP].revents);
-				state.fds[POLL_SP_UDP].revents = 0;
-			}
-
 			if (state.fds[POLL_SP_TCP].revents) {
 				sp_tcp_sock_event(state.fds[POLL_SP_TCP].revents);
 				state.fds[POLL_SP_TCP].revents = 0;
@@ -430,4 +403,3 @@ int peer_main(bool localhost)
 #undef POLL_STDIN
 #undef POLL_PEER_TCP
 #undef POLL_SP_TCP
-#undef POLL_SP_UDP

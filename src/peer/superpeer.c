@@ -26,6 +26,7 @@
 #include "peer/file_cache.h"
 #include "peer/thread_manager.h"
 #include "peer/superpeer-peer.h"
+#include "peer/superpeer-superpeer.h"
 
 #include "fsnp/fsnp.h"
 
@@ -80,8 +81,16 @@ static bool create_sp_socks(void)
 		return false;
 	}
 
+	ret = enter_sp_network(udp);
+	if (ret < 0) {
+		fprintf(stderr, "Unable to enter the superpeer network\n");
+		close(tcp);
+		close(udp);
+		return false;
+	}
+
 	rm_peer_sock();
-	add_sp_socks(udp, tcp);
+	add_poll_sp_sock(tcp);
 	set_udp_sp_port(udp_port);
 	set_tcp_sp_port(tcp_port);
 	return true;
@@ -214,9 +223,10 @@ bool enter_sp_mode(void)
 
 void exit_sp_mode(void)
 {
+	exit_sp_network();
 	close_file_cache();
 	// TODO: if there are threads communicating with peers join them before going on
-	rm_sp_socks();
+	rm_poll_sp_sock();
 	list_destroy(known_peers);
 	known_peers = NULL;
 }
