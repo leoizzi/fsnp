@@ -111,7 +111,7 @@ static int list_print_iterator(void *val, size_t idx, void *user)
 
 	sp->addr.s_addr = htonl(sp->addr.s_addr);
 	printf("%-16s | %-16hu | %-16hu\n", inet_ntoa(sp->addr), sp->p_port, sp->sp_port);
-	return 1; // Continue the iteration
+	return GO_AHEAD; // Continue the iteration
 }
 
 static void print_sp(void)

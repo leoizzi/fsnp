@@ -206,6 +206,10 @@ int list_move_value(linked_list_t *list, size_t srcPos, size_t dstPos);
  */
 int list_swap_values(linked_list_t *list, size_t pos1, size_t pos2);
 
+#define GO_AHEAD 1
+#define STOP 0
+#define REMOVE_AND_GO -1
+#define REMOVE_AND_STOP -2
 
 /**
  * @brief Callback for the value iterator

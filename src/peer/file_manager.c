@@ -285,8 +285,6 @@ bool shared_dir_is_set(void)
 	return shared.is_set;
 }
 
-#define GO_AHEAD 1
-
 /*
  * List iterator for copying all the keys inside the array to be returned
  */
@@ -298,8 +296,6 @@ int key_copy_list_iterator(void *item, size_t idx, void *user)
 	memcpy(keys[idx], k->data, k->len);
 	return GO_AHEAD;
 }
-
-#undef GO_AHEAD
 
 sha256_t *retrieve_all_keys(uint32_t *num)
 {
@@ -336,9 +332,6 @@ sha256_t *retrieve_all_keys(uint32_t *num)
 	return keys;
 }
 
-#define GO_AHEAD 1
-#define DELETE_AND_GO_AHEAD -1
-
 struct search_delete_file_data {
 	hashtable_t *table;
 	int changes;
@@ -363,12 +356,9 @@ static int search_delete_file_iterator(void *item, size_t idx, void *user)
 		sha256(entry->name, entry->name_len, key);
 		ht_delete(d->table, key, sizeof(key), NULL, NULL);
 		d->changes = NEW;
-		return DELETE_AND_GO_AHEAD;
+		return REMOVE_AND_GO;
 	}
 }
-
-#undef GO_AHEAD
-#undef DELETE_AND_GO_AHEAD
 
 bool update_file_manager(void)
 {

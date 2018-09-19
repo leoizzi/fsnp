@@ -68,9 +68,6 @@ int init_thread_manager(void)
 	return 0;
 }
 
-#define GO_AHEAD 1
-#define REMOVE_AND_STOP -2
-
 /*
  * Iterator callback for searching threads that need to be removed from the
  * list
@@ -92,9 +89,6 @@ static int find_n_remove_callback(void *item, size_t idx, void *user)
 		return GO_AHEAD;
 	}
 }
-
-#undef GO_AHEAD
-#undef REMOVE_AND_STOP
 
 /*
  * Entry point for all the threads spawned by the thread manager.
@@ -162,8 +156,6 @@ void close_thread_manager(void)
 	list_destroy(closed_threads);
 }
 
-#define REMOVE_AND_GO -1
-
 /*
  * Iterator callback for joining threads
  */
@@ -182,8 +174,6 @@ static int join_callback(void *item, size_t idx, void *user)
 #endif
 	return REMOVE_AND_GO;
 }
-
-#undef REMOVE_AND_GO
 
 void join_threads_if_any(void)
 {

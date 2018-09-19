@@ -27,11 +27,6 @@
 
 #define MAX_SP 10
 
-#define GO_AHEAD 1
-#define STOP 0
-#define REMOVE_AND_GO -1
-#define REMOVE_AND_STOP -2
-
 static linked_list_t *sp_list = NULL;
 pthread_mutex_t sp_mtx;
 
@@ -225,10 +220,5 @@ void unlock_sp_list(void)
 		exit(EXIT_FAILURE);
 	}
 }
-
-#undef GO_AHEAD
-#undef STOP
-#undef REMOVE_AND_GO
-#undef REMOVE_AND_STOP
 
 #undef MAX_SP

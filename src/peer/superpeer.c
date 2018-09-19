@@ -87,9 +87,6 @@ static bool create_sp_socks(void)
 	return true;
 }
 
-#define GO_AHEAD 1
-#define STOP 0
-
 static int peer_already_known(void *item, size_t idx, void *user)
 {
 	struct peer_info *peer = (struct peer_info *)item;
@@ -105,9 +102,6 @@ static int peer_already_known(void *item, size_t idx, void *user)
 
 	return GO_AHEAD;
 }
-
-#undef GO_AHEAD
-#undef STOP
 
 /*
  * Accept a new peer, establishing a TCP connection with him. Then add
