@@ -64,6 +64,10 @@ static void send_update_msg(void)
 	int sock = 0;
 	fsnp_err_t err;
 
+#ifdef FSNP_DEBUG
+	printf("Sending an update message\n");
+#endif
+
 	keys = retrieve_all_keys(&num_k);
 	if (!keys) {
 #ifdef FSNP_DEBUG
@@ -89,6 +93,10 @@ static void send_update_msg(void)
 		fsnp_print_err_msg(err);
 #endif
 	}
+
+#ifdef FSNP_DEBUG
+	printf("Update message successfully sent");
+#endif
 
 	free(update);
 }

@@ -59,10 +59,11 @@ static void free_callback(void *data)
 }
 
 /*
- * Create the SHA-256 key for the hash by the name and add it to the table
+ * Add the file to the table. If 'sha' is NULL the key will be calculated by
+ * this function
  */
 static void add_file_to_table(hashtable_t *hashtable, const char *name,
-                              size_t name_len, const char *path)
+							  size_t name_len, const char *path, sha256_t sha)
 {
 	sha256_t key;
 	struct h_entry *e = NULL;
@@ -73,7 +74,12 @@ static void add_file_to_table(hashtable_t *hashtable, const char *name,
 		return;
 	}
 
-	sha256(name, name_len, key);
+	if (sha) {
+		memcpy(key, sha, sizeof(sha256_t));
+	} else {
+		sha256(name, name_len, key);
+	}
+
 	strncpy(e->name, name, name_len);
 	strncpy(e->path, path, PATH_MAX);
 	e->name_len = name_len;
@@ -119,7 +125,7 @@ static int check_if_known(hashtable_t *hashtable, const char *name,
 		entry->found = true;
 		return OK;
 	} else if (ret == 0) { // the key doesn't exists
-		add_file_to_table(hashtable, name, name_len, path);
+		add_file_to_table(hashtable, name, name_len, path, key);
 		return NEW;
 	} else { // error
 		return ERR;
@@ -140,7 +146,7 @@ static int parse_dir(hashtable_t *hashtable, const char *path, bool first_time)
 	struct dirent *dirent = NULL;
 	struct stat s;
 	int ret = 0;
-	int res = 0;
+	int res = OK;
 	int prev_res = OK;
 	char filename[PATH_MAX];
 	size_t name_len = 0;
@@ -178,20 +184,24 @@ static int parse_dir(hashtable_t *hashtable, const char *path, bool first_time)
 
 		if (mode == S_IFREG) {
 			if (first_time) {
-				add_file_to_table(hashtable, dirent->d_name, name_len, path);
+				add_file_to_table(hashtable, dirent->d_name, name_len, path,
+				                  NULL);
 			} else {
 				prev_res = res;
 				res = check_if_known(hashtable, dirent->d_name, name_len, path);
 				/* HACK: this is ugly, but it's needed for avoiding that the
-				 * recursion could wrongly return OK instead of NEW if something
-				 * changed at the beginning */
+				 * recursion could wrongly return OK instead of NEW */
 				if (res == OK) {
-					res = prev_res == NEW ? NEW : OK;
+					res = prev_res;
 				}
 			}
 		} else if (mode == S_IFDIR) {
-			res = parse_dir(hashtable, filename, NULL); // recursion step
-			if (res == ERR) {
+			prev_res = res;
+			res = parse_dir(hashtable, filename, first_time); // recursion step
+			/* HACK: same HACK as for the file */
+			if (res == OK) {
+				res = prev_res;
+			} else if (res == ERR) {
 				break;
 			}
 		} else { // avoid symlink and other weird stuff...
