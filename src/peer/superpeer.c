@@ -161,7 +161,11 @@ static void accept_peer(void)
 	peer_info->addr.ip = addr.sin_addr.s_addr;
 	peer_info->addr.port = addr.sin_port;
 	peer_info->sock = peer_sock;
-	list_push_value(known_peers, peer_info);
+	ret = list_push_value(known_peers, peer_info);
+	if (ret < 0) {
+		fprintf(stderr, "Unable to add the peer to the known_peer_list\n");
+	}
+	
 	ret = start_new_thread(sp_tcp_thread, peer_info, "sp_tcp_thread");
 	if (ret < 0) {
 		close(peer_sock);
