@@ -181,4 +181,10 @@ static int join_callback(void *item, size_t idx, void *user)
 void join_threads_if_any(void)
 {
 	list_foreach_value(closed_threads, join_callback, NULL);
+#ifndef FSNP_MEM_DEBUG
+#ifdef FSNP_DEBUG
+	printf("Peer: ");
+	fflush(stdout);
+#endif // FSNP_DEBUG
+#endif // FSNP_MEM_DEBUG
 }
