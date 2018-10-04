@@ -233,7 +233,8 @@ static int request_dir(char *path)
 
 	if (path[l - 1] != '/') {
 		path[l] = '/';
-		path[l + 1] = '\0'; // safe to do since read_stdin read at max PATH-1 bytes
+		// safe to do since read_stdin has read at max PATH-1 bytes
+		path[l + 1] = '\0';
 	}
 
 	return 0;
@@ -280,7 +281,9 @@ static void update_download_dir(void)
  */
 static void print_download_path(void)
 {
-	// TODO: implement
+	show_download_path();
+	printf("\nPeer: ");
+	fflush(stdout);
 }
 
 /*

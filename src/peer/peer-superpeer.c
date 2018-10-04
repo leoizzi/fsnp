@@ -330,6 +330,7 @@ struct peer_tcp_state {
 	int pipe_fd[2];
 	int peer_sock;
 	bool quit_loop;
+	bool send_leave_msg;
 };
 
 static struct peer_tcp_state tcp_state;
@@ -409,6 +410,10 @@ static void peer_tcp_thread(void *data)
 		}
 	}
 
+	if (tcp_state.send_leave_msg) {
+		// TODO: send a leave message to the superpeer
+	}
+
 	close(tcp_state.peer_sock);
 	close(tcp_state.pipe_fd[READ_END]);
 	close(tcp_state.pipe_fd[WRITE_END]);
@@ -437,6 +442,7 @@ static void launch_poll_peer_tcp_sock(int sock)
 
 	tcp_state.peer_sock = sock;
 	tcp_state.quit_loop = false;
+	tcp_state.send_leave_msg = false;
 	ret = start_new_thread(peer_tcp_thread, NULL, "peer_tcp_thread");
 	if (ret < 0) {
 		close(sock);
@@ -452,11 +458,12 @@ int get_peer_sock(void)
 	return sock;
 }
 
-void close_peer_sock(void)
+void leave_sp(void)
 {
 	ssize_t ret = 0;
 	int to_write = 1;
 
+	tcp_state.send_leave_msg = true;
 	ret = fsnp_write(tcp_state.pipe_fd[WRITE_END], &to_write, sizeof(int));
 	if (ret < 0) {
 		perror("Unable to close 'peer_tcp_thread'");

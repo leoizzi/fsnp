@@ -208,37 +208,6 @@ static void setup_poll(void)
 	state.fds[POLL_STDIN].events = POLLIN | POLLPRI;
 }
 
-static void peer_sock_event(short revents)
-{
-	bool print_peer = false;
-
-	if (revents & POLLERR) {
-		printf("An exceptional error has occurred on the peer socket. Try to"
-		       " reconnect with a superpeer\n");
-		close_peer_sock();
-		print_peer = true;
-	} else if (revents & POLLHUP) {
-		printf("The superpeer has disconnected itself.\nPlease join another"
-		       " one\n");
-		close_peer_sock();
-		print_peer = true;
-	} else if (revents & POLLIN || revents & POLLRDBAND || revents & POLLPRI) {
-		fprintf(stderr, "pollin/pollrdband/pollpri\n");
-	} else {
-#ifdef FSNP_DEBUG
-		fprintf(stderr, "peer TCP. Case not covered!\n");
-		printf("revents: %hd\n", revents);
-		print_peer = true;
-#endif
-		close_peer_sock();
-	}
-
-	if (print_peer) {
-		printf("\nPeer: ");
-		fflush(stdout);
-	}
-}
-
 static void handle_poll_ret(int ret)
 {
 	if (ret > 0) {
@@ -314,7 +283,7 @@ int peer_main(bool localhost)
 		printf("Closing the superpeer's sockets...\n");
 		exit_sp_mode();
 	} else if (get_peer_sock() != 0) {
-		close_peer_sock();
+		leave_sp();
 	}
 
 	printf("Closing the thread manager...\n");

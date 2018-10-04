@@ -90,7 +90,7 @@ static bool create_sp_socks(void)
 		return false;
 	}
 
-	close_peer_sock();
+	leave_sp();
 	add_poll_sp_sock(tcp);
 	set_udp_sp_port(udp_port);
 	set_tcp_sp_port(tcp_port);

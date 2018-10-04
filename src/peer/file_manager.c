@@ -400,3 +400,12 @@ bool update_file_manager(void)
 		return false;
 	}
 }
+
+void show_download_path(void)
+{
+	if (!download.is_set) {
+		printf("The download path is not set.\n");
+	} else {
+		printf("You're downloading files in \"%s\".\n", download.path);
+	}
+}

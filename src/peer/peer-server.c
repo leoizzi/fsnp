@@ -73,7 +73,7 @@ static struct fsnp_query_res *read_res(int sock)
 /*
  * Add the peer to the server superpeer list
  *
- * NOTE: there is no need to call close_peer_sock before since there's no
+ * NOTE: there is no need to call leave_sp before since there's no
  * possibility that the peer socket was created... we're the first!
  */
 static void first_peer(int sock)

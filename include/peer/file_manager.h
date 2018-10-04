@@ -67,6 +67,11 @@ sha256_t *retrieve_all_keys(uint32_t *num);
  */
 bool update_file_manager(void);
 
+/*
+ * Show the user the path where he's saving the files
+ */
+void show_download_path(void);
+
 FSNP_END_DECL
 
 #endif //FSNP_FILE_MANAGER_H

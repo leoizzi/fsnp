@@ -34,9 +34,10 @@ void join_sp(const struct fsnp_query_res *query_res);
 int get_peer_sock(void);
 
 /*
- * Remove from the poll the peer's socket. The descriptor will be closed
+ * Tell the superpeer that the user is leaving and release all the resources
+ * used
  */
-void close_peer_sock(void);
+void leave_sp(void);
 
 FSNP_END_DECL
 
