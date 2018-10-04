@@ -132,6 +132,7 @@ static void accept_peer(void)
 	size_t num_peers = 0;
 	size_t n = 0;
 	int ret = 0;
+	int added = 0;
 
 
 	s = get_tcp_sp_port();
@@ -161,14 +162,18 @@ static void accept_peer(void)
 	peer_info->addr.ip = addr.sin_addr.s_addr;
 	peer_info->addr.port = addr.sin_port;
 	peer_info->sock = peer_sock;
-	ret = list_push_value(known_peers, peer_info);
+	added = list_push_value(known_peers, peer_info);
 	if (ret < 0) {
 		fprintf(stderr, "Unable to add the peer to the known_peer_list\n");
 	}
-	
+
 	ret = start_new_thread(sp_tcp_thread, peer_info, "sp_tcp_thread");
 	if (ret < 0) {
 		close(peer_sock);
+		if (added == 0) {
+			list_pop_value(known_peers);
+		}
+		
 		free(peer_info);
 	}
 }
