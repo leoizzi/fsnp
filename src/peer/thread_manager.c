@@ -168,6 +168,9 @@ static int join_callback(void *item, size_t idx, void *user)
 
 #ifndef FSNP_MEM_DEBUG
 	pthread_join(ld->tid, NULL);
+#ifdef FSNP_DEBUG
+	printf("Thread %s joined.\n", ld->name);
+#endif
 	free_callback(ld);
 #else
 	free_callback(ld);
