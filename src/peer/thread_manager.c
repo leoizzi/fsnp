@@ -170,11 +170,11 @@ static int join_callback(void *item, size_t idx, void *user)
 	pthread_join(ld->tid, NULL);
 #ifdef FSNP_DEBUG
 	printf("Thread %s joined.\n", ld->name);
-#endif
+#endif // FSNP_DEBUG
 	free_callback(ld);
-#else
+#else // !FSNP_MEM_DEBUG
 	free_callback(ld);
-#endif
+#endif // FSNP_MEM_DEBUG
 	return REMOVE_AND_GO;
 }
 
