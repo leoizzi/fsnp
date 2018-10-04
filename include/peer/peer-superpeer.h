@@ -28,7 +28,15 @@ FSNP_BEGIN_DECL
  */
 void join_sp(const struct fsnp_query_res *query_res);
 
-void stop_update_thread(void);
+/*
+ * Get the peer's socket. If the socket is unset the function will return 0
+ */
+int get_peer_sock(void);
+
+/*
+ * Remove from the poll the peer's socket. The descriptor will be closed
+ */
+void close_peer_sock(void);
 
 FSNP_END_DECL
 

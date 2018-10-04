@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <poll.h>
 
 #include "fsnp/fsnp.h"
 
@@ -39,7 +40,7 @@ struct periodic_data {
 
 static struct periodic_data pd;
 
-void stop_update_thread(void)
+static void stop_update_thread(void)
 {
 	/* safe to check without mutex since it was set by the main thread itself
 	 * when it has started the update thread, and this function is called only
@@ -316,8 +317,150 @@ static int read_join_res(int sock)
 
 	pd.is_running = true;
 	start_new_thread(periodic_update, NULL, "periodic_update");
+#else
+	pd.is_running = false;
 #endif
 	return 0;
+}
+
+#define READ_END 0
+#define WRITE_END 1
+
+struct peer_tcp_state {
+	int pipe_fd[2];
+	int peer_sock;
+	bool quit_loop;
+};
+
+static struct peer_tcp_state tcp_state;
+
+#define SOCK 0
+#define PIPE 1
+
+/*
+ * Initialize the pollfd array for the poll
+ */
+static void setup_peer_tcp_poll(struct pollfd *fds)
+{
+	memset(fds, 0, sizeof(struct pollfd) * 2);
+	fds[SOCK].fd = tcp_state.peer_sock;
+	fds[SOCK].events = POLLIN | POLLPRI;
+	fds[PIPE].fd = tcp_state.pipe_fd[READ_END];
+	fds[PIPE].events = POLLIN | POLLPRI;
+}
+
+/*
+ * Handle an event happened in the pipe (read side)
+ */
+static void pipe_event(short revents)
+{
+	// Whatever happened in the pipe just quit the thread
+	UNUSED(revents);
+
+	tcp_state.quit_loop = true;
+}
+
+/*
+ * Handle an event happened in the socket
+ */
+static void sock_event(short revents)
+{
+	if (revents & POLLIN || revents & POLLRDBAND || revents & POLLPRI) {
+
+	} else if (revents & POLLHUP) {
+		printf("The superpeer has disconnected itself. Please join another one");
+		printf("\nPeer :");
+		fflush(stdout);
+		tcp_state.quit_loop = true;
+	} else {
+		tcp_state.quit_loop = true;
+	}
+}
+
+/*
+ * Entry point for the thread spawned by 'launch_poll_peer_tcp_sock'.
+ * Enter a poll loop for respond to a superpeer and check whether the app is
+ * closing
+ */
+static void peer_tcp_thread(void *data)
+{
+	struct pollfd fds[2];
+	int ret = 0;
+
+	UNUSED(data);
+
+	setup_peer_tcp_poll(fds);
+
+	while (!tcp_state.quit_loop) {
+		ret = poll(fds, 2, -1);
+		if (ret > 0) {
+			if (fds[PIPE].revents) {
+				pipe_event(fds[PIPE].revents);
+				fds[PIPE].revents = 0;
+			}
+
+			if (fds[SOCK].revents) {
+				sock_event(fds[SOCK].revents);
+				fds[SOCK].revents = 0;
+			}
+		} else {
+			perror("poll");
+			tcp_state.quit_loop = true;
+		}
+	}
+
+	close(tcp_state.peer_sock);
+	close(tcp_state.pipe_fd[READ_END]);
+	close(tcp_state.pipe_fd[WRITE_END]);
+
+	tcp_state.peer_sock = 0;
+	tcp_state.pipe_fd[READ_END] = 0;
+	tcp_state.pipe_fd[WRITE_END] = 0;
+
+	stop_update_thread();
+}
+
+/*
+ * Set up 'tcp_state' and spawn the relative thread
+ */
+static void launch_poll_peer_tcp_sock(int sock)
+{
+	int ret = 0;
+
+	ret = pipe(tcp_state.pipe_fd);
+	if (ret < 0) {
+		perror("pipe");
+		close(sock);
+		stop_update_thread();
+		return;
+	}
+
+	tcp_state.peer_sock = sock;
+	tcp_state.quit_loop = false;
+	ret = start_new_thread(peer_tcp_thread, NULL, "peer_tcp_thread");
+	if (ret < 0) {
+		close(sock);
+		close(tcp_state.pipe_fd[READ_END]);
+		close(tcp_state.pipe_fd[WRITE_END]);
+		stop_update_thread();
+	}
+}
+
+int get_peer_sock(void)
+{
+	int sock = tcp_state.peer_sock;
+	return sock;
+}
+
+void close_peer_sock(void)
+{
+	ssize_t ret = 0;
+	int to_write = 1;
+
+	ret = fsnp_write(tcp_state.pipe_fd[WRITE_END], &to_write, sizeof(int));
+	if (ret < 0) {
+		perror("Unable to close 'peer_tcp_thread'");
+	}
 }
 
 void join_sp(const struct fsnp_query_res *query_res)
@@ -325,17 +468,19 @@ void join_sp(const struct fsnp_query_res *query_res)
 	int choice = 0;
 	int sock = 0;
 	int ret = 0;
-	int p_sock = 0;
 
 	if (is_superpeer()) {
 		printf("You're a superpeer, you can't join another superpeer\n");
+		printf("\nPeer: ");
+		fflush(stdout);
 		return;
 	}
 
-	p_sock = get_peer_sock();
-	if (p_sock != 0) { // we're already connected to a superpeer
+	if (tcp_state.peer_sock != 0) { // we're already connected to a superpeer
 		printf("You're already connected to a superpeer. Leave him before"
 		       " trying to join another one\n");
+		printf("\nPeer: ");
+		fflush(stdout);
 		return;
 	}
 
@@ -351,13 +496,21 @@ void join_sp(const struct fsnp_query_res *query_res)
 
 	ret = send_join_msg(sock);
 	if (ret < 0) {
+		close(sock);
 		return;
 	}
 
 	ret = read_join_res(sock);
 	if (ret < 0) {
+		close(sock);
 		return;
 	}
 
-	add_peer_sock(sock);
+	launch_poll_peer_tcp_sock(sock);
 }
+
+#undef READ_END
+#undef WRITE_END
+#undef POLL_TIMEOUT
+#undef SOCK
+#undef PIPE

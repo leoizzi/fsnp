@@ -17,7 +17,7 @@
 
 #include "peer/superpeer-peer.h"
 
-void peer_thread(void *data)
+void sp_tcp_thread(void *data)
 {
 	// TODO: continue from here
 	// TODO: promote the head peer if the other one is accepted

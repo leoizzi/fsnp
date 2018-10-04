@@ -38,7 +38,8 @@ endif ()
 message(STATUS "Using timeout value of ${FSNP_TIMEOUT} milliseconds")
 set(FSNP_GLOBAL_DEF ${FSNP_GLOBAL_DEF} -DFSNP_TIMEOUT=${FSNP_TIMEOUT})
 
-set(COMMON_COMPILER_FLAGS -Wall -Wextra -Wundef -Wshadow -Wcast-align)
+set(COMMON_COMPILER_FLAGS -Wall -Wextra -Wundef -Wshadow -Wcast-align
+						  -Wno-deprecated)
 
 # -Wundef: warn if an uninitialized identifier is evaluated in an #if directive.
 

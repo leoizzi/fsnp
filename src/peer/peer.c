@@ -37,11 +37,10 @@
 
 #define POLLFD_NUM 2
 
-#define PEER_POLLFD_NUM 2
-#define SP_POLLFD_NUM POLLFD_NUM
+#define PEER_POLLFD_NUM 1
+#define SP_POLLFD_NUM 2
 
 #define POLL_STDIN 0
-#define POLL_PEER_TCP 1
 #define POLL_SP_TCP 1
 
 struct state {
@@ -63,62 +62,6 @@ static const char err_lock_msg[] = "Unable to lock state_mtx.\n The data from"
 static const char err_unlock_msg[] = "Unable to unlock state_mtx.\n The data"
 									 " from now on can be compromised. It's"
 		                             " suggested to restart the peer\n";
-
-void add_peer_sock(int sock)
-{
-	if (pthread_mutex_lock(&state.state_mtx)) {
-		fprintf(stderr, err_lock_msg);
-	}
-
-	state.fds[POLL_PEER_TCP].fd = sock;
-	state.fds[POLL_PEER_TCP].events = POLLIN | POLLPRI;
-
-	state.num_fd = PEER_POLLFD_NUM; // add the socket from the poll count
-
-	if (pthread_mutex_unlock(&state.state_mtx)) {
-		fprintf(stderr, err_unlock_msg);
-	}
-}
-
-int get_peer_sock(void)
-{
-	if (pthread_mutex_lock(&state.state_mtx)) {
-		fprintf(stderr, err_lock_msg);
-	}
-
-	int sock = state.fds[POLL_PEER_TCP].fd;
-
-	if (pthread_mutex_unlock(&state.state_mtx)) {
-		fprintf(stderr, err_unlock_msg);
-	}
-
-	return sock;
-}
-
-void rm_peer_sock(void)
-{
-	if (pthread_mutex_lock(&state.state_mtx)) {
-		fprintf(stderr, err_lock_msg);
-	}
-
-	if (state.fds[POLL_PEER_TCP].fd != 0) {
-		close(state.fds[POLL_PEER_TCP].fd);
-
-		state.fds[POLL_PEER_TCP].fd = 0;
-		state.fds[POLL_PEER_TCP].events = 0;
-
-		// remove the peer socket from the poll interface
-		state.num_fd = PEER_POLLFD_NUM - 1;
-
-	}
-
-	if (pthread_mutex_unlock(&state.state_mtx)) {
-		fprintf(stderr, err_unlock_msg);
-	}
-
-	stop_update_thread();
-
-}
 
 void add_poll_sp_sock(int tcp_sock)
 {
@@ -272,12 +215,12 @@ static void peer_sock_event(short revents)
 	if (revents & POLLERR) {
 		printf("An exceptional error has occurred on the peer socket. Try to"
 		       " reconnect with a superpeer\n");
-		rm_peer_sock();
+		close_peer_sock();
 		print_peer = true;
 	} else if (revents & POLLHUP) {
 		printf("The superpeer has disconnected itself.\nPlease join another"
 		       " one\n");
-		rm_peer_sock();
+		close_peer_sock();
 		print_peer = true;
 	} else if (revents & POLLIN || revents & POLLRDBAND || revents & POLLPRI) {
 		fprintf(stderr, "pollin/pollrdband/pollpri\n");
@@ -287,7 +230,7 @@ static void peer_sock_event(short revents)
 		printf("revents: %hd\n", revents);
 		print_peer = true;
 #endif
-		rm_peer_sock();
+		close_peer_sock();
 	}
 
 	if (print_peer) {
@@ -304,12 +247,7 @@ static void handle_poll_ret(int ret)
 			state.fds[POLL_STDIN].revents = 0;
 		}
 
-		if (!is_superpeer()) {
-			if (state.fds[POLL_PEER_TCP].revents) {
-				peer_sock_event(state.fds[POLL_PEER_TCP].revents);
-				state.fds[POLL_PEER_TCP].revents = 0;
-			}
-		} else {
+		if (is_superpeer()) {
 			if (state.fds[POLL_SP_TCP].revents) {
 				sp_tcp_sock_event(state.fds[POLL_SP_TCP].revents);
 				state.fds[POLL_SP_TCP].revents = 0;
@@ -354,10 +292,10 @@ int peer_main(bool localhost)
 		exit(EXIT_FAILURE);
 	}
 
-	printf("Setting up the ^C signal handler...\n");
+	printf("Setting up the 'ctrl C' signal handler...\n");
 	setup_signal_handler();
 	init_stdin();
-	state.num_fd = PEER_POLLFD_NUM - 1; // skip the peer socket at the beginning
+	state.num_fd = PEER_POLLFD_NUM;
 	printf("Setting up the poll interface...\n");
 	setup_poll();
 
@@ -376,7 +314,7 @@ int peer_main(bool localhost)
 		printf("Closing the superpeer's sockets...\n");
 		exit_sp_mode();
 	} else if (get_peer_sock() != 0) {
-		rm_peer_sock();
+		close_peer_sock();
 	}
 
 	printf("Closing the thread manager...\n");
@@ -401,5 +339,4 @@ int peer_main(bool localhost)
 #undef PEER_POLLFD_NUM
 
 #undef POLL_STDIN
-#undef POLL_PEER_TCP
 #undef POLL_SP_TCP

@@ -28,7 +28,7 @@ FSNP_BEGIN_DECL
  * Entry point for a thread that has to communicate with a new peer.
  * In data pass a pointer to a 'struct peer_info'
  */
-void peer_thread(void *data);
+void sp_tcp_thread(void *data);
 
 FSNP_END_DECL
 

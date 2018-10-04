@@ -25,6 +25,7 @@
 #include "peer/port.h"
 #include "peer/file_cache.h"
 #include "peer/thread_manager.h"
+#include "peer/peer-superpeer.h"
 #include "peer/superpeer-peer.h"
 #include "peer/superpeer-superpeer.h"
 
@@ -37,7 +38,7 @@
 
 /*
  * This list doesn't have a free callback because it shares the content with
- * a 'peer_thread'. The thread will free the memory when it's about to close
+ * a 'sp_tcp_thread'. The thread will free the memory when it's about to close
  */
 static linked_list_t *known_peers = NULL;
 
@@ -89,7 +90,7 @@ static bool create_sp_socks(void)
 		return false;
 	}
 
-	rm_peer_sock();
+	close_peer_sock();
 	add_poll_sp_sock(tcp);
 	set_udp_sp_port(udp_port);
 	set_tcp_sp_port(tcp_port);
@@ -154,7 +155,7 @@ static void accept_peer(void)
 	peer_info->addr.ip = addr.sin_addr.s_addr;
 	peer_info->addr.port = addr.sin_port;
 	peer_info->sock = peer_sock;
-	ret = start_new_thread(peer_thread, peer_info, NULL);
+	ret = start_new_thread(sp_tcp_thread, peer_info, "sp_tcp_thread");
 	if (ret < 0) {
 		close(peer_sock);
 		free(peer_info);

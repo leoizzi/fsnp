@@ -31,21 +31,6 @@ FSNP_BEGIN_DECL
 int peer_main(bool localhost);
 
 /*
- * Add to poll the peer socket
- */
-void add_peer_sock(int sock);
-
-/*
- * Get the peer's socket. If the socket is unset the function will return 0
- */
-int get_peer_sock(void);
-
-/*
- * Remove from the poll the peer's socket. The descriptor will be closed
- */
-void rm_peer_sock(void);
-
-/*
  * Add to poll the superpeer TCP socket
  */
 void add_poll_sp_sock(int tcp_sock);
