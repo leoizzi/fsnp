@@ -36,6 +36,8 @@
 #define SP_BACKLOG 128
 #define MAX_KNOWN_PEER 8
 
+//TODO: improve the error handling in the sockets' poll handlers
+
 /*
  * This list doesn't have a free callback because it shares the content with
  * a 'sp_tcp_thread'. The thread will free the memory when it's about to close
@@ -90,7 +92,11 @@ static bool create_sp_socks(void)
 		return false;
 	}
 
-	leave_sp();
+	if (get_peer_sock() != 0) {
+		// We're getting promoted, leave the superpeer before going forward
+		leave_sp();
+	}
+
 	add_poll_sp_sock(tcp);
 	set_udp_sp_port(udp_port);
 	set_tcp_sp_port(tcp_port);
@@ -155,6 +161,7 @@ static void accept_peer(void)
 	peer_info->addr.ip = addr.sin_addr.s_addr;
 	peer_info->addr.port = addr.sin_port;
 	peer_info->sock = peer_sock;
+	list_push_value(known_peers, peer_info);
 	ret = start_new_thread(sp_tcp_thread, peer_info, "sp_tcp_thread");
 	if (ret < 0) {
 		close(peer_sock);
