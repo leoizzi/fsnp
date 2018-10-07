@@ -29,8 +29,12 @@ FSNP_BEGIN_DECL
 
 struct peer_info {
 	int sock;
+	int pipefd[2];
 	struct fsnp_peer addr;
 };
+
+#define PIPE_QUIT 1
+#define PIPE_PROMOTE 2
 
 /*
  * Enter the superpeer mode.

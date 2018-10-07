@@ -91,7 +91,7 @@ static void first_peer(int sock)
 	} else {
 		ret = enter_sp_mode();
 		if (ret == false) {
-			perror("create_sp_socks-first_peer");
+			perror("enter_sp_mode-first_peer");
 			return;
 		}
 	}

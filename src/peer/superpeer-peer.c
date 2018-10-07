@@ -15,10 +15,50 @@
  *  along with fsnp. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <poll.h>
+#include <memory.h>
+#include <stdbool.h>
+
 #include "peer/superpeer-peer.h"
+#include "peer/superpeer.h"
+
+#define READ_END 0
+#define WRITE_END 1
+
+#define SOCK 0
+#define PIPE 1
+
+#define POLLFD_NUM 2
+
+/*
+ * Fill the pollfd struct
+ */
+static void setup_poll(struct pollfd *pollfd, int p, int s)
+{
+	memset(pollfd, 0, sizeof(struct pollfd) * POLLFD_NUM);
+
+	pollfd[SOCK].fd = s;
+	pollfd[SOCK].events = POLLIN | POLLPRI;
+	pollfd[PIPE].fd = p;
+	pollfd[PIPE].events = POLLIN | POLLPRI;
+}
 
 void sp_tcp_thread(void *data)
 {
-	// TODO: continue from here
-	// TODO: promote the head peer if the other one is accepted
+	struct peer_info *info = (struct peer_info *)data;
+	struct pollfd pollfd[POLLFD_NUM];
+	bool should_exit = false;
+	int ret = 0;
+
+	setup_poll(pollfd, info->pipefd[READ_END], info->sock);
+	while (!should_exit) {
+		ret = poll(pollfd, POLLFD_NUM, -1);
+		// TODO: continue from here
+	}
 }
+
+#undef READ_END
+#undef WRITE_END
+#undef SOCK
+#undef PIPE
+#undef POLLFD_NUM

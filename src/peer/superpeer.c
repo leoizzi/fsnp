@@ -16,7 +16,9 @@
  */
 
 #include <stdio.h>
+#include <stdbool.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
 #include <unistd.h>
 #include <poll.h>
 
@@ -36,6 +38,9 @@
 #define SP_BACKLOG 128
 #define MAX_KNOWN_PEER 8
 
+#define READ_END 0
+#define WRITE_END 1
+
 //TODO: improve the error handling in the sockets' poll handlers
 
 /*
@@ -44,7 +49,10 @@
  */
 static linked_list_t *known_peers = NULL;
 
-static bool create_sp_socks(void)
+/*
+ * Create the superpeer's sockets and enter the overlay network
+ */
+static bool initialize_sp(void)
 {
 	int udp = 0;
 	int tcp = 0;
@@ -84,6 +92,8 @@ static bool create_sp_socks(void)
 		return false;
 	}
 
+	// TODO: add this superpeer to the server list
+
 	ret = enter_sp_network(udp);
 	if (ret < 0) {
 		fprintf(stderr, "Unable to enter the superpeer network\n");
@@ -103,6 +113,9 @@ static bool create_sp_socks(void)
 	return true;
 }
 
+/*
+ * Check if a peer is already known
+ */
 static int peer_already_known(void *item, size_t idx, void *user)
 {
 	struct peer_info *peer = (struct peer_info *)item;
@@ -119,8 +132,23 @@ static int peer_already_known(void *item, size_t idx, void *user)
 	return GO_AHEAD;
 }
 
+static void promote_peer(void)
+{
+	int msg = PIPE_PROMOTE;
+	ssize_t w = 0;
+	struct peer_info *to_promote = NULL;
+
+	to_promote = list_shift_value(known_peers);
+	w = fsnp_write(to_promote->pipefd[WRITE_END], &msg, sizeof(int));
+	if (w < 0) {
+		perror("Unable to promote a peer");
+	}
+}
+
 /*
- * Accept a new peer, establishing a TCP connection with him. Then add
+ * Accept a new peer, establishing a TCP connection with him.
+ * If the number of peers is greater than MAX_KNOWN_PEER promote the peer at the
+ * head of 'known_peers'
  */
 static void accept_peer(void)
 {
@@ -159,9 +187,16 @@ static void accept_peer(void)
 		return;
 	}
 
-	peer_info->addr.ip = addr.sin_addr.s_addr;
-	peer_info->addr.port = addr.sin_port;
+	peer_info->addr.ip = ntohl(addr.sin_addr.s_addr);
+	peer_info->addr.port = ntohs(addr.sin_port);
 	peer_info->sock = peer_sock;
+	ret = pipe(peer_info->pipefd);
+	if (ret < 0) {
+		perror("accept_peer-pipe");
+		close(peer_sock);
+		free(peer_info);
+	}
+
 	added = list_push_value(known_peers, peer_info);
 	if (ret < 0) {
 		fprintf(stderr, "Unable to add the peer to the known_peer_list\n");
@@ -169,12 +204,18 @@ static void accept_peer(void)
 
 	ret = start_new_thread(sp_tcp_thread, peer_info, "sp_tcp_thread");
 	if (ret < 0) {
+		fprintf(stderr, "Unable to start 'sp_tcp_thread' for peer %s:%hu\n",
+				inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
 		close(peer_sock);
 		if (added == 0) {
 			list_pop_value(known_peers);
 		}
-		
+
 		free(peer_info);
+	}
+
+	if (num_peers + 1 > MAX_KNOWN_PEER) {
+		promote_peer();
 	}
 }
 
@@ -229,7 +270,7 @@ bool enter_sp_mode(void)
 		return false;
 	}
 
-	ret = create_sp_socks();
+	ret = initialize_sp();
 	if (!ret) {
 		close_file_cache();
 		return false;
@@ -238,12 +279,38 @@ bool enter_sp_mode(void)
 	return true;
 }
 
+/*
+ * For each thread spawned for communicating with a peer tell it to quit
+ */
+static int quit_peer_threads(void *item, size_t idx, void *user)
+{
+	struct peer_info *info = (struct peer_info *)item;
+	struct in_addr addr;
+	ssize_t w = 0;
+	int msg = PIPE_QUIT;
+
+	UNUSED(idx);
+	UNUSED(user);
+
+	w = fsnp_write(info->pipefd[WRITE_END], &msg, sizeof(int));
+	if (w < 0) {
+		addr.s_addr = htonl(info->addr.ip);
+		fprintf(stderr, "Unable to communicate to the 'sp_tcp_thread' of peer"
+				  "%s:%hu to quit\n", inet_ntoa(addr), htons(info->addr.port));
+	}
+}
+
 void exit_sp_mode(void)
 {
 	exit_sp_network();
 	close_file_cache();
-	// TODO: if there are threads communicating with peers join them before going on
+	list_foreach_value(known_peers, quit_peer_threads, NULL);
 	rm_poll_sp_sock();
 	list_destroy(known_peers);
 	known_peers = NULL;
 }
+
+#undef READ_END
+#undef WRITE_END
+#undef SP_BACKLOG
+#undef MAX_KNOWN_PEER
