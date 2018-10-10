@@ -252,13 +252,15 @@ struct packed fsnp_whohas {
 };
 
 /*
- * Sent to a peer by a superpeer to inform him that he is now a superpeer
+ * Sent to a peer by a superpeer to inform him that he is now a superpeer.
+ * The promoter, if know another superpeer, will pass it to the promoted so that
+ * he can still communicate with the network if the promoter will leave the
+ * network
  */
 struct packed fsnp_promote {
 	struct fsnp_msg header;
-	in_port_t sp_port; // the superpeer port of the promoter
-	uint8_t num_sp;
-	struct fsnp_peer sp[1];
+	in_port_t sp_port; // the superpeer UDP port of the promoter
+	struct fsnp_peer sp;
 };
 
 FSNP_END_DECL

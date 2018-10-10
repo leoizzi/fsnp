@@ -84,29 +84,27 @@ static void first_peer(int sock)
 	bool ret = false;
 
 	if (is_superpeer()) { // something really wrong happened with the server
-		fprintf(stderr, "The system is already a superpeer and the server"
-				  " doesn't know about it.\nSending the request to add this"
+		fprintf(stderr, "This program is already a superpeer and the server"
+				  " doesn't know about it.\nSending a request to add this"
 	              " superpeer to its list\n");
-		// TODO: send add_sp to the server
+		fsnp_init_add_sp(&add_sp, get_tcp_sp_port(), get_udp_sp_port());
+		w = fsnp_write_msg_tcp(sock, 0, (struct fsnp_msg *)&add_sp, &err);
+		if (w < 0) {
+			fsnp_print_err_msg(err);
+			PRINT_PEER;
+			return;
+		}
 	} else {
 		ret = enter_sp_mode();
 		if (ret == false) {
 			perror("enter_sp_mode-first_peer");
+			PRINT_PEER;
 			return;
 		}
 	}
 
-	fsnp_init_add_sp(&add_sp, get_tcp_sp_port(), get_udp_sp_port());
-	w = fsnp_write_msg_tcp(sock, 0, (struct fsnp_msg *)&add_sp, &err);
-	if (w < 0) {
-		exit_sp_mode();
-		fsnp_print_err_msg(err);
-		return;
-	}
-
 	printf("\nYou're the first peer in the network!\n");
-	printf("\nPeer: ");
-	fflush(stdout);
+	PRINT_PEER;
 }
 
 /*

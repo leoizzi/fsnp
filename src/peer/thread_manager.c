@@ -22,6 +22,10 @@
 
 #include "peer/thread_manager.h"
 
+#ifdef FSNP_DEBUG
+#include "peer/peer.h" // for PRINT_PEER
+#endif
+
 #ifdef FSNP_MEM_DEBUG
 #include "fsnp/sha-256.h"
 #endif
@@ -183,8 +187,7 @@ void join_threads_if_any(void)
 	list_foreach_value(closed_threads, join_callback, NULL);
 #ifndef FSNP_MEM_DEBUG
 #ifdef FSNP_DEBUG
-	printf("Peer: ");
-	fflush(stdout);
+	PRINT_PEER;
 #endif // FSNP_DEBUG
 #endif // FSNP_MEM_DEBUG
 }

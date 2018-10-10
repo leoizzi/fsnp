@@ -392,6 +392,5 @@ void stdin_event(void)
 
 	cleanup_stdin();
 
-	printf("\nPeer: ");
-	fflush(stdout);
+	PRINT_PEER;
 }

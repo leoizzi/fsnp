@@ -82,9 +82,8 @@ fsnp_init_download(struct fsnp_download *download, uint64_t file_size);
 EXPORT void fsnp_init_whohas(struct fsnp_whohas *whohas, sha256_t req_id,
                              sha256_t file_hash, uint8_t missing_peers);
 
-EXPORT struct fsnp_promote *fsnp_create_promote(in_port_t sp_port,
-												uint8_t num_sp,
-                                                struct fsnp_peer *sp);
+EXPORT void fsnp_init_promote(struct fsnp_promote *promote, in_port_t sp_port,
+                              struct fsnp_peer *sp);
 
 FSNP_END_DECL
 

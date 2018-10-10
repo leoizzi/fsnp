@@ -302,8 +302,7 @@ static int read_join_res(int sock)
 
 	free(msg);
 	printf("Superpeer join successfully!\n");
-	printf("\nPeer: ");
-	fflush(stdout);
+	PRINT_PEER;
 
 #ifndef FSNP_MEM_DEBUG
 	// launch the periodic update thread
@@ -317,9 +316,9 @@ static int read_join_res(int sock)
 
 	pd.is_running = true;
 	start_new_thread(periodic_update, NULL, "periodic_update");
-#else
+#else // !FSNP_MEM_DEBUG
 	pd.is_running = false;
-#endif
+#endif // FSNP_MEM_DEBUG
 	return 0;
 }
 
@@ -328,7 +327,7 @@ static int read_join_res(int sock)
 
 struct peer_tcp_state {
 	int pipe_fd[2];
-	int peer_sock;
+	int sock;
 	bool quit_loop;
 	bool send_leave_msg;
 };
@@ -344,7 +343,7 @@ static struct peer_tcp_state tcp_state;
 static void setup_peer_tcp_poll(struct pollfd *fds)
 {
 	memset(fds, 0, sizeof(struct pollfd) * 2);
-	fds[SOCK].fd = tcp_state.peer_sock;
+	fds[SOCK].fd = tcp_state.sock;
 	fds[SOCK].events = POLLIN | POLLPRI;
 	fds[PIPE].fd = tcp_state.pipe_fd[READ_END];
 	fds[PIPE].events = POLLIN | POLLPRI;
@@ -370,8 +369,7 @@ static void sock_event(short revents)
 
 	} else if (revents & POLLHUP) {
 		printf("The superpeer has disconnected itself. Please join another one");
-		printf("\nPeer :");
-		fflush(stdout);
+		PRINT_PEER;
 		tcp_state.quit_loop = true;
 	} else {
 		tcp_state.quit_loop = true;
@@ -387,6 +385,9 @@ static void peer_tcp_thread(void *data)
 {
 	struct pollfd fds[2];
 	int ret = 0;
+	struct fsnp_leave leave;
+	fsnp_err_t err;
+	ssize_t w = 0;
 
 	UNUSED(data);
 
@@ -411,14 +412,20 @@ static void peer_tcp_thread(void *data)
 	}
 
 	if (tcp_state.send_leave_msg) {
-		// TODO: send a leave message to the superpeer
+		fsnp_init_leave(&leave);
+		w = fsnp_write_msg_tcp(tcp_state.sock, 0, (struct fsnp_msg *)&leave,
+				               &err);
+		if (w < 0) {
+			fsnp_print_err_msg(err);
+			PRINT_PEER;
+		}
 	}
 
-	close(tcp_state.peer_sock);
+	close(tcp_state.sock);
 	close(tcp_state.pipe_fd[READ_END]);
 	close(tcp_state.pipe_fd[WRITE_END]);
 
-	tcp_state.peer_sock = 0;
+	tcp_state.sock = 0;
 	tcp_state.pipe_fd[READ_END] = 0;
 	tcp_state.pipe_fd[WRITE_END] = 0;
 
@@ -440,7 +447,7 @@ static void launch_poll_peer_tcp_sock(int sock)
 		return;
 	}
 
-	tcp_state.peer_sock = sock;
+	tcp_state.sock = sock;
 	tcp_state.quit_loop = false;
 	tcp_state.send_leave_msg = false;
 	ret = start_new_thread(peer_tcp_thread, NULL, "peer_tcp_thread");
@@ -454,7 +461,7 @@ static void launch_poll_peer_tcp_sock(int sock)
 
 int get_peer_sock(void)
 {
-	int sock = tcp_state.peer_sock;
+	int sock = tcp_state.sock;
 	return sock;
 }
 
@@ -478,16 +485,14 @@ void join_sp(const struct fsnp_query_res *query_res)
 
 	if (is_superpeer()) {
 		printf("You're a superpeer, you can't join another superpeer\n");
-		printf("\nPeer: ");
-		fflush(stdout);
+		PRINT_PEER;
 		return;
 	}
 
-	if (tcp_state.peer_sock != 0) { // we're already connected to a superpeer
+	if (tcp_state.sock != 0) { // we're already connected to a superpeer
 		printf("You're already connected to a superpeer. Leave him before"
 		       " trying to join another one\n");
-		printf("\nPeer: ");
-		fflush(stdout);
+		PRINT_PEER;
 		return;
 	}
 

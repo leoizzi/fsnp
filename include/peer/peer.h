@@ -25,6 +25,8 @@
 
 FSNP_BEGIN_DECL
 
+#define PRINT_PEER printf("\nPeer: "); fflush(stdout)
+
 /*
  * Main peer function
  */

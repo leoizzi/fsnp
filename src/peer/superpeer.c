@@ -72,24 +72,40 @@ static bool initialize_sp(void)
 		return false;
 	}
 
+#ifdef FSNP_DEBUG
+bool print_peer = false;
+
 	if (tcp != SP_TCP_PORT) {
 		fprintf(stderr, "Unable to bind the superpeer TCP socket to the port"
 		                " %hu. The port %hu has been used instead\n",
 		        (in_port_t)SP_TCP_PORT, tcp_port);
+		print_peer = true;
 	}
 
 	if (udp_port != SP_UDP_PORT) {
 		fprintf(stderr, "Unable to bind the superpeer UDP socket to the port"
 		                " %hu. The port %hu has been used instead\n",
 		        (in_port_t)SP_UDP_PORT, udp_port);
+		print_peer = true;
 	}
+
+	if (print_peer) {
+		PRINT_PEER;
+	}
+#endif
 
 	ret = listen(tcp, SP_BACKLOG);
 	if (ret < 0) {
 		fprintf(stderr, "Unable to listen on the TCP port.\n");
 		close(tcp);
 		close(udp);
+		PRINT_PEER;
 		return false;
+	}
+
+	if (get_peer_sock() != 0) {
+		// We're getting promoted, leave the superpeer before going forward
+		leave_sp();
 	}
 
 	// TODO: add this superpeer to the server list
@@ -99,12 +115,8 @@ static bool initialize_sp(void)
 		fprintf(stderr, "Unable to enter the superpeer network\n");
 		close(tcp);
 		close(udp);
+		PRINT_PEER;
 		return false;
-	}
-
-	if (get_peer_sock() != 0) {
-		// We're getting promoted, leave the superpeer before going forward
-		leave_sp();
 	}
 
 	add_poll_sp_sock(tcp);
@@ -168,6 +180,7 @@ static void accept_peer(void)
 	peer_sock = accept(s, (struct sockaddr *)&addr, &socklen);
 	if (peer_sock < 0) {
 		perror("Unable to accept a new TCP connection");
+		PRINT_PEER;
 		return;
 	}
 
@@ -184,6 +197,7 @@ static void accept_peer(void)
 	if (!peer_info) {
 		close(peer_sock);
 		perror("Unable to allocate enough memory");
+		PRINT_PEER;
 		return;
 	}
 
@@ -195,11 +209,13 @@ static void accept_peer(void)
 		perror("accept_peer-pipe");
 		close(peer_sock);
 		free(peer_info);
+		PRINT_PEER;
 	}
 
 	added = list_push_value(known_peers, peer_info);
 	if (ret < 0) {
 		fprintf(stderr, "Unable to add the peer to the known_peer_list\n");
+		PRINT_PEER;
 	}
 
 	ret = start_new_thread(sp_tcp_thread, peer_info, "sp_tcp_thread");
@@ -212,6 +228,7 @@ static void accept_peer(void)
 		}
 
 		free(peer_info);
+		PRINT_PEER;
 	}
 
 	if (num_peers + 1 > MAX_KNOWN_PEER) {
@@ -229,28 +246,26 @@ static void read_udp_sock(void)
 
 void sp_tcp_sock_event(short revents)
 {
-	if (revents & POLLERR) {
-		printf("An exceptional error has occurred on the sp TCP socket.\n");
-	} else if (revents & POLLIN || revents & POLLRDBAND || revents & POLLPRI) {
+	if (revents & POLLIN || revents & POLLRDBAND || revents & POLLPRI) {
 		accept_peer();
 	} else {
 #ifdef FSNP_DEBUG
 		fprintf(stderr, "sp TCP socket. Case not covered!\n");
 		printf("revents: %hd\n", revents);
+		PRINT_PEER;
 #endif
 	}
 }
 
 void sp_udp_sock_event(short revents)
 {
-	if (revents & POLLERR) {
-		printf("An exceptional error has occurred on the sp UDP socket.\n");
-	} else if (revents & POLLIN || revents & POLLRDBAND || revents & POLLPRI) {
+	if (revents & POLLIN || revents & POLLRDBAND || revents & POLLPRI) {
 		read_udp_sock();
 	} else {
 #ifdef FSNP_DEBUG
 		fprintf(stderr, "sp UDP socket. Case not covered!\n");
 		printf("revents: %hd\n", revents);
+		PRINT_PEER;
 #endif
 	}
 }
@@ -297,6 +312,7 @@ static int quit_peer_threads(void *item, size_t idx, void *user)
 		addr.s_addr = htonl(info->addr.ip);
 		fprintf(stderr, "Unable to communicate to the 'sp_tcp_thread' of peer"
 				  "%s:%hu to quit\n", inet_ntoa(addr), htons(info->addr.port));
+		PRINT_PEER;
 	}
 }
 

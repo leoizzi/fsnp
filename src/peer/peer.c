@@ -67,16 +67,18 @@ void add_poll_sp_sock(int tcp_sock)
 {
 	if (pthread_mutex_lock(&state.state_mtx)) {
 		fprintf(stderr, err_lock_msg);
+		PRINT_PEER;
 	}
 
 	state.fds[POLL_SP_TCP].fd = tcp_sock;
 	state.fds[POLL_SP_TCP].events = POLLIN | POLLPRI;
 	state.sp = true;
 
-	state.num_fd = SP_POLLFD_NUM; // add the sockets from the poll count
+	state.num_fd = SP_POLLFD_NUM; // add the socket to the poll count
 
 	if (pthread_mutex_unlock(&state.state_mtx)) {
 		fprintf(stderr, err_unlock_msg);
+		PRINT_PEER;
 	}
 }
 
@@ -88,6 +90,7 @@ void rm_poll_sp_sock(void)
 
 	if (pthread_mutex_lock(&state.state_mtx)) {
 		fprintf(stderr, err_lock_msg);
+		PRINT_PEER;
 	}
 
 	close(state.fds[POLL_SP_TCP].fd);
@@ -101,6 +104,7 @@ void rm_poll_sp_sock(void)
 
 	if (pthread_mutex_unlock(&state.state_mtx)) {
 		fprintf(stderr, err_unlock_msg);
+		PRINT_PEER;
 	}
 
 	set_udp_sp_port(0);
@@ -115,12 +119,14 @@ int get_sp_tcp_sock(void)
 
 	if (pthread_mutex_lock(&state.state_mtx)) {
 		fprintf(stderr, err_lock_msg);
+		PRINT_PEER;
 	}
 
 	int sock = state.fds[POLL_SP_TCP].fd;
 
 	if (pthread_mutex_unlock(&state.state_mtx)) {
 		fprintf(stderr, err_unlock_msg);
+		PRINT_PEER;
 	}
 
 	return sock;
@@ -132,12 +138,14 @@ bool is_superpeer(void)
 
 	if (pthread_mutex_lock(&state.state_mtx)) {
 		fprintf(stderr, err_lock_msg);
+		PRINT_PEER;
 	}
 
 	res = state.sp;
 
 	if (pthread_mutex_unlock(&state.state_mtx)) {
 		fprintf(stderr, err_unlock_msg);
+		PRINT_PEER;
 	}
 
 	return res;
@@ -176,9 +184,6 @@ void quit_peer(void)
 static void termination_handler(int signum)
 {
 	UNUSED(signum);
-#ifdef FSNP_DEBUG
-	printf("termination handler called\n");
-#endif
 	state.should_exit = true;
 }
 
@@ -268,9 +273,8 @@ int peer_main(bool localhost)
 	printf("Setting up the poll interface...\n");
 	setup_poll();
 
-	printf("The peer is successfully initialized!\n\n");
-	printf("Peer: ");
-	fflush(stdout);
+	printf("The peer is successfully initialized!\n");
+	PRINT_PEER;
 	while (!state.should_exit) {
 		ret = poll(state.fds, state.num_fd, POLL_TIMEOUT);
 		handle_poll_ret(ret);

@@ -204,23 +204,12 @@ void fsnp_init_whohas(struct fsnp_whohas *whohas, sha256_t req_id,
 	fsnp_init_msg(&whohas->header, WHOHAS, sizeof(*whohas));
 }
 
-struct fsnp_promote *fsnp_create_promote(in_port_t sp_port, uint8_t num_sp,
-                                         struct fsnp_peer *sp)
+void fsnp_init_promote(struct fsnp_promote *promote, in_port_t sp_port,
+					   struct fsnp_peer *sp)
 {
-	struct fsnp_promote *promote = NULL;
-	uint64_t peer_size = 0;
 	uint64_t size = 0;
 
-	peer_size = num_sp * sizeof(struct fsnp_peer);
-	size = peer_size + sizeof(*promote) - sizeof(promote->sp);
-	promote = malloc(size);
-	if (!promote) {
-		return NULL;
-	}
-
-	promote->num_sp = num_sp;
-	memcpy(promote->sp, sp, peer_size);
+	memcpy(&promote->sp, sp, sizeof(promote->sp));
 	promote->sp_port = sp_port;
-	fsnp_init_msg(&promote->header, PROMOTE, size);
-	return promote;
+	fsnp_init_msg(&promote->header, PROMOTE, sizeof(*promote));
 }
