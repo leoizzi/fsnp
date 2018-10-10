@@ -52,7 +52,7 @@ static void setup_poll(struct pollfd *pollfd, int p, int s)
  * - if is a PIPE_PROMOTE message promote the peer
  * - if is a PIPE_QUIT message tell the peer we're leaving
  */
-static void read_pipe_msg(struct peer_info *info, bool *should_exit)
+static void read_pipe_msg(const struct peer_info *info, bool *should_exit)
 {
 	ssize_t r = 0;
 	int msg = 0;
@@ -77,7 +77,8 @@ static void read_pipe_msg(struct peer_info *info, bool *should_exit)
 /*
  * Handle an event on the pipe
  */
-static void pipe_event(short revents, struct peer_info *info, bool *should_exit)
+static void pipe_event(short revents, const struct peer_info *info,
+					   bool *should_exit)
 {
 	if (revents & POLLIN || revents & POLLPRI || revents & POLLRDBAND) {
 		read_pipe_msg(info, should_exit);
@@ -110,7 +111,7 @@ static int send_fsnp_error(int sock)
  * Join a peer, adding all of its files to the file cache and sending an ACK to
  * him
  */
-static void join_rcvd(struct fsnp_join *join, struct peer_info *info,
+static void join_rcvd(const struct fsnp_join *join, const struct peer_info *info,
 					  bool *should_exit)
 {
 	int ret = 0;
@@ -149,10 +150,25 @@ static void join_rcvd(struct fsnp_join *join, struct peer_info *info,
 	}
 }
 
+static void update_rcvd(const struct fsnp_update *update,
+						const struct peer_info *info)
+{
+	int ret = 0;
+	struct in_addr addr;
+
+	cache_rm_files(&info->addr);
+	ret = cache_add_files(update->num_files, update->files_hash, &info->addr);
+	if (ret < 0) {
+		addr.s_addr = htonl(info->addr.ip);
+		fprintf(stderr, "Unable to add the files of peer %s:%hu to the file"
+		                " cache\n", inet_ntoa(addr), htons(info->addr.port));
+	}
+}
+
 /*
  * Read a fsnp_msg from the socket and dispatch it to the right handler
  */
-static void read_sock_msg(struct peer_info *info, bool *should_exit)
+static void read_sock_msg(const struct peer_info *info, bool *should_exit)
 {
 	struct fsnp_msg *msg = NULL;
 	ssize_t r = 0;
@@ -181,9 +197,11 @@ static void read_sock_msg(struct peer_info *info, bool *should_exit)
 			break;
 
 		case FILE_REQ:
+			// TODO: before going on with FILE_REQ a working implementation of the superpeers' network is needed
 			break;
 
 		case UPDATE:
+			update_rcvd((struct fsnp_update *))
 			break;
 
 		case ALIVE:
@@ -202,7 +220,8 @@ static void read_sock_msg(struct peer_info *info, bool *should_exit)
 /*
  * Handle an event on the socket
  */
-static void sock_event(short revents, struct peer_info *info, bool *should_exit)
+static void sock_event(short revents, const struct peer_info *info,
+					   bool *should_exit)
 {
 	if (revents & POLLIN || revents & POLLPRI || revents & POLLRDBAND) {
 		read_sock_msg(info, should_exit);

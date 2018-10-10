@@ -35,12 +35,13 @@ bool init_file_cache(void);
  * Add a set of files to the file cache. The keys are passed as uint8_t instead
  * of sha256_t since this is the format used by the join and update messages
  */
-int cache_add_files(int num_files, uint8_t *keys, struct fsnp_peer *owner);
+int cache_add_files(int num_files, const uint8_t *keys,
+					const struct fsnp_peer *owner);
 
 /*
  * Remove all the files belonging to owner
  */
-void cache_rm_files(struct fsnp_peer *owner);
+void cache_rm_files(const struct fsnp_peer *owner);
 
 /*
  * Close the file cache, releasing all the resources allocated
