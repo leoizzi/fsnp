@@ -61,7 +61,7 @@ static void connect_to_server(void)
 	}
 
 	fsnp_init_add_sp(&add_sp, port, 0); // the sp port doesn't matter with this test
-	w = fsnp_write_msg_tcp(s, 0, (struct fsnp_msg *)&add_sp, &err);
+	w = fsnp_write_msg_tcp(s, 0, (const struct fsnp_msg *)&add_sp, &err);
 	if (w < 0) {
 		fprintf(stderr, "Unable to send the add_sp message to the server\n");
 		fsnp_print_err_msg(err);
@@ -115,7 +115,7 @@ static void join_received(struct fsnp_join *join)
 	printf("\n");
 
 	fsnp_init_ack(&ack);
-	w = fsnp_write_msg_tcp(peer_sock, 0, (struct fsnp_msg *)&ack, &err);
+	w = fsnp_write_msg_tcp(peer_sock, 0, (const struct fsnp_msg *)&ack, &err);
 	if (w < 0) {
 		fsnp_print_err_msg(err);
 		exit(EXIT_FAILURE);

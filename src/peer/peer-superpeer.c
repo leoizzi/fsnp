@@ -88,7 +88,7 @@ static void send_update_msg(void)
 
 	free(keys);
 	sock = get_peer_sock();
-	w = fsnp_write_msg_tcp(sock, 0, (struct fsnp_msg *)update, &err);
+	w = fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)update, &err);
 	if (w < 0) {
 #ifdef FSNP_DEBUG
 		fsnp_print_err_msg(err);
@@ -263,7 +263,7 @@ static int send_join_msg(int sock)
 #ifdef FSNP_DEBUG
 	printf("Sending the join message\n");
 #endif
-	ret = fsnp_write_msg_tcp(sock, 0, (struct fsnp_msg *)join, &err);
+	ret = fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)join, &err);
 	if (ret < 0) {
 		fsnp_print_err_msg(err);
 		free(join);
@@ -413,8 +413,8 @@ static void peer_tcp_thread(void *data)
 
 	if (tcp_state.send_leave_msg) {
 		fsnp_init_leave(&leave);
-		w = fsnp_write_msg_tcp(tcp_state.sock, 0, (struct fsnp_msg *)&leave,
-				               &err);
+		w = fsnp_write_msg_tcp(tcp_state.sock, 0,
+			                  (const struct fsnp_msg *)&leave, &err);
 		if (w < 0) {
 			fsnp_print_err_msg(err);
 			PRINT_PEER;

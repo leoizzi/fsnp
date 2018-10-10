@@ -204,6 +204,7 @@ static void accept_peer(void)
 	peer_info->addr.ip = ntohl(addr.sin_addr.s_addr);
 	peer_info->addr.port = ntohs(addr.sin_port);
 	peer_info->sock = peer_sock;
+	peer_info->joined = false;
 	ret = pipe(peer_info->pipefd);
 	if (ret < 0) {
 		perror("accept_peer-pipe");

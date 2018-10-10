@@ -16,6 +16,7 @@
  */
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #include "peer/file_cache.h"
 
@@ -52,6 +53,16 @@ bool init_file_cache(void)
 	}
 
 	return true;
+}
+
+int cache_add_files(int num_files, uint8_t *keys, struct fsnp_peer *owner)
+{
+
+}
+
+void cache_rm_files(struct fsnp_peer *owner)
+{
+
 }
 
 void close_file_cache(void)

@@ -20,6 +20,7 @@
 
 #include <stdbool.h>
 #include <sys/socket.h>
+#include <stdio.h>
 
 #include "compiler.h"
 

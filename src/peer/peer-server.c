@@ -41,7 +41,7 @@ static bool send_query(int sock)
 	fsnp_err_t err;
 
 	fsnp_init_query(&query, PEER);
-	t = fsnp_write_msg_tcp(sock, 0, (struct fsnp_msg *)&query, &err);
+	t = fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)&query, &err);
 	if (t < 0) {
 		fsnp_print_err_msg(err);
 		return false;
@@ -88,7 +88,7 @@ static void first_peer(int sock)
 				  " doesn't know about it.\nSending a request to add this"
 	              " superpeer to its list\n");
 		fsnp_init_add_sp(&add_sp, get_tcp_sp_port(), get_udp_sp_port());
-		w = fsnp_write_msg_tcp(sock, 0, (struct fsnp_msg *)&add_sp, &err);
+		w = fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)&add_sp, &err);
 		if (w < 0) {
 			fsnp_print_err_msg(err);
 			PRINT_PEER;

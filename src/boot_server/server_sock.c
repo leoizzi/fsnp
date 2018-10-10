@@ -126,7 +126,8 @@ static void normal_query_res(const struct handler_data *data,
 	}
 
 	free(sp);
-	w = fsnp_write_msg_tcp(data->sock, 0, (struct fsnp_msg *)query_res, &err);
+	w = fsnp_write_msg_tcp(data->sock, 0, (const struct fsnp_msg *)query_res,
+			               &err);
 	if (w < 0) {
 		fsnp_print_err_msg(err);
 	}
@@ -161,7 +162,8 @@ static void first_query_res(const struct handler_data *data,
 		return;
 	}
 
-	w = fsnp_write_msg_tcp(data->sock, 0, (struct fsnp_msg *)query_res, &err);
+	w = fsnp_write_msg_tcp(data->sock, 0, (const struct fsnp_msg *)query_res,
+			               &err);
 	if (w < 0) {
 		fsnp_print_err_msg(err);
 		return;

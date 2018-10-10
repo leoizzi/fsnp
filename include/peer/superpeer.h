@@ -31,6 +31,10 @@ struct peer_info {
 	int sock;
 	int pipefd[2];
 	struct fsnp_peer addr;
+	/* 'joined' is used to check if the peer has respected the protocol by
+	 * sending a join message as first message. If not the superpeer will shut
+	 * down the communication with him */
+	bool joined;
 };
 
 #define PIPE_QUIT 1
