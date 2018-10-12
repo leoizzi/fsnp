@@ -30,16 +30,8 @@ if (FSNP_MEM_DEBUG)
 	set(FSNP_GLOBAL_DEF ${FSNP_GLOBAL_DEF} -DFSNP_MEM_DEBUG)
 endif ()
 
-if (CMAKE_BUILD_TYPE MATCHES "Debug")
-	set(FSNP_GLOBAL_DEF ${FSNP_GLOBAL_DEF} -DFSNP_DEBUG)
-	set(FSNP_TIMEOUT 65535)
-endif ()
-
-message(STATUS "Using timeout value of ${FSNP_TIMEOUT} milliseconds")
-set(FSNP_GLOBAL_DEF ${FSNP_GLOBAL_DEF} -DFSNP_TIMEOUT=${FSNP_TIMEOUT})
-
 set(COMMON_COMPILER_FLAGS -Wall -Wextra -Wundef -Wshadow -Wcast-align
-						  -Wno-deprecated)
+		-Wno-deprecated)
 
 # -Wundef: warn if an uninitialized identifier is evaluated in an #if directive.
 
@@ -50,6 +42,14 @@ set(COMMON_COMPILER_FLAGS -Wall -Wextra -Wundef -Wshadow -Wcast-align
 # of the target is increased. For example, warn if a char * is cast to an int *
 # on machines where integers can only be accessed at two- or four-byte
 # boundaries.
+
+if (CMAKE_BUILD_TYPE MATCHES "Debug")
+	set(FSNP_GLOBAL_DEF ${FSNP_GLOBAL_DEF} -DFSNP_DEBUG)
+	set(FSNP_TIMEOUT 65535)
+endif ()
+
+message(STATUS "Using timeout value of ${FSNP_TIMEOUT} milliseconds")
+set(FSNP_GLOBAL_DEF ${FSNP_GLOBAL_DEF} -DFSNP_TIMEOUT=${FSNP_TIMEOUT})
 
 add_definitions(${FSNP_GLOBAL_DEF})
 
