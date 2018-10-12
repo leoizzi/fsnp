@@ -25,7 +25,7 @@
 #include "peer/peer.h"
 #include "peer/superpeer.h"
 #include "peer/port.h"
-#include "peer/file_cache.h"
+#include "peer/keys_cache.h"
 #include "peer/thread_manager.h"
 #include "peer/peer-superpeer.h"
 #include "peer/superpeer-peer.h"
@@ -42,6 +42,8 @@
 #define WRITE_END 1
 
 //TODO: improve the error handling in the sockets' poll handlers
+
+// TODO: add all the files of file_manager to the keys_cache when the peer is becoming a superpeer
 
 /*
  * This list doesn't have a free callback because it shares the content with
@@ -275,20 +277,20 @@ bool enter_sp_mode(void)
 {
 	bool ret = false;
 
-	ret = init_file_cache();
+	ret = init_keys_cache();
 	if (!ret) {
 		return false;
 	}
 
 	known_peers = list_create();
 	if (!known_peers) {
-		close_file_cache();
+		close_keys_cache();
 		return false;
 	}
 
 	ret = initialize_sp();
 	if (!ret) {
-		close_file_cache();
+		close_keys_cache();
 		return false;
 	}
 
@@ -320,7 +322,7 @@ static int quit_peer_threads(void *item, size_t idx, void *user)
 void exit_sp_mode(void)
 {
 	exit_sp_network();
-	close_file_cache();
+	close_keys_cache();
 	list_foreach_value(known_peers, quit_peer_threads, NULL);
 	rm_poll_sp_sock();
 	list_destroy(known_peers);

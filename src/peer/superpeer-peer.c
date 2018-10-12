@@ -22,7 +22,7 @@
 #include "peer/superpeer-peer.h"
 #include "peer/superpeer.h"
 #include "peer/peer.h"
-#include "peer/file_cache.h"
+#include "peer/keys_cache.h"
 
 #include "fsnp/fsnp.h"
 
@@ -111,7 +111,7 @@ static int send_fsnp_error(int sock)
  * Join a peer, adding all of its files to the file cache and sending an ACK to
  * him
  */
-static void join_rcvd(const struct fsnp_join *join, const struct peer_info *info,
+static void join_rcvd(struct fsnp_join *join, struct peer_info *info,
 					  bool *should_exit)
 {
 	int ret = 0;
@@ -133,7 +133,7 @@ static void join_rcvd(const struct fsnp_join *join, const struct peer_info *info
 		return;
 	}
 
-	ret = cache_add_files(join->num_files, join->files_hash, &info->addr);
+	ret = cache_add_keys(join->num_files, join->files_hash, &info->addr);
 	if (ret < 0) {
 		addr.s_addr = htonl(info->addr.ip);
 		fprintf(stderr, "Unable to add the files of peer %s:%hu to the file"
@@ -143,21 +143,20 @@ static void join_rcvd(const struct fsnp_join *join, const struct peer_info *info
 	fsnp_init_ack(&ack);
 	w = fsnp_write_msg_tcp(info->sock, 0, (const struct fsnp_msg *)&ack, &err);
 	if (w < 0) {
-		cache_rm_files(&info->addr);
+		cache_rm_keys(&info->addr);
 		fsnp_print_err_msg(err);
 		info->joined = false;
 		*should_exit = true;
 	}
 }
 
-static void update_rcvd(const struct fsnp_update *update,
-						const struct peer_info *info)
+static void update_rcvd(struct fsnp_update *update, struct peer_info *info)
 {
 	int ret = 0;
 	struct in_addr addr;
 
-	cache_rm_files(&info->addr);
-	ret = cache_add_files(update->num_files, update->files_hash, &info->addr);
+	cache_rm_keys(&info->addr);
+	ret = cache_add_keys(update->num_files, update->files_hash, &info->addr);
 	if (ret < 0) {
 		addr.s_addr = htonl(info->addr.ip);
 		fprintf(stderr, "Unable to add the files of peer %s:%hu to the file"
@@ -168,7 +167,7 @@ static void update_rcvd(const struct fsnp_update *update,
 /*
  * Read a fsnp_msg from the socket and dispatch it to the right handler
  */
-static void read_sock_msg(const struct peer_info *info, bool *should_exit)
+static void read_sock_msg(struct peer_info *info, bool *should_exit)
 {
 	struct fsnp_msg *msg = NULL;
 	ssize_t r = 0;
@@ -201,7 +200,7 @@ static void read_sock_msg(const struct peer_info *info, bool *should_exit)
 			break;
 
 		case UPDATE:
-			update_rcvd((struct fsnp_update *))
+			update_rcvd((struct fsnp_update *)msg, info);
 			break;
 
 		case ALIVE:
@@ -220,7 +219,7 @@ static void read_sock_msg(const struct peer_info *info, bool *should_exit)
 /*
  * Handle an event on the socket
  */
-static void sock_event(short revents, const struct peer_info *info,
+static void sock_event(short revents, struct peer_info *info,
 					   bool *should_exit)
 {
 	if (revents & POLLIN || revents & POLLPRI || revents & POLLRDBAND) {
