@@ -146,6 +146,7 @@ static int peer_already_known(void *item, size_t idx, void *user)
 	return GO_AHEAD;
 }
 
+// TODO: review the peer promotion mechanism. It would be good promote the oldest peer or the one who's sharing more files?
 static void promote_peer(void)
 {
 	int msg = PIPE_PROMOTE;
@@ -207,6 +208,7 @@ static void accept_peer(void)
 	peer_info->addr.port = ntohs(addr.sin_port);
 	peer_info->sock = peer_sock;
 	peer_info->joined = false;
+	peer_info->timeouts = 0;
 	ret = pipe(peer_info->pipefd);
 	if (ret < 0) {
 		perror("accept_peer-pipe");
@@ -271,6 +273,33 @@ void sp_udp_sock_event(short revents)
 		PRINT_PEER;
 #endif
 	}
+}
+
+/*
+ * Iterate over "known_peers" in order to remove from the list the peer that
+ * matches the one passed in "user".
+ */
+static int rm_peer_callback(void *item, size_t idx, void *user)
+{
+	struct peer_info *info = (struct peer_info *)item;
+	struct fsnp_peer *peer = (struct fsnp_peer *)user;
+
+	UNUSED(idx);
+
+	if (info->addr.ip == peer->ip) {
+		if (info->addr.port == peer->port) {
+			return REMOVE_AND_STOP;
+		} else {
+			return GO_AHEAD;
+		}
+	} else {
+		return GO_AHEAD;
+	}
+}
+
+void rm_peer_from_list(struct fsnp_peer *peer)
+{
+	list_foreach_value(known_peers, rm_peer_callback, peer);
 }
 
 bool enter_sp_mode(void)

@@ -35,6 +35,7 @@ struct peer_info {
 	 * sending a join message as first message. If not the superpeer will shut
 	 * down the communication with him */
 	bool joined;
+	unsigned int timeouts;
 };
 
 #define PIPE_QUIT 1
@@ -60,6 +61,11 @@ void sp_tcp_sock_event(short revents);
  * Respond to an event occurred on the UDP socket
  */
 void sp_udp_sock_event(short revents);
+
+/*
+ * Remove the peer passed in input from the list of known peer.
+ */
+void rm_peer_from_list(struct fsnp_peer *peer);
 
 FSNP_END_DECL
 
