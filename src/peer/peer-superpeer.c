@@ -32,6 +32,8 @@
 #include "peer/peer.h"
 #include "peer/thread_manager.h"
 
+// TODO: THE MOST IMPORTANT ONE!!! Use the pipe in the poll for tell to THIS thread to download a fle from a peer or ask who has a file in the network. DO NOT SPAWN ANOTHER THREAD
+
 struct periodic_data {
 	pthread_mutex_t mtx;
 	bool closing;
@@ -334,6 +336,52 @@ struct peer_tcp_state {
 
 static struct peer_tcp_state tcp_state;
 
+static void read_sock_msg(void)
+{
+	struct fsnp_msg *msg = NULL;
+	fsnp_err_t err;
+
+	msg = fsnp_read_msg_tcp(tcp_state.sock, 0, NULL, &err);
+	if (!msg) {
+		fsnp_print_err_msg(err);
+		if (err == E_PEER_DISCONNECTED) {
+			tcp_state.quit_loop = true;
+		}
+
+		return;
+	}
+
+
+	free(msg);
+}
+
+/*
+ * Handle an event happened in the socket
+ */
+static void sock_event(short revents)
+{
+	if (revents & POLLIN || revents & POLLRDBAND || revents & POLLPRI) {
+		read_sock_msg();
+	} else if (revents & POLLHUP) {
+		printf("The superpeer has disconnected itself. Please join another one");
+		PRINT_PEER;
+		tcp_state.quit_loop = true;
+	} else {
+		tcp_state.quit_loop = true;
+	}
+}
+
+/*
+ * Handle an event happened in the pipe (read side)
+ */
+static void pipe_event(short revents)
+{
+	// Whatever happened in the pipe just quit the thread
+	UNUSED(revents);
+
+	tcp_state.quit_loop = true;
+}
+
 #define SOCK 0
 #define PIPE 1
 
@@ -349,37 +397,12 @@ static void setup_peer_tcp_poll(struct pollfd *fds)
 	fds[PIPE].events = POLLIN | POLLPRI;
 }
 
-/*
- * Handle an event happened in the pipe (read side)
- */
-static void pipe_event(short revents)
-{
-	// Whatever happened in the pipe just quit the thread
-	UNUSED(revents);
-
-	tcp_state.quit_loop = true;
-}
-
-/*
- * Handle an event happened in the socket
- */
-static void sock_event(short revents)
-{
-	if (revents & POLLIN || revents & POLLRDBAND || revents & POLLPRI) {
-
-	} else if (revents & POLLHUP) {
-		printf("The superpeer has disconnected itself. Please join another one");
-		PRINT_PEER;
-		tcp_state.quit_loop = true;
-	} else {
-		tcp_state.quit_loop = true;
-	}
-}
-
+#define POLL_ALIVE_TIMEOUT 30000 // ms
 /*
  * Entry point for the thread spawned by 'launch_poll_peer_tcp_sock'.
  * Enter a poll loop for respond to a superpeer and check whether the app is
- * closing
+ * closing, so that we can properly shut down the communication and free the
+ * resources
  */
 static void peer_tcp_thread(void *data)
 {
@@ -394,7 +417,7 @@ static void peer_tcp_thread(void *data)
 	setup_peer_tcp_poll(fds);
 
 	while (!tcp_state.quit_loop) {
-		ret = poll(fds, 2, -1);
+		ret = poll(fds, 2, POLL_ALIVE_TIMEOUT);
 		if (ret > 0) {
 			if (fds[PIPE].revents) {
 				pipe_event(fds[PIPE].revents);
@@ -405,6 +428,8 @@ static void peer_tcp_thread(void *data)
 				sock_event(fds[SOCK].revents);
 				fds[SOCK].revents = 0;
 			}
+		} else if (ret == 0) {
+			// TODO: send alive msg
 		} else {
 			perror("poll");
 			tcp_state.quit_loop = true;
@@ -521,8 +546,8 @@ void join_sp(const struct fsnp_query_res *query_res)
 	launch_poll_peer_tcp_sock(sock);
 }
 
+#undef POLL_ALIVE_TIMEOUT;
 #undef READ_END
 #undef WRITE_END
-#undef POLL_TIMEOUT
 #undef SOCK
 #undef PIPE
