@@ -19,6 +19,7 @@
 #include <memory.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "peer/superpeer-peer.h"
 #include "peer/superpeer.h"
@@ -362,6 +363,9 @@ void sp_tcp_thread(void *data)
 	 * That said, we need to tell the list to remove us from there
 	 */
 	rm_peer_from_list(&info->addr);
+	close(info->sock);
+	close(info->pipefd[READ_END]);
+	close(info->pipefd[WRITE_END]);
 	PRINT_PEER;
 }
 
