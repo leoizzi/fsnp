@@ -18,6 +18,7 @@
 #include <poll.h>
 #include <memory.h>
 #include <stdbool.h>
+#include <stdlib.h>
 
 #include "peer/superpeer-peer.h"
 #include "peer/superpeer.h"
@@ -252,6 +253,8 @@ static void read_sock_msg(struct peer_info *info, bool leaving,
 			info->timeouts = 0;
 			break;
 	}
+
+	free(msg);
 }
 
 /*
