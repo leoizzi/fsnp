@@ -63,7 +63,6 @@ static void send_update_msg(void)
 	struct fsnp_update *update;
 	sha256_t *keys = NULL;
 	uint32_t num_k = 0;
-	ssize_t w = 0;
 	int sock = 0;
 	fsnp_err_t err;
 
@@ -90,9 +89,9 @@ static void send_update_msg(void)
 
 	free(keys);
 	sock = get_peer_sock();
-	w = fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)update, &err);
-	if (w < 0) {
+	err = fsnp_send_update(get_peer_sock(), update);
 #ifdef FSNP_DEBUG
+	if (err != E_NOERR) {
 		fsnp_print_err_msg(err);
 #endif
 	}
@@ -245,7 +244,6 @@ static int send_join_msg(int sock)
 	sha256_t *keys;
 	uint32_t num_keys = 0;
 	fsnp_err_t err;
-	ssize_t ret = 0;
 
 	keys = retrieve_all_keys(&num_keys);
 	if (!keys) {
@@ -265,8 +263,8 @@ static int send_join_msg(int sock)
 #ifdef FSNP_DEBUG
 	printf("Sending the join message\n");
 #endif
-	ret = fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)join, &err);
-	if (ret < 0) {
+	err = fsnp_send_join(sock, join);
+	if (err != E_NOERR) {
 		fsnp_print_err_msg(err);
 		free(join);
 		return -1;
@@ -332,6 +330,7 @@ struct peer_tcp_state {
 	int sock;
 	bool quit_loop;
 	bool send_leave_msg;
+	unsigned int timeouts;
 };
 
 static struct peer_tcp_state tcp_state;
@@ -351,6 +350,20 @@ static void read_sock_msg(void)
 		return;
 	}
 
+	switch (msg->msg_type) {
+		case FILE_RES:
+			break;
+
+		case ALIVE:
+			break;
+
+		case ACK:
+			break;
+
+		default:
+			fprintf(stderr, "Unexpected message type: %d\n", msg->msg_type);
+			PRINT_PEER;
+	}
 
 	free(msg);
 }
@@ -363,7 +376,8 @@ static void sock_event(short revents)
 	if (revents & POLLIN || revents & POLLRDBAND || revents & POLLPRI) {
 		read_sock_msg();
 	} else if (revents & POLLHUP) {
-		printf("The superpeer has disconnected itself. Please join another one");
+		printf("The superpeer has disconnected itself. Please join another"
+		       " one\n");
 		PRINT_PEER;
 		tcp_state.quit_loop = true;
 	} else {
@@ -410,7 +424,6 @@ static void peer_tcp_thread(void *data)
 	int ret = 0;
 	struct fsnp_leave leave;
 	fsnp_err_t err;
-	ssize_t w = 0;
 
 	UNUSED(data);
 
@@ -438,9 +451,8 @@ static void peer_tcp_thread(void *data)
 
 	if (tcp_state.send_leave_msg) {
 		fsnp_init_leave(&leave);
-		w = fsnp_write_msg_tcp(tcp_state.sock, 0,
-			                  (const struct fsnp_msg *)&leave, &err);
-		if (w < 0) {
+		err = fsnp_send_leave(tcp_state.sock, &leave);
+		if (err != E_NOERR < 0) {
 			fsnp_print_err_msg(err);
 			PRINT_PEER;
 		}
@@ -546,7 +558,7 @@ void join_sp(const struct fsnp_query_res *query_res)
 	launch_poll_peer_tcp_sock(sock);
 }
 
-#undef POLL_ALIVE_TIMEOUT;
+#undef POLL_ALIVE_TIMEOUT
 #undef READ_END
 #undef WRITE_END
 #undef SOCK

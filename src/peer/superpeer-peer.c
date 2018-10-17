@@ -50,80 +50,6 @@ static void setup_poll(struct pollfd *pollfd, int p, int s)
 }
 
 /*
- * Send an error message to the peer.
- * Return 0 on success, -1 if an error has occurred
- */
-static int send_error_msg(int sock)
-{
-	struct fsnp_error error;
-	ssize_t w = 0;
-	fsnp_err_t err;
-
-	fsnp_init_error(&error);
-	w = fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)&error, &err);
-	if (w < 0) {
-		fsnp_print_err_msg(err);
-		return -1;
-	}
-
-	return 0;
-}
-
-/*
- * Send an alive message to the peer.
- * Return 0 on success, -1 otherwise
- */
-static int send_alive_msg(struct peer_info *info)
-{
-	struct fsnp_alive alive;
-	ssize_t w = 0;
-	fsnp_err_t err;
-
-	fsnp_init_alive(&alive);
-	w = fsnp_write_msg_tcp(info->sock, 0, (const struct fsnp_msg *)&alive, &err);
-	if (w < 0 && err != E_TIMEOUT) {
-		fsnp_print_err_msg(err);
-		return -1;
-	}
-
-	info->timeouts++;
-	return 0;
-}
-
-/*
- * Send a leave message to the peer
- */
-static void send_leave_msg(int sock)
-{
-	struct fsnp_leave leave;
-	fsnp_err_t err;
-
-	fsnp_init_leave(&leave);
-	// don't care about the return here... we're closing the comm away anyway
-	fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)&leave, &err);
-}
-
-/*
- * Send an ACK message to the peer
- * Return 0 on success, -1 otherwise
- */
-static int send_ack_msg(int sock)
-{
-	struct fsnp_ack ack;
-	ssize_t w = 0;
-	fsnp_err_t err;
-
-	fsnp_init_ack(&ack);
-	w = fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)&ack, &err);
-	if (w < 0) {
-		fsnp_print_err_msg(err);
-		return -1;
-	}
-
-	return 0;
-}
-
-/*
  * Join a peer, adding all of its files to the file cache and sending an ACK to
  * him
  */
@@ -132,13 +58,14 @@ static void join_rcvd(struct fsnp_join *join, struct peer_info *info,
 {
 	int ret = 0;
 	struct in_addr addr;
-	ssize_t w = 0;
 	fsnp_err_t err;
 	struct fsnp_ack ack;
+	struct fsnp_error error;
 
 	if (info->joined) {
-		ret = send_error_msg(info->sock);
-		if (ret < 0) {
+		fsnp_init_error(&error)
+		err = fsnp_send_error(info->sock, &error);
+		if (err != E_NOERR) {
 			*should_exit = true;
 			return;
 		}
@@ -157,8 +84,8 @@ static void join_rcvd(struct fsnp_join *join, struct peer_info *info,
 	}
 
 	fsnp_init_ack(&ack);
-	w = fsnp_write_msg_tcp(info->sock, 0, (const struct fsnp_msg *)&ack, &err);
-	if (w < 0) {
+	err = fsnp_send_ack(info->sock, &ack);
+	if (err != E_NOERR) {
 		cache_rm_keys(&info->addr);
 		fsnp_print_err_msg(err);
 		info->joined = false;
@@ -170,6 +97,8 @@ static void update_rcvd(struct fsnp_update *update, struct peer_info *info)
 {
 	int ret = 0;
 	struct in_addr addr;
+	struct fsnp_ack ack;
+	fsnp_err_t err;
 
 	cache_rm_keys(&info->addr);
 	ret = cache_add_keys(update->num_files, update->files_hash, &info->addr);
@@ -179,6 +108,10 @@ static void update_rcvd(struct fsnp_update *update, struct peer_info *info)
 		                " cache\n", inet_ntoa(addr), htons(info->addr.port));
 		PRINT_PEER;
 	}
+
+	fsnp_init_ack(&ack);
+	// don't care about any error here
+	fsnp_send_ack(info->sock, &ack);
 }
 
 /*
@@ -191,6 +124,7 @@ static void read_sock_msg(struct peer_info *info, bool leaving,
 	ssize_t r = 0;
 	fsnp_err_t err;
 	int ret = 0;
+	struct fsnp_ack ack;
 
 	msg = fsnp_read_msg_tcp(info->sock, 0, &r, &err);
 
@@ -225,16 +159,20 @@ static void read_sock_msg(struct peer_info *info, bool leaving,
 			break;
 
 		case ALIVE:
-			ret = send_ack_msg(info->sock);
-			if (ret < 0) {
-				PRINT_PEER; // we printed with fsnp_print_error
+			fsnp_init_ack(&ack);
+			err = fsnp_send_ack(info->sock, &ack);
+			if (err != E_NOERR) {
+				fsnp_print_err_msg(err);
+				PRINT_PEER;
 			}
 
 			info->timeouts = 0;
 			break;
 
 		case LEAVE:
-			send_ack_msg(info->sock); // don't care about the return... just quit
+			fsnp_init_ack(&ack);
+			// don't care about the return... just quit
+			fsnp_send_ack(info->sock, &ack);
 			*should_exit = true;
 			info->timeouts = 0;
 			break;
@@ -284,6 +222,7 @@ static void read_pipe_msg(const struct peer_info *info, bool *leaving,
 	ssize_t r = 0;
 	int msg = 0;
 	struct fsnp_promote promote;
+	struct fsnp_leave leave;
 
 	r = fsnp_read(info->pipefd[READ_END], &msg, sizeof(int));
 	if (r < 0) {
@@ -297,7 +236,8 @@ static void read_pipe_msg(const struct peer_info *info, bool *leaving,
 	if (msg == PIPE_PROMOTE) {
 		// TODO: promote the peer. Before going on here the superpeer-superpeer file has to be completed, since we need to communicate to the peer who's being promoted the other sps' addresses
 	} else { // msg = PIPE_QUIT
-		send_leave_msg(info->sock);
+		fsnp_init_leave(&leave);
+		fsnp_send_leave(info->sock, &leave);
 		*leaving = true;
 	}
 }
@@ -323,6 +263,8 @@ void sp_tcp_thread(void *data)
 	int ret = 0;
 	bool should_exit = false;
 	bool leaving = false;
+	fsnp_err_t err;
+	struct fsnp_alive alive;
 
 	setup_poll(pollfd, info->pipefd[READ_END], info->sock);
 	while (!should_exit) {
@@ -340,7 +282,12 @@ void sp_tcp_thread(void *data)
 				// we didn't listen the peer for more than 2 minutes. Let's quit
 				should_exit = true;
 			} else {
-				send_alive_msg(info);
+				info->timeouts++;
+				fsnp_init_alive(&alive);
+				err = fsnp_send_alive(info->sock, &alive);
+				if (err == E_PEER_DISCONNECTED) {
+					should_exit = true;
+				}
 			}
 		} else {
 			should_exit = true;

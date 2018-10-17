@@ -280,6 +280,7 @@ struct fsnp_msg *fsnp_read_msg_tcp(int sock, uint16_t timeout, ssize_t *r,
 		*r = r1 + r2;
 	}
 
+	*err = E_NOERR;
 	return msg;
 }
 
@@ -287,11 +288,127 @@ ssize_t fsnp_write_msg_tcp(int sock, uint16_t timeout,
                            const struct fsnp_msg *msg, fsnp_err_t *err)
 {
 	size_t tot_size = 0;
+	ssize_t w = 0;
 
 	if (timeout == 0) {
 		timeout = FSNP_TIMEOUT;
 	}
 
 	tot_size = msg->msg_size + sizeof(struct fsnp_msg);
-	return fsnp_timed_write(sock, msg, tot_size, timeout, err);
+	w = fsnp_timed_write(sock, msg, tot_size, timeout, err);
+	if (w == (ssize_t)tot_size) {
+		*err = E_NOERR;
+	}
+
+	return w;
 }
+
+#define NULL_CHECK(param) { \
+								if ((param) == NULL) { \
+									return E_INVALID_PARAM; \
+								} \
+							}
+
+fsnp_err_t fsnp_send_join(int sock, const struct fsnp_join *join)
+{
+	fsnp_err_t err;
+
+	NULL_CHECK(join);
+	fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)join, &err);
+
+	return err;
+}
+
+fsnp_err_t fsnp_send_ack(int sock, const struct fsnp_ack *ack)
+{
+	fsnp_err_t err;
+
+	NULL_CHECK(ack);
+	fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)ack, &err);
+
+	return err;
+}
+
+fsnp_err_t fsnp_send_leave(int sock, const struct fsnp_leave *leave)
+{
+	fsnp_err_t err;
+
+	NULL_CHECK(leave);
+	fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)leave, &err);
+
+	return err;
+}
+
+fsnp_err_t fsnp_send_file_req(int sock, const struct fsnp_file_req *req)
+{
+	fsnp_err_t err;
+	NULL_CHECK(req);
+	fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)req, &err);
+
+	return err;
+}
+
+fsnp_err_t fsnp_send_file_res(int sock, const struct fsnp_file_res *res)
+{
+	fsnp_err_t err;
+	NULL_CHECK(res);
+	fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)res, &err);
+
+	return err;
+}
+
+fsnp_err_t fsnp_send_update(int sock, const struct fsnp_update *update)
+{
+	fsnp_err_t err;
+	NULL_CHECK(update);
+	fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)update, &err);
+
+	return err;
+}
+
+fsnp_err_t fsnp_send_alive(int sock, const struct fsnp_alive *alive)
+{
+	fsnp_err_t err;
+	NULL_CHECK(alive);
+	fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)alive, &err);
+
+	return err;
+}
+
+fsnp_err_t fsnp_send_get_file(int sock, const struct fsnp_get_file *get_file)
+{
+	fsnp_err_t err;
+	NULL_CHECK(get_file);
+	fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)get_file, &err);
+
+	return err;
+}
+
+fsnp_err_t fsnp_send_error(int sock, const struct fsnp_error *error)
+{
+	fsnp_err_t err;
+	NULL_CHECK(error);
+	fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)error, &err);
+
+	return err;
+}
+
+fsnp_err_t fsnp_send_download(int sock, const struct fsnp_download *download)
+{
+	fsnp_err_t err;
+	NULL_CHECK(download);
+	fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)download, &err);
+
+	return err;
+}
+
+fsnp_err_t fsnp_send_promote(int sock, const struct fsnp_promote *promote)
+{
+	fsnp_err_t err;
+	NULL_CHECK(promote);
+	fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)promote, &err);
+
+	return err;
+}
+
+#undef NULL_CHECK

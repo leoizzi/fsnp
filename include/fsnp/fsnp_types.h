@@ -126,11 +126,11 @@ struct packed fsnp_query {
  * Sent as response to fsnp_query
  * It contains a variable length array of superpeers
  * The value of the port field inside fsnp_peer depends on peer_type requested:
- * - if the type is peer it will contains the port used by the superpeer for talking
- *   with the peers
+ * - if the type is peer it will contains the port used by the superpeer for
+ *   talking with the peers
  *
- * - if the type is superpeer it will contains the port used by the superpeer for
- *   communicating with others superpeer
+ * - if the type is superpeer it will contains the port used by the superpeer
+ *   for communicating with others superpeer
  */
 struct packed fsnp_query_res {
 		struct fsnp_msg header;
@@ -181,7 +181,8 @@ struct packed fsnp_leave {
 };
 
 /*
- * Ask the superpeer to find the peers who are sharing the file with the given hash
+ * Ask the superpeer to find the peers who are sharing the file with the given
+ * hash
  */
 struct packed fsnp_file_req {
 		struct fsnp_msg header;
@@ -231,17 +232,20 @@ struct packed fsnp_error {
 
 /*
  * Sent as response to fsnp_get_file in case the file is available.
+ * In dw_port is indicated the port where to contact the peer for downloading
+ * the file requested.
  */
 struct packed fsnp_download {
 	struct fsnp_msg header;
 	uint64_t file_size;
+	uint16_t dw_port;
 };
 
 /*
  * Sent by a superpeer searching a given file inside the overlay network.
  * There is a unique ID for the request so that it's impossible to create cycles
- * and a missing peers field, in order to propagate uselessly the message if enough
- * peers were collected before
+ * and a missing peers field, in order to propagate uselessly the message if
+ * enough peers were collected before.
  */
 struct packed fsnp_whohas {
 	struct fsnp_msg header;

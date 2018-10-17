@@ -59,6 +59,12 @@ static void print_e_unknown(void)
 				    " to the protocol has happened.\n");
 }
 
+static void print_e_invalid_param(void)
+{
+	fprintf(stderr, "fsnp error type: E_INVALID_PARAM.\nExplanation: An invalid"
+				 " parameter was passed to a function.\n");
+}
+
 static void print_default(void) {
 	fprintf(stderr, "fsnp error type: unknown fsnp_err_t passed!\n");
 }
@@ -66,6 +72,8 @@ static void print_default(void) {
 void fsnp_print_err_msg(fsnp_err_t err)
 {
 	switch (err) {
+		case E_NOERR:
+			return;
 
 		case E_ERRNO:
 			print_e_errno_err();
@@ -90,6 +98,9 @@ void fsnp_print_err_msg(fsnp_err_t err)
 		case E_UNKNOWN:
 			print_e_unknown();
 			break;
+
+		case E_INVALID_PARAM:
+			print_e_invalid_param();
 
 		default:
 			print_default();

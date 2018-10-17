@@ -29,17 +29,21 @@ FSNP_BEGIN_DECL
  * Used in situations where multiple types of error can occur and a more
  * fine-grained error handling can be useful.
  *
+ * E_NOERR: No error has occurred
  * E_ERRNO: check errno for the error
  * E_TIMEOUT: the connection's timer was fired
  * E_NOT_FSNP_MSG: what arrived on the socket wasn't a protocol message
  * E_OUT_OF_MEM: the system is out of memory
+ * E_INVALID_PARAM: an invalid parameter was passed to a function
  */
 enum fsnp_err {
+	E_NOERR = 0,
 	E_ERRNO = -1,
 	E_TIMEOUT = -2,
 	E_NOT_FSNP_MSG = -3,
 	E_OUT_OF_MEM = -4,
 	E_PEER_DISCONNECTED = -5,
+	E_INVALID_PARAM = -6,
 	E_UNKNOWN = -INT_MAX
 };
 

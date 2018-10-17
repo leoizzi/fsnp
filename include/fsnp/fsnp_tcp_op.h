@@ -96,6 +96,83 @@ EXPORT struct fsnp_msg *fsnp_read_msg_tcp(int sock, uint16_t timeout,
 EXPORT ssize_t fsnp_write_msg_tcp(int sock, uint16_t timeout,
                                   const struct fsnp_msg *msg, fsnp_err_t *err);
 
+
+
+/*
+ * From now on the are some convenience functions for sending to another peer
+ * standard messages. They all use the standard fsnp timeout. If a different
+ * timeout is needed use fsnp_write_msg_tcp instead.
+ */
+
+/*
+ * Send a join message.
+ * Return an fsnp_err_t indicating the success or the failure
+ */
+EXPORT fsnp_err_t fsnp_send_join(int sock, const struct fsnp_join *join);
+
+/*
+ * Send an ack message.
+ * Return an fsnp_err_t indicating the success or the failure
+ */
+EXPORT fsnp_err_t fsnp_send_ack(int sock, const struct fsnp_ack *ack);
+
+/*
+ * Send a leave message.
+ * Return an fsnp_err_t indicating the success or the failure
+ */
+EXPORT fsnp_err_t fsnp_send_leave(int sock, const struct fsnp_leave *leave);
+
+/*
+ * Send a file_req message.
+ * Return an fsnp_err_t indicating the success or the failure
+ */
+EXPORT fsnp_err_t fsnp_send_file_req(int sock, const struct fsnp_file_req *req);
+
+/*
+ * Send a file_res message.
+ * Return an fsnp_err_t indicating the success or the failure
+ */
+EXPORT fsnp_err_t fsnp_send_file_res(int sock, const struct fsnp_file_res *res);
+
+/*
+ * Send an update message.
+ * Return an fsnp_err_t indicating the success or the failure
+ */
+EXPORT fsnp_err_t fsnp_send_update(int sock, const struct fsnp_update *update);
+
+/*
+ * Send an alive message.
+ * Return an fsnp_err_t indicating the success or the failure
+ */
+EXPORT fsnp_err_t fsnp_send_alive(int sock, const struct fsnp_alive *alive);
+
+/*
+ * Send a get_file message.
+ * Return an fsnp_err_t indicating the success or the failure
+ */
+EXPORT fsnp_err_t fsnp_send_get_file(int sock,
+                                     const struct fsnp_get_file *get_file);
+
+/*
+ * Send an error message.
+ * Return an fsnp_err_t indicating the success or the failure
+ */
+EXPORT fsnp_err_t fsnp_send_error(int sock, const struct fsnp_error *error);
+
+/*
+ * Send a download message.
+ * Return an fsnp_err_t indicating the success or the failure
+ */
+EXPORT fsnp_err_t fsnp_send_download(int sock,
+                                     const struct fsnp_download *download);
+
+/*
+ * Send a promote message.
+ * Return an fsnp_err_t indicating the success or the failure
+ */
+EXPORT fsnp_err_t fsnp_send_promote(int sock,
+                                    const struct fsnp_promote *promote);
+
 FSNP_END_DECL
 
 #endif //FSNP_FSNP_OP_H
