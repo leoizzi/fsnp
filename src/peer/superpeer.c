@@ -346,6 +346,8 @@ static int quit_peer_threads(void *item, size_t idx, void *user)
 				  "%s:%hu to quit\n", inet_ntoa(addr), htons(info->addr.port));
 		PRINT_PEER;
 	}
+
+	return GO_AHEAD;
 }
 
 void exit_sp_mode(void)

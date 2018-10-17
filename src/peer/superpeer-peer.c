@@ -63,7 +63,7 @@ static void join_rcvd(struct fsnp_join *join, struct peer_info *info,
 	struct fsnp_error error;
 
 	if (info->joined) {
-		fsnp_init_error(&error)
+		fsnp_init_error(&error);
 		err = fsnp_send_error(info->sock, &error);
 		if (err != E_NOERR) {
 			*should_exit = true;
@@ -98,7 +98,6 @@ static void update_rcvd(struct fsnp_update *update, struct peer_info *info)
 	int ret = 0;
 	struct in_addr addr;
 	struct fsnp_ack ack;
-	fsnp_err_t err;
 
 	cache_rm_keys(&info->addr);
 	ret = cache_add_keys(update->num_files, update->files_hash, &info->addr);
@@ -123,7 +122,6 @@ static void read_sock_msg(struct peer_info *info, bool leaving,
 	struct fsnp_msg *msg = NULL;
 	ssize_t r = 0;
 	fsnp_err_t err;
-	int ret = 0;
 	struct fsnp_ack ack;
 
 	msg = fsnp_read_msg_tcp(info->sock, 0, &r, &err);
@@ -255,6 +253,29 @@ static void pipe_event(short revents, const struct peer_info *info,
 	}
 }
 
+/*
+ * Check if the peer is still alive. If not close the communications and quit
+ * the thread
+ */
+static void is_alive(struct peer_info *info, bool *should_exit)
+{
+	fsnp_err_t err;
+	struct fsnp_alive alive;
+
+	info->timeouts++;
+	if (info->timeouts > 4) {
+		// the peer didn't contacted us for more than 2 minutes
+		*should_exit = true;
+		return;
+	}
+
+	fsnp_init_alive(&alive);
+	err = fsnp_send_alive(info->sock, &alive);
+	if (err == E_PEER_DISCONNECTED) {
+		*should_exit = true;
+	}
+}
+
 #define POLL_ALIVE_TIMEOUT 30000 // ms
 void sp_tcp_thread(void *data)
 {
@@ -263,8 +284,6 @@ void sp_tcp_thread(void *data)
 	int ret = 0;
 	bool should_exit = false;
 	bool leaving = false;
-	fsnp_err_t err;
-	struct fsnp_alive alive;
 
 	setup_poll(pollfd, info->pipefd[READ_END], info->sock);
 	while (!should_exit) {
@@ -282,12 +301,7 @@ void sp_tcp_thread(void *data)
 				// we didn't listen the peer for more than 2 minutes. Let's quit
 				should_exit = true;
 			} else {
-				info->timeouts++;
-				fsnp_init_alive(&alive);
-				err = fsnp_send_alive(info->sock, &alive);
-				if (err == E_PEER_DISCONNECTED) {
-					should_exit = true;
-				}
+				is_alive(info, &should_exit);
 			}
 		} else {
 			should_exit = true;

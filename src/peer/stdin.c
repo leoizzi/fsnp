@@ -286,12 +286,38 @@ static void print_download_path(void)
 	fflush(stdout);
 }
 
+#define FILENAME_SIZE 256
+
 /*
  * The user wants to know who has a file in the network
  */
+
 static void who_has_handler(void)
 {
-	// TODO: implement
+	char filename[FILENAME_SIZE];
+	size_t s = 0;
+
+	if (file_already_asked()) {
+		printf("You've already asked a file. Wait until a response for it arrive"
+		 " before asking for another one,\n");
+		PRINT_PEER;
+		return;
+	}
+
+	printf("Insert the name of the file (max 255 character): ");
+	fflush(stdout);
+	s = read_stdin(filename, FILENAME_SIZE);
+	if (s == 0) {
+		fprintf(stderr, "An error occurred while reading from the stdin\n");
+		return;
+	}
+
+	if (filename[s - 1] == '\n') {
+		filename[s - 1] = '0';
+		s--;
+	}
+
+	ask_file(filename, s);
 }
 
 /*
@@ -394,3 +420,6 @@ void stdin_event(void)
 
 	PRINT_PEER;
 }
+
+#undef FILENAME_SIZE
+#undef MAX_STDIN_SIZE

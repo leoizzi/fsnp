@@ -32,8 +32,6 @@
 #include "peer/peer.h"
 #include "peer/thread_manager.h"
 
-// TODO: THE MOST IMPORTANT ONE!!! Use the pipe in the poll for tell to THIS thread to download a fle from a peer or ask who has a file in the network. DO NOT SPAWN ANOTHER THREAD
-
 struct periodic_data {
 	pthread_mutex_t mtx;
 	bool closing;
@@ -89,7 +87,7 @@ static void send_update_msg(void)
 
 	free(keys);
 	sock = get_peer_sock();
-	err = fsnp_send_update(get_peer_sock(), update);
+	err = fsnp_send_update(sock, update);
 #ifdef FSNP_DEBUG
 	if (err != E_NOERR) {
 		fsnp_print_err_msg(err);
@@ -330,15 +328,25 @@ struct peer_tcp_state {
 	int sock;
 	bool quit_loop;
 	bool send_leave_msg;
+	bool file_asked;
 	unsigned int timeouts;
 };
 
 static struct peer_tcp_state tcp_state;
 
+/*
+ * Handler called when a FILE_RES msg is received.
+ */
+static void file_res_rcvd(struct fsnp_file_res *file_res)
+{
+	tcp_state.file_asked = false;
+}
+
 static void read_sock_msg(void)
 {
 	struct fsnp_msg *msg = NULL;
 	fsnp_err_t err;
+	struct fsnp_ack ack;
 
 	msg = fsnp_read_msg_tcp(tcp_state.sock, 0, NULL, &err);
 	if (!msg) {
@@ -352,12 +360,18 @@ static void read_sock_msg(void)
 
 	switch (msg->msg_type) {
 		case FILE_RES:
+			file_res_rcvd((struct fsnp_file_res *)msg);
+			tcp_state.timeouts = 0;
 			break;
 
 		case ALIVE:
+			tcp_state.timeouts = 0;
+			fsnp_init_ack(&ack);
+			fsnp_send_ack(tcp_state.sock, &ack);
 			break;
 
 		case ACK:
+			tcp_state.timeouts = 0;
 			break;
 
 		default:
@@ -385,15 +399,122 @@ static void sock_event(short revents)
 	}
 }
 
+#define PIPE_QUIT -1
+#define PIPE_WHO_HAS 0
+#define PIPE_DOWNLOAD 1
+
+#define FILENAME_SIZE 256
+
+/*
+ * Read from the pipe the filename and its size
+ */
+static size_t read_filename_from_pipe(char *msg)
+{
+	int pipe_read = 0;
+	ssize_t r = 0;
+	size_t size;
+	fsnp_err_t err;
+
+	pipe_read = tcp_state.pipe_fd[READ_END];
+	r = fsnp_timed_read(pipe_read, &size, sizeof(size_t), 1000, &err);
+	if (r < 0) {
+		fsnp_print_err_msg(err);
+		PRINT_PEER;
+		return 0;
+	}
+
+	r = fsnp_timed_read(pipe_read, msg, size, 1000, &err);
+	if (r < 0) {
+		fsnp_print_err_msg(err);
+		PRINT_PEER;
+		return 0;
+	}
+
+	return size;
+}
+
+/*
+ *  Send a who_has message to the superpeer
+ */
+static void send_file_req(void)
+{
+	size_t size;
+	char msg[FILENAME_SIZE];
+	fsnp_err_t err;
+	struct fsnp_file_req file_req;
+	sha256_t sha;
+
+	size = read_filename_from_pipe(msg);
+	if (size == 0) {
+		return;
+	}
+
+	if (tcp_state.file_asked) {
+		// If the user was quick enough to ask two times for a file stop him here
+		return;
+	}
+
+	sha256(msg, size, sha);
+	fsnp_init_file_req(&file_req, sha);
+	err = fsnp_send_file_req(tcp_state.sock, &file_req);
+	if (err != E_NOERR) {
+		fsnp_print_err_msg(err);
+		PRINT_PEER;
+		return;
+	}
+
+	tcp_state.file_asked = true;
+}
+
+/*
+ * Read a message from the pipe and call the right handler
+ */
+static void read_pipe_msg(void)
+{
+	int type = 0;
+	ssize_t ret = 0;
+
+	ret = fsnp_read(tcp_state.pipe_fd[READ_END], &type, sizeof(int));
+	if (ret < 0) {
+		tcp_state.quit_loop = true;
+		return;
+	}
+
+	switch (type) {
+		case PIPE_QUIT:
+			tcp_state.quit_loop = true;
+			break;
+
+		case PIPE_WHO_HAS:
+			send_file_req();
+			break;
+
+		case PIPE_DOWNLOAD:
+			// TODO: implement
+			break;
+
+		default:
+			// if we're here something really weird happened. Close everything
+			tcp_state.quit_loop = true;
+			fprintf(stderr, "Quitting the 'peer_tcp_thread'. An unexpected error"
+				   " has occurred\n");
+			PRINT_PEER;
+			break;
+	}
+}
+
+#undef FILENAME_SIZE
+
 /*
  * Handle an event happened in the pipe (read side)
  */
 static void pipe_event(short revents)
 {
-	// Whatever happened in the pipe just quit the thread
-	UNUSED(revents);
-
-	tcp_state.quit_loop = true;
+	if (revents & POLLIN || revents & POLLRDBAND || revents & POLLPRI) {
+		read_pipe_msg();
+	} else {
+		tcp_state.quit_loop = true;
+	}
 }
 
 #define SOCK 0
@@ -411,9 +532,32 @@ static void setup_peer_tcp_poll(struct pollfd *fds)
 	fds[PIPE].events = POLLIN | POLLPRI;
 }
 
+/*
+ * Check if the superpeer is still alive. If not close the communications and
+ * quit the thread
+ */
+static void is_alive(void)
+{
+	fsnp_err_t err;
+	struct fsnp_alive alive;
+
+	tcp_state.timeouts++;
+	if (tcp_state.timeouts > 4) {
+		// the peer didn't contacted us for more than 2 minutes
+		tcp_state.quit_loop = true;
+		return;
+	}
+
+	fsnp_init_alive(&alive);
+	err = fsnp_send_alive(tcp_state.sock, &alive);
+	if (err == E_PEER_DISCONNECTED) {
+		tcp_state.quit_loop = true;
+	}
+}
+
 #define POLL_ALIVE_TIMEOUT 30000 // ms
 /*
- * Entry point for the thread spawned by 'launch_poll_peer_tcp_sock'.
+ * Entry point for the thread spawned by 'launch_peer_thread'.
  * Enter a poll loop for respond to a superpeer and check whether the app is
  * closing, so that we can properly shut down the communication and free the
  * resources
@@ -429,6 +573,10 @@ static void peer_tcp_thread(void *data)
 
 	setup_peer_tcp_poll(fds);
 
+	tcp_state.quit_loop = false;
+	tcp_state.send_leave_msg = false;
+	tcp_state.file_asked = false;
+
 	while (!tcp_state.quit_loop) {
 		ret = poll(fds, 2, POLL_ALIVE_TIMEOUT);
 		if (ret > 0) {
@@ -442,7 +590,7 @@ static void peer_tcp_thread(void *data)
 				fds[SOCK].revents = 0;
 			}
 		} else if (ret == 0) {
-			// TODO: send alive msg
+			is_alive();
 		} else {
 			perror("poll");
 			tcp_state.quit_loop = true;
@@ -452,7 +600,7 @@ static void peer_tcp_thread(void *data)
 	if (tcp_state.send_leave_msg) {
 		fsnp_init_leave(&leave);
 		err = fsnp_send_leave(tcp_state.sock, &leave);
-		if (err != E_NOERR < 0) {
+		if (err != E_NOERR) {
 			fsnp_print_err_msg(err);
 			PRINT_PEER;
 		}
@@ -472,7 +620,7 @@ static void peer_tcp_thread(void *data)
 /*
  * Set up 'tcp_state' and spawn the relative thread
  */
-static void launch_poll_peer_tcp_sock(int sock)
+static void launch_peer_thread(int sock)
 {
 	int ret = 0;
 
@@ -493,24 +641,6 @@ static void launch_poll_peer_tcp_sock(int sock)
 		close(tcp_state.pipe_fd[READ_END]);
 		close(tcp_state.pipe_fd[WRITE_END]);
 		stop_update_thread();
-	}
-}
-
-int get_peer_sock(void)
-{
-	int sock = tcp_state.sock;
-	return sock;
-}
-
-void leave_sp(void)
-{
-	ssize_t ret = 0;
-	int to_write = 1;
-
-	tcp_state.send_leave_msg = true;
-	ret = fsnp_write(tcp_state.pipe_fd[WRITE_END], &to_write, sizeof(int));
-	if (ret < 0) {
-		perror("Unable to close 'peer_tcp_thread'");
 	}
 }
 
@@ -555,7 +685,51 @@ void join_sp(const struct fsnp_query_res *query_res)
 		return;
 	}
 
-	launch_poll_peer_tcp_sock(sock);
+	launch_peer_thread(sock);
+}
+
+void ask_file(const char *filename, size_t size)
+{
+	ssize_t ret = 0;
+	int to_write = PIPE_WHO_HAS;
+	static const char err_msg[] = "peer-pipe: unable to send WHO_HAS";
+
+	ret = fsnp_write(tcp_state.pipe_fd[WRITE_END], &to_write, sizeof(int));
+	if (ret < 0) {
+		perror(err_msg);
+		return;
+	}
+
+	ret = fsnp_write(tcp_state.pipe_fd[WRITE_END], &size, sizeof(size_t));
+	if (ret < 0) {
+		perror(err_msg);
+		return;
+	}
+
+	ret = fsnp_write(tcp_state.pipe_fd[WRITE_END], filename, size);
+	if (ret < 0) {
+		perror(err_msg);
+		return;
+	}
+}
+
+int get_peer_sock(void)
+{
+	int sock = tcp_state.sock;
+	return sock;
+}
+
+void leave_sp(void)
+{
+	ssize_t ret = 0;
+	int to_write = PIPE_QUIT;
+
+	tcp_state.send_leave_msg = true;
+	ret = fsnp_write(tcp_state.pipe_fd[WRITE_END], &to_write, sizeof(int));
+	if (ret < 0) {
+		tcp_state.quit_loop = true; // force the thread to quit
+		perror("Forcing to quit 'peer_tcp_thread'");
+	}
 }
 
 #undef POLL_ALIVE_TIMEOUT
@@ -563,3 +737,6 @@ void join_sp(const struct fsnp_query_res *query_res)
 #undef WRITE_END
 #undef SOCK
 #undef PIPE
+#undef PIPE_QUIT
+#undef PIPE_DOWNLOAD
+#undef PIPE_WHO_HAS

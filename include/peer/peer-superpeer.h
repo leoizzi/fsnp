@@ -29,6 +29,18 @@ FSNP_BEGIN_DECL
 void join_sp(const struct fsnp_query_res *query_res);
 
 /*
+ * Send a message to the thread who's talking with the superpeer to search for
+ * a file.
+ * In filename put the name of the file, in size the size of filename
+ */
+void ask_file(const char *filename, size_t size);
+
+/*
+ * If a file request is already in progress return true, otherwise false
+ */
+bool file_already_asked(void);
+
+/*
  * Get the peer's socket. If the socket is unset the function will return 0
  */
 int get_peer_sock(void);
