@@ -713,6 +713,11 @@ void ask_file(const char *filename, size_t size)
 	}
 }
 
+bool file_already_asked(void)
+{
+	return tcp_state.file_asked;
+}
+
 int get_peer_sock(void)
 {
 	int sock = tcp_state.sock;
