@@ -111,7 +111,6 @@ static void normal_query_res(const struct handler_data *data,
 	struct fsnp_peer *sp = NULL;
 	struct fsnp_query_res *query_res = NULL;
 	fsnp_err_t err;
-	ssize_t w = 0;
 
 	sp = read_sp_by_type(&num_sp, msg->peer_type);
 	if (!sp) {
@@ -126,9 +125,8 @@ static void normal_query_res(const struct handler_data *data,
 	}
 
 	free(sp);
-	w = fsnp_write_msg_tcp(data->sock, 0, (const struct fsnp_msg *)query_res,
-			               &err);
-	if (w < 0) {
+	err = fsnp_send_query_res(data->sock, query_res);
+	if (err != E_NOERR) {
 		fsnp_print_err_msg(err);
 	}
 
@@ -150,7 +148,6 @@ static void first_query_res(const struct handler_data *data,
 {
 	struct fsnp_query_res *query_res = NULL;
 	struct fsnp_msg *m = NULL;
-	ssize_t w = 0;
 	ssize_t r = 0;
 	fsnp_err_t err;
 
@@ -162,12 +159,12 @@ static void first_query_res(const struct handler_data *data,
 		return;
 	}
 
-	w = fsnp_write_msg_tcp(data->sock, 0, (const struct fsnp_msg *)query_res,
-			               &err);
-	if (w < 0) {
+	err = fsnp_send_query_res(data->sock, query_res);
+	if (err != E_NOERR && err != E_PEER_DISCONNECTED) {
 		fsnp_print_err_msg(err);
 		return;
-	} else if (w == 0) { // the peer has closed the connection
+	} else if (err == E_PEER_DISCONNECTED) {
+		// the peer has closed the connection
 		return;
 	}
 

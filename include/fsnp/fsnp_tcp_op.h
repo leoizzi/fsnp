@@ -105,6 +105,30 @@ EXPORT ssize_t fsnp_write_msg_tcp(int sock, uint16_t timeout,
  */
 
 /*
+ * Send a query message.
+ * Return an fsnp_err_t indicating the success or the failure
+ */
+EXPORT fsnp_err_t fsnp_send_query(int sock, const struct fsnp_query *query);
+
+/*
+ * Send a query_res message.
+ * Return an fsnp_err_t indicating the success or the failure
+ */
+EXPORT fsnp_err_t fsnp_send_query_res(int sock,
+									  const struct fsnp_query_res *query_res);
+/*
+ * Send an add_sp message.
+ * Return an fsnp_err_t indicating the success or the failure
+ */
+EXPORT fsnp_err_t fsnp_send_add_sp(int sock, const struct fsnp_add_sp *add_sp);
+
+/*
+ * Send a rm_sp message.
+ * Return an fsnp_err_t indicating the success or the failure
+ */
+EXPORT fsnp_err_t fsnp_send_rm_sp(int sock, const struct fsnp_rm_sp *rm_sp);
+
+/*
  * Send a join message.
  * Return an fsnp_err_t indicating the success or the failure
  */

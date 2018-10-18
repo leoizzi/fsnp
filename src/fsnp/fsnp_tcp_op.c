@@ -309,6 +309,46 @@ ssize_t fsnp_write_msg_tcp(int sock, uint16_t timeout,
 								} \
 							}
 
+fsnp_err_t fsnp_send_query(int sock, const struct fsnp_query *query)
+{
+	fsnp_err_t err;
+
+	NULL_CHECK(query);
+	fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)query, &err);
+
+	return err;
+}
+
+fsnp_err_t fsnp_send_query_res(int sock, const struct fsnp_query_res *query_res)
+{
+	fsnp_err_t err;
+
+	NULL_CHECK(query_res);
+	fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)query_res, &err);
+
+	return err;
+}
+
+fsnp_err_t fsnp_send_add_sp(int sock, const struct fsnp_add_sp *add_sp)
+{
+	fsnp_err_t err;
+
+	NULL_CHECK(add_sp);
+	fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)add_sp, &err);
+
+	return err;
+}
+
+fsnp_err_t fsnp_send_rm_sp(int sock, const struct fsnp_rm_sp *rm_sp)
+{
+	fsnp_err_t err;
+
+	NULL_CHECK(rm_sp);
+	fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)rm_sp, &err);
+
+	return err;
+}
+
 fsnp_err_t fsnp_send_join(int sock, const struct fsnp_join *join)
 {
 	fsnp_err_t err;

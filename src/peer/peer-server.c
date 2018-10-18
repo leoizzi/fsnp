@@ -37,12 +37,11 @@
 static bool send_query(int sock)
 {
 	struct fsnp_query query;
-	ssize_t t = 0;
 	fsnp_err_t err;
 
 	fsnp_init_query(&query, PEER);
-	t = fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)&query, &err);
-	if (t < 0) {
+	err = fsnp_send_query(sock, &query);
+	if (err != E_NOERR) {
 		fsnp_print_err_msg(err);
 		return false;
 	}
@@ -72,14 +71,10 @@ static struct fsnp_query_res *read_res(int sock)
 
 /*
  * Add the peer to the server superpeer list
- *
- * NOTE: there is no need to call leave_sp before since there's no
- * possibility that the peer socket was created... we're the first!
  */
 static void first_peer(int sock)
 {
 	struct fsnp_add_sp add_sp;
-	ssize_t w = 0;
 	fsnp_err_t err;
 	bool ret = false;
 
@@ -88,8 +83,8 @@ static void first_peer(int sock)
 				  " doesn't know about it.\nSending a request to add this"
 	              " superpeer to its list\n");
 		fsnp_init_add_sp(&add_sp, get_tcp_sp_port(), get_udp_sp_port());
-		w = fsnp_write_msg_tcp(sock, 0, (const struct fsnp_msg *)&add_sp, &err);
-		if (w < 0) {
+		err = fsnp_send_add_sp(sock, &add_sp);
+		if (err != E_NOERR) {
 			fsnp_print_err_msg(err);
 			PRINT_PEER;
 			return;
