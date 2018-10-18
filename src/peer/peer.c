@@ -281,7 +281,6 @@ int peer_main(bool localhost)
 	}
 
 	printf("Quitting...\n");
-	// TODO: send a leave message to the superpeer (if any)
 	// TODO: free all the resources of the struct library
 	if (is_superpeer()) {
 		printf("Closing the superpeer's sockets...\n");

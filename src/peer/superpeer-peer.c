@@ -26,6 +26,8 @@
 #include "peer/peer.h"
 #include "peer/keys_cache.h"
 
+#include "peer/peer-superpeer.h" // FIXME: is this right?
+
 #include "fsnp/fsnp.h"
 
 #define READ_END 0
@@ -148,6 +150,12 @@ static void read_sock_msg(struct peer_info *info, bool leaving,
 
 		case FILE_REQ:
 			// TODO: before going on with FILE_REQ a working implementation of the superpeers' network is needed
+			info->timeouts = 0;
+			break;
+
+		case FILE_RES: // FIXME: is this right?
+		// maybe it's better if the superpeer just know if he has done the request for itself and directly show the result
+			file_res_rcvd((struct fsnp_file_res *)msg);
 			info->timeouts = 0;
 			break;
 

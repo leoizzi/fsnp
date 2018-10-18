@@ -36,6 +36,11 @@ void join_sp(const struct fsnp_query_res *query_res);
 void ask_file(const char *filename, size_t size);
 
 /*
+ * Handler called when a FILE_RES msg is received.
+ */
+void file_res_rcvd(struct fsnp_file_res *file_res);
+
+/*
  * If a file request is already in progress return true, otherwise false
  */
 bool file_already_asked(void);

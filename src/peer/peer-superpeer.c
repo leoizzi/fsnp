@@ -38,7 +38,7 @@ struct periodic_data {
 	bool is_running;
 };
 
-static struct periodic_data pd;
+static struct periodic_data pd; // it's not a political party :)
 
 static void stop_update_thread(void)
 {
@@ -337,9 +337,23 @@ static struct peer_tcp_state tcp_state;
 /*
  * Handler called when a FILE_RES msg is received.
  */
-static void file_res_rcvd(struct fsnp_file_res *file_res)
+void file_res_rcvd(struct fsnp_file_res *file_res)
 {
+	uint8_t i = 0;
+	struct in_addr addr;
+
 	tcp_state.file_asked = false;
+	printf("There are %hhu peers who have the file you're searching.\n You can "
+		   "download it from one of them by inserting the string 'download' from"
+           " the command line.\n\n", file_res->num_peers);
+
+	for (i = 0; i < file_res->num_peers; i++) {
+		addr.s_addr = htonl(file_res->peers[i].ip);
+		printf("Peer %hhu: %s:%hu\n", i, inet_ntoa(addr),
+				file_res->peers[i].port);
+	}
+
+	PRINT_PEER;
 }
 
 static void read_sock_msg(void)
@@ -372,6 +386,13 @@ static void read_sock_msg(void)
 
 		case ACK:
 			tcp_state.timeouts = 0;
+			break;
+
+		case LEAVE:
+			tcp_state.timeouts = 0;
+			fsnp_init_ack(&ack);
+			fsnp_send_ack(tcp_state.sock, &ack);
+			tcp_state.quit_loop = true;
 			break;
 
 		default:
