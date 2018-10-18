@@ -297,6 +297,12 @@ static void who_has_handler(void)
 	char filename[FILENAME_SIZE];
 	size_t s = 0;
 
+	if (get_peer_sock() == 0 && !is_superpeer()) {
+		printf("You have to join a superpeer before searching for a file,\n");
+		PRINT_PEER;
+		return;
+	}
+
 	if (file_already_asked()) {
 		printf("You've already asked a file. Wait until a response for it arrive"
 		 " before asking for another one,\n");
@@ -313,7 +319,7 @@ static void who_has_handler(void)
 	}
 
 	if (filename[s - 1] == '\n') {
-		filename[s - 1] = '0';
+		filename[s - 1] = '\0';
 		s--;
 	}
 
