@@ -439,6 +439,7 @@ static void rm_sp_from_server(void)
 void exit_sp_mode(void)
 {
 	exit_sp_network();
+	rm_sp_from_server();
 	close_keys_cache();
 	list_foreach_value(known_peers, quit_peer_threads, NULL);
 	rm_poll_sp_sock();
