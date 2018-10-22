@@ -21,6 +21,7 @@
 #include <stdlib.h>
 
 #include "peer/keys_cache.h"
+#include "peer/file_manager.h"
 
 #include "struct/hashtable.h"
 #include "struct/linklist.h"

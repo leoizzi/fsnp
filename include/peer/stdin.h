@@ -18,6 +18,9 @@
 #ifndef FSNP_STDIN_H
 #define FSNP_STDIN_H
 
+#include <stdbool.h>
+#include <arpa/inet.h>
+
 #include "compiler.h"
 
 FSNP_BEGIN_DECL
@@ -47,6 +50,11 @@ void block_stdin(void);
  * Unlock the stdin for the main thread
  */
 void release_stdin(void);
+
+/*
+ * Ask the user to give us an IP address and a port
+ */
+bool request_user_ip_port(struct sockaddr_in *addr);
 
 FSNP_END_DECL
 

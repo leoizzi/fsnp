@@ -108,6 +108,8 @@ static void first_peer(int sock)
  */
 static void parse_query_res(int sock, struct fsnp_query_res *query_res)
 {
+	set_peer_ip(query_res->peer_addr);
+
 	if (query_res->num_sp == 1) {
 		if (query_res->sp_list[0].ip == 0 && query_res->sp_list[0].port == 0) {
 			first_peer(sock);
@@ -126,6 +128,7 @@ static void query_server(void *data)
 	int sock = 0;
 	struct sockaddr_in *addr = (struct sockaddr_in *)data;
 	struct fsnp_query_res *query_res = NULL;
+	struct fsnp_peer server_addr;
 
 	sock = fsnp_create_connect_tcp_sock(addr->sin_addr, addr->sin_port);
 	if (sock < 0) {
@@ -141,6 +144,10 @@ static void query_server(void *data)
 	if (!query_res) {
 		return;
 	}
+
+	server_addr.ip = addr->sin_addr.s_addr;
+	server_addr.port = addr->sin_port;
+	set_server_addr(&server_addr);
 
 	parse_query_res(sock, query_res);
 

@@ -34,7 +34,7 @@ void fsnp_init_query(struct fsnp_query *query, fsnp_peer_type_t type)
 	fsnp_init_msg(&query->header, QUERY, sizeof(*query));
 }
 
-struct fsnp_query_res *fsnp_create_query_res(uint8_t num_sp,
+struct fsnp_query_res *fsnp_create_query_res(in_addr_t peer_addr, uint8_t num_sp,
                                              struct fsnp_peer *sp_list)
 {
 	struct fsnp_query_res *query_res = NULL;
@@ -62,6 +62,7 @@ struct fsnp_query_res *fsnp_create_query_res(uint8_t num_sp,
 		memcpy(query_res->sp_list, sp_list, list_size);
 	}
 
+	query_res->peer_addr = peer_addr;
 	fsnp_init_msg(&query_res->header, QUERY_RES, size);
 	return query_res;
 }

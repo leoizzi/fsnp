@@ -109,10 +109,7 @@ static size_t read_stdin(char *msg, int size)
 #define IP_STR_SIZE 16
 #define PORT_STR_SIZE 6
 
-/*
- * Ask the user to give us an IP address and a port
- */
-static bool request_user_ip_port(struct sockaddr_in *addr)
+bool request_user_ip_port(struct sockaddr_in *addr)
 {
 	char ip[IP_STR_SIZE];
 	char port[PORT_STR_SIZE];
@@ -189,7 +186,7 @@ static void join_sp_handler(void)
 
 	peer.ip = addr.sin_addr.s_addr;
 	peer.port = addr.sin_port;
-	query_res = fsnp_create_query_res(1, &peer);
+	query_res = fsnp_create_query_res(0, 1, &peer);
 	if (!query_res) {
 		fprintf(stderr, "Unable to join\n");
 		return;

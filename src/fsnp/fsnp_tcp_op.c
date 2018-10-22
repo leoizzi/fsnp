@@ -38,7 +38,7 @@ int fsnp_create_bind_tcp_sock(in_port_t *port, bool localhost)
 		return -1;
 	}
 
-	memset(&addr, sizeof(addr), 0);
+	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
 	if (localhost) {
 		addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);

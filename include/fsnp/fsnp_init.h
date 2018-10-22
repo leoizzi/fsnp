@@ -45,8 +45,9 @@ EXPORT void fsnp_init_msg(struct fsnp_msg *header, fsnp_type_t type,
  
 EXPORT void fsnp_init_query(struct fsnp_query *query, fsnp_peer_type_t type);
 
-EXPORT struct fsnp_query_res *fsnp_create_query_res(uint8_t num_sp,
-                                             struct fsnp_peer *sp_list);
+EXPORT struct fsnp_query_res *fsnp_create_query_res(in_addr_t peer_addr,
+													uint8_t num_sp,
+                                                    struct fsnp_peer *sp_list);
 
 EXPORT void fsnp_init_add_sp(struct fsnp_add_sp *add_sp, in_port_t p_port,
                              in_port_t sp_port);

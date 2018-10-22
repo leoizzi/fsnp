@@ -24,6 +24,8 @@
 
 #include "compiler.h"
 
+#include "fsnp/fsnp_types.h"
+
 FSNP_BEGIN_DECL
 
 #define PRINT_PEER printf("\nPeer: "); fflush(stdout)
@@ -48,7 +50,7 @@ void rm_poll_sp_sock(void);
  * Get the TCP superpeer's socket. If the socket is unset the function will
  * return 0
  */
-int get_sp_tcp_sock(void);
+int get_tcp_sp_sock(void);
 
 /*
  * Return true if the peer is also a superpeer, false otherwise
@@ -80,6 +82,27 @@ in_port_t get_udp_sp_port(void);
  * Set the UDP port used for communicating with others superpeers
  */
 void set_udp_sp_port(in_port_t port);
+
+/*
+ * Set the address of the last bootstrap server contacted by the peer.
+ */
+void set_server_addr(const struct fsnp_peer *addr);
+
+/*
+ * Get the address of the last bootstrap server contacted by the peer.
+ * If the address and the port are all set to 0 no server is known
+ */
+void get_server_addr(struct fsnp_peer *addr);
+
+/*
+ * Set the IP address of this peer (in little endian format)
+ */
+void set_peer_ip(in_addr_t peer_ip);
+
+/*
+ * Get the IP address of this peer (in little endian format)
+ */
+in_addr_t get_peer_ip(void);
 
 /*
  * Exit the peer

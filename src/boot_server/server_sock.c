@@ -118,7 +118,8 @@ static void normal_query_res(const struct handler_data *data,
 		return;
 	}
 
-	query_res = fsnp_create_query_res(num_sp, sp);
+	query_res = fsnp_create_query_res(ntohl(data->addr.sin_addr.s_addr), num_sp,
+									  sp);
 	if (!query_res) {
 		fprintf(stderr, "\nUnable to create the query_res\n");
 		return;
@@ -153,7 +154,8 @@ static void first_query_res(const struct handler_data *data,
 
 	UNUSED(msg);
 
-	query_res = fsnp_create_query_res(0, NULL);
+	query_res = fsnp_create_query_res(ntohl(data->addr.sin_addr.s_addr), 0,
+									  NULL);
 	if (!query_res) {
 		fprintf(stderr, "\nUnable to create the query_res\n");
 		return;

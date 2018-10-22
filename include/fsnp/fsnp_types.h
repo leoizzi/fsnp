@@ -124,7 +124,9 @@ struct packed fsnp_query {
 
 /*
  * Sent as response to fsnp_query
- * It contains a variable length array of superpeers
+ * It contains a variable length array of superpeers and the address of the peer
+ * used for contacting the server (in little endian format).
+ *
  * The value of the port field inside fsnp_peer depends on peer_type requested:
  * - if the type is peer it will contains the port used by the superpeer for
  *   talking with the peers
@@ -134,6 +136,7 @@ struct packed fsnp_query {
  */
 struct packed fsnp_query_res {
 		struct fsnp_msg header;
+		in_addr_t peer_addr;
 		uint8_t num_sp;
 		struct fsnp_peer sp_list[1];
 };
@@ -148,8 +151,9 @@ struct packed fsnp_add_sp {
 };
 
 /*
- * Tell the server to remove a superpeer. Based on the peer type the port field
- * inside addr is either the peer port or the superpeer port
+ * Tell the server to remove a superpeer. Based on 'peer_type' the 'port' field
+ * inside addr is either the port number used by the peers or the port number
+ * used by the superpeers
  */
 struct packed fsnp_rm_sp {
 		struct fsnp_msg header;

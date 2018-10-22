@@ -19,6 +19,7 @@
 #define FSNP_PEER_SERVER_H
 
 #include <arpa/inet.h>
+#include "fsnp/fsnp_types.h"
 
 #include "compiler.h"
 

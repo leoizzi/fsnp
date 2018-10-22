@@ -26,8 +26,10 @@
 
 FSNP_BEGIN_DECL
 
+// TODO: when searching for a key we need to search in the keys_cache and the file manager!!!
+
 /*
- * Initialize all the resources for using the file cache
+ * Initialize all the resources for using the file cache.
  */
 bool init_keys_cache(void);
 

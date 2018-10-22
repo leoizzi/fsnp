@@ -52,6 +52,8 @@ struct state {
 	in_port_t udp_sp_port;
 	bool localhost;
 	bool sp;
+	struct fsnp_peer server_addr;
+	in_addr_t peer_ip;
 };
 
 static struct state state;
@@ -111,7 +113,7 @@ void rm_poll_sp_sock(void)
 	set_tcp_sp_port(0);
 }
 
-int get_sp_tcp_sock(void)
+int get_tcp_sp_sock(void)
 {
 	if (!is_superpeer()) {
 		return 0;
@@ -174,6 +176,46 @@ void set_udp_sp_port(in_port_t port)
 in_port_t get_udp_sp_port(void)
 {
 	return state.udp_sp_port;
+}
+
+void set_server_addr(const struct fsnp_peer *addr)
+{
+	if (pthread_mutex_lock(&state.state_mtx)) {
+		fprintf(stderr, err_lock_msg);
+		PRINT_PEER;
+	}
+
+	memcpy(&state.server_addr, addr, sizeof(struct fsnp_peer));
+
+	if (pthread_mutex_unlock(&state.state_mtx)) {
+		fprintf(stderr, err_unlock_msg);
+		PRINT_PEER;
+	}
+}
+
+void get_server_addr(struct fsnp_peer *addr)
+{
+	if (pthread_mutex_lock(&state.state_mtx)) {
+		fprintf(stderr, err_lock_msg);
+		PRINT_PEER;
+	}
+
+	memcpy(addr, &state.server_addr, sizeof(struct fsnp_peer));
+
+	if (pthread_mutex_unlock(&state.state_mtx)) {
+		fprintf(stderr, err_unlock_msg);
+		PRINT_PEER;
+	}
+}
+
+void set_peer_ip(in_addr_t peer_ip)
+{
+	state.peer_ip = peer_ip;
+}
+
+in_addr_t get_peer_ip(void)
+{
+	return state.peer_ip;
 }
 
 void quit_peer(void)
