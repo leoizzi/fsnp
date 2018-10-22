@@ -13,6 +13,15 @@ include_directories(include)
 
 set(FSNP_GLOBAL_DEF "")
 
+include (TestBigEndian)
+TEST_BIG_ENDIAN(IS_BIG_ENDIAN)
+if(IS_BIG_ENDIAN)
+	message(STATUS "Compiling for a big endian system")
+	set(FSNP_GLOBAL_DEF "${FSNP_GLOBAL_DEF} -DFSNP_BIG_ENDIAN")
+	else()
+	message(STATUS "Compiling for a little endian system")
+endif()
+
 if (NOT SERVER_PORT)
 	set(SERVER_PORT 38818)
 elseif (SERVER_PORT LESS_EQUAL 0 OR SERVER_PORT GREATER_EQUAL 65535)
