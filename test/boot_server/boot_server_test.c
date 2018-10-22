@@ -153,6 +153,9 @@ static void query_res(void)
 	}
 
 	query_res = (struct fsnp_query_res *)msg;
+	addr.s_addr = htonl(query_res->peer_addr);
+	printf("IP used by this executable: %s\n", inet_ntoa(addr));
+
 	if (query_res->num_sp == 1) {
 		if (query_res->sp_list->ip == 0 && query_res->sp_list->port == 0) {
 			printf("The server doesn't know any peer. Registering as superpeer\n");
