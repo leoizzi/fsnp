@@ -63,6 +63,7 @@ set(FSNP_GLOBAL_DEF ${FSNP_GLOBAL_DEF} -DFSNP_TIMEOUT=${FSNP_TIMEOUT})
 add_definitions(${FSNP_GLOBAL_DEF})
 
 add_subdirectory(src/struct)
+add_subdirectory(src/slog)
 add_subdirectory(src/fsnp)
 add_subdirectory(src/boot_server)
 add_subdirectory(src/peer)

@@ -1,0 +1,6 @@
+This file is taken from the slog library (https://github.com/kala13x/slog).
+
+I've only fixed the header position, added some macros and switched the
+compilation from make to cmake, keeping all the compiler flags used in the
+makefile.
+
