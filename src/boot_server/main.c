@@ -21,8 +21,11 @@
 #include <string.h>
 #include <stdint.h>
 #include <arpa/inet.h>
+#include <time.h>
 
 #include "boot_server/server.h"
+
+#include "slog/slog.h"
 
 static void usage()
 {
@@ -39,13 +42,17 @@ static void change_default_port(in_port_t *port, char *arg)
 
 	new_port = (in_port_t)strtol(arg, NULL, 10);
 
+	slog_info(FILE_LEVEL, "Change of default port requested: %s", arg);
 	if (new_port == 0) {
-		fprintf(stderr, "Error during the conversion of the string\n");
+		slog_warn(STDOUT_LEVEL, "Error during the conversion of the string");
+		slog_close();
 		exit(EXIT_FAILURE);
 	}
 
 	if (new_port < 0 || new_port >= 65535) {
-		fprintf(stderr, "The server port range value is 1-65536. You've passed %hu\n", new_port);
+		slog_warn(STDOUT_LEVEL, "The server port range value is 1-65536."
+						   " You've passed %hu", new_port);
+		slog_close();
 		exit(EXIT_FAILURE);
 	}
 
@@ -64,8 +71,9 @@ static void server_conf(int argc, char **argv, in_port_t *port, bool *localhost)
 	const char help_opt[] = "--help";
 
 	if (argc > 4) {
-		fprintf(stderr, "Too many arguments!\n");
+		slog_warn(STDOUT_LEVEL, "Too many arguments!");
 		usage();
+		slog_close();
 		exit(EXIT_FAILURE);
 	}
 
@@ -73,16 +81,28 @@ static void server_conf(int argc, char **argv, in_port_t *port, bool *localhost)
 		if (!strncmp(argv[i], with_port_opt, sizeof(with_port_opt))) {
 			change_default_port(port, argv[i] + sizeof(with_port_opt));
 		} else if (!strncmp(argv[i], localhost_opt, sizeof(localhost_opt))) {
+			slog_info(FILE_LEVEL, "localhost option enabled");
 			*localhost = true;
 		} else if (!strncmp(argv[i], help_opt, sizeof(help_opt))) {
 			usage();
+			slog_info(FILE_LEVEL, "Print usage");
+			slog_close();
 			exit(EXIT_SUCCESS);
 		} else {
-			fprintf(stderr, "Unknown command line argument: %s\n\n", argv[i]);
+			slog_warn(STDOUT_LEVEL, "Unknown command line argument: %s\n\n", argv[i]);
+			slog_close();
 			usage();
 			exit(EXIT_SUCCESS);
 		}
 	}
+}
+
+/*
+ * Initialize the slog library
+ */
+static void start_log(void)
+{
+	slog_init("server_log", NULL, MAX_LOG_STDOUT_LEVEL, 1);
 }
 
 int main(int argc, char *argv[])
@@ -90,6 +110,7 @@ int main(int argc, char *argv[])
 	in_port_t port = (in_port_t)SERVER_PORT;
 	bool localhost = false;
 
+	start_log();
 	server_conf(argc, argv, &port, &localhost);
 	return server_main(port, localhost);
 }

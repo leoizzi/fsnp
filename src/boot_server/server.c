@@ -31,6 +31,7 @@
 
 #include "struct/linklist.h"
 
+#include "slog/slog.h"
 
 #define PEER_POLLFD_NUM 2
 #define SOCK_FD 0
@@ -45,9 +46,6 @@ static int sock = 0;
 static void termination_handler(int signum)
 {
 	UNUSED(signum);
-#ifdef FSNP_DEBUG
-	printf("termination handler called\n");
-#endif
 	should_exit = true;
 }
 
@@ -64,8 +62,9 @@ static void setup_signal_handler(void)
 	s.sa_flags = SA_RESTART;
 	err = sigaction(SIGINT, &s, NULL);
 	if (err < 0) {
-		perror("Unable to set up the signal handler for ^C.\n"
-		       "You can still exit by entering 'quit' from the command line.\n");
+		slog_warn(STDOUT_LEVEL, "Unable to set up the signal handler for ^C. "
+						  "You can still exit by entering 'quit' from the "
+						  "command line.");
 	}
 }
 
@@ -76,21 +75,23 @@ static int create_server_socket(in_port_t port, bool localhost)
 
 	sock = fsnp_create_bind_tcp_sock(&sock_port, localhost);
 	if (sock < 0) {
-		perror("Unable to create the server socket. Reason");
-		fprintf(stderr, "\n\nAborting");
+		slog_error(FILE_LEVEL, "Unable to create the server socket."
+		                         " Error: %d", errno);
 		return -1;
 	}
 
 	if (sock_port != port) {
-		printf("The socket wasn't created on the port %hu but on the port %hu\n", port, sock_port);
+		slog_warn(STDOUT_LEVEL, "The socket wasn't created on the port %hu but"
+						  " on the port %hu", port, sock_port);
 	}
-
-	printf("Server socket successfully created\n");
 
 	ret = listen(sock, FSNP_BACKLOG);
 	if (ret < 0) {
-		perror("listen");
+		slog_error(FILE_LEVEL, "listen: error %d", errno);
+		return -1;
 	}
+
+	slog_info(STDOUT_LEVEL, "Server socket successfully created!");
 
 	return 0;
 }
@@ -120,7 +121,7 @@ static void print_sp(void)
 
 	list = read_all_sp();
 	if (!list) {
-		fprintf(stderr, "Unable to read the list\n");
+		slog_warn(STDOUT_LEVEL, "Unable to read the list");
 		return;
 	}
 
@@ -167,9 +168,10 @@ static void server_stdin_handler(void)
 	memset(user_msg, 0, MAX_STDIN_SIZE);
 
 	if (!fgets(user_msg, MAX_STDIN_SIZE, stdin)) {
-		perror("fgets");
+		slog_error(STDOUT_LEVEL, "Error %d for fgets", errno);
 	}
 
+	slog_debug(FILE_LEVEL, "server_stdin_handler: msg \"%s\"", user_msg);
 	if (!strncmp(user_msg, quit, sizeof(quit))) {
 		should_exit = true;
 		return;
@@ -181,6 +183,7 @@ static void server_stdin_handler(void)
 		fprintf(stderr, "?\n");
 	}
 
+	PRINT_SERVER;
 	cleanup_stdin();
 }
 
@@ -200,12 +203,12 @@ static void handle_poll_ret(struct pollfd *pollfd, int ret)
 			server_stdin_handler();
 		}
 
-		printf("\nServer: ");
-		fflush(stdout);
+		PRINT_SERVER;
 	} else if (ret < 0) {
 		if (errno != EINTR) {
-			perror("Server poll error");
+			slog_error(STDOUT_LEVEL, "poll: errno %d", errno);
 		}
+
 		should_exit = true;
 	}
 }
@@ -216,33 +219,42 @@ int server_main(in_port_t port, bool localhost)
 	int ret = 0;
 	struct pollfd pollfd[PEER_POLLFD_NUM];
 
-	printf("Starting server initialization\n");
-
+	slog_info(STDOUT_LEVEL, "Starting server initialization");
+	slog_info(STDOUT_LEVEL, "Initializing the server socket");
 	ret = create_server_socket(port, localhost);
 	if (ret < 0) {
+		slog_error(STDOUT_LEVEL, "Unable to create the server socket. Aborting");
 		return ret;
 	}
 
+	slog_info(STDOUT_LEVEL, "Initializing the sp_manager");
 	ret = init_sp_manager();
 	if (ret < 0) {
-		fprintf(stderr, "Unable to setup the sp manager.\n\nAborting");
+		slog_error(STDOUT_LEVEL, "Unable to setup the sp manager. Aborting");
 		close(sock);
 		return ret;
 	}
 
+	slog_info(STDOUT_LEVEL, "Setting up the poll interface");
 	pollfd_setup(pollfd);
+
+	slog_info(STDOUT_LEVEL, "Setting up the ^C signal handler");
 	setup_signal_handler();
 
-	printf("The server is successfully initialized\n\n");
-	printf("Server: ");
-	fflush(stdout);
+	slog_info(STDOUT_LEVEL, "The server is successfully initialized");
+	printf("\n");
+	PRINT_SERVER;
 	while (!should_exit) {
 		ret = poll(pollfd, PEER_POLLFD_NUM, POLL_TIMEOUT);
 		handle_poll_ret(pollfd, ret);
 	}
 
+	slog_info(STDOUT_LEVEL, "Exiting the boot_server executable...");
+	slog_info(STDOUT_LEVEL, "Closing the server sock");
 	close(sock);
+	slog_info(STDOUT_LEVEL, "Closing the sp_manager");
 	close_sp_manager();
+	slog_close();
 
 	if (ret >= 0) { // return a standard value
 		ret = EXIT_SUCCESS;

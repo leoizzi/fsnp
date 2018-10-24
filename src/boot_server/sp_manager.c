@@ -19,11 +19,15 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <pthread.h>
+#include <errno.h>
 
 #include "boot_server/sp_manager.h"
 #include "boot_server/server_fsnp.h"
+#include "boot_server/server.h"
 
 #include "struct/linklist.h"
+
+#include "slog/slog.h"
 
 #define MAX_SP 10
 
@@ -42,12 +46,14 @@ int init_sp_manager(void)
 
 	sp_list = list_create();
 	if (!sp_list) {
+		slog_error(FILE_LEVEL, "list_create")
 		return -1;
 	}
 
 	list_set_free_value_callback(sp_list, free_callback);
 	err = pthread_mutex_init(&sp_mtx, NULL);
 	if (err) {
+		slog_error(FILE_LEVEL, "pthread_mutex_init: error %d", err);
 		return -1;
 	}
 
@@ -59,7 +65,7 @@ void close_sp_manager(void)
 	list_destroy(sp_list);
 }
 
-int add_sp(struct fsnp_server_sp *sp)
+int add_sp_to_list(struct fsnp_server_sp *sp)
 {
 	return list_push_value(sp_list, sp);
 }
@@ -119,6 +125,7 @@ static int list_copy_iterator(void *item, size_t idx, void *user)
 
 	copy = malloc(sizeof(struct fsnp_server_sp));
 	if (!copy) {
+		slog_error(FILE_LEVEL, "malloc: %d", errno);
 		return STOP;
 	}
 
@@ -136,12 +143,16 @@ linked_list_t *read_all_sp(void)
 
 	list_copy = list_create();
 	if (!list_copy) {
+		slog_error(FILE_LEVEL, "list_create");
 		return NULL;
 	}
 
 	list_set_free_value_callback(list_copy, free_callback);
 	it_num = (size_t)list_foreach_value(sp_list, list_copy_iterator, list_copy);
 	if (it_num != list_count(sp_list)) { // something went wrong during the copy
+		slog_error(FILE_LEVEL, "Error while copying the sps. list_count"
+						 " reported %d, while list_foreach_value reported %d",
+						 list_count(sp_list), it_num);
 		list_destroy(list_copy);
 		return NULL;
 	}
@@ -162,14 +173,16 @@ struct fsnp_peer *read_sp_by_type(uint8_t *num_sp, fsnp_peer_type_t type)
 
 	sp = malloc(sizeof(struct fsnp_peer) * *num_sp);
 	if (!sp) {
+		slog_error(FILE_LEVEL, "malloc: %d", errno);
 		return NULL;
 	}
 
 	for (i = 0; i < *num_sp; i++) {
 		ssp = list_shift_value(sp_list); // Get the head of the list
 		if (!ssp) {
-			fprintf(stderr, "WARNING: sp_manager - Unable to get the %u element"
-				            " from the list\n", i);
+			slog_warn(STDOUT_LEVEL, "sp_manager - Unable to get the %u element"
+				            " from the list", i);
+			PRINT_SERVER;
 			continue;
 		}
 
@@ -184,8 +197,9 @@ struct fsnp_peer *read_sp_by_type(uint8_t *num_sp, fsnp_peer_type_t type)
 		// push the value back in the tail
 		ret = list_push_value(sp_list, ssp);
 		if (ret < 0) {
-			fprintf(stderr, "WARNING: sp_manager - Unable to push back the %u "
-				            "element of the list\n", i);
+			slog_warn(STDOUT_LEVEL, "sp_manager - Unable to push back the %u "
+				            "element of the list", i);
+			PRINT_SERVER;
 		}
 	}
 
@@ -203,8 +217,9 @@ void lock_sp_list(void)
 
 	err = pthread_mutex_lock(&sp_mtx);
 	if (err) {
-		fprintf(stderr, "Unable to lock the mutex. In this case it's impossible"
-				  " to continue. Aborting\n\n");
+		slog_panic(STDOUT_LEVEL, "Unable to lock the mutex. In this case it's impossible"
+				  " to continue. Aborting");
+		slog_close();
 		exit(EXIT_FAILURE);
 	}
 }
@@ -215,8 +230,9 @@ void unlock_sp_list(void)
 
 	err = pthread_mutex_unlock(&sp_mtx);
 	if (err) {
-		fprintf(stderr, "Unable to unlock the mutex. In this case it's"
-				  " impossible to continue. Aborting\n\n");
+		slog_panic(STDOUT_LEVEL, "Unable to unlock the mutex. In this case it's"
+				  " impossible to continue. Aborting");
+		slog_close();
 		exit(EXIT_FAILURE);
 	}
 }

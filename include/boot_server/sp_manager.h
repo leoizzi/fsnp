@@ -39,7 +39,7 @@ void close_sp_manager(void);
  * Add a superpeer to the list.
  * Returns 0 on success, -1 otherwise
  */
-int add_sp(struct fsnp_server_sp *sp);
+int add_sp_to_list(struct fsnp_server_sp *sp);
 
 /*
  * Remove a superpeer from the list.

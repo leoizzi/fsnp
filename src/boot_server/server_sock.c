@@ -24,10 +24,13 @@
 #include <memory.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include "fsnp/fsnp.h"
 #include "boot_server/server_sock.h"
 #include "boot_server/sp_manager.h"
+
+#include "slog/slog.h"
 
 struct handler_data {
 	int sock;
@@ -54,25 +57,26 @@ static void add_sp_msg(const struct handler_data *data,
 
 	fsp = malloc(sizeof(struct fsnp_server_sp));
 	if (!fsp) {
-		fprintf(stderr, "\nSystem out of memory\n");
+		slog_error(FILE_LEVEL, "malloc. Error :%d", errno);
 		return;
 	}
 
 	fsp->addr.s_addr = ntohl(data->addr.sin_addr.s_addr);
 	fsp->p_port = msg->p_port;
 	fsp->sp_port = msg->sp_port;
-	ret = add_sp(fsp);
+	ret = add_sp_to_list(fsp);
 	if (ret < 0) {
-		fprintf(stderr, "\nUnable to add the sp %s with p_port = %hu and sp_port"
-		                " = %hu to the list\n", inet_ntoa(data->addr.sin_addr),
-		        fsp->p_port, fsp->sp_port);
+		slog_error(FILE_LEVEL, "Unable to add the sp %s with p_port = %hu and"
+						 " sp_port = %hu to the list",
+						 inet_ntoa(data->addr.sin_addr), fsp->p_port,
+						 fsp->sp_port);
 		free(fsp);
 	}
 
 #ifdef FSNP_DEBUG
 	address.s_addr = htonl(fsp->addr.s_addr);
-	printf("\nSuperpeer added: address: %s, p_port: %hu, sp_port: %hu\n",
-	       inet_ntoa(address), fsp->p_port, fsp->sp_port);
+	slog_debug(FILE_LEVEL, "Superpeer added: address: %s, p_port: %hu, sp_port:"
+						" %hu", inet_ntoa(address), fsp->p_port, fsp->sp_port);
 #endif
 }
 
@@ -94,8 +98,9 @@ static void rm_sp_msg(const struct handler_data *data,
 #ifdef FSNP_DEBUG
 		struct in_addr addr;
 		addr.s_addr = htonl(sp->addr.s_addr);
-		printf("Removing superpeer with address %s, p_port %hu, sp_port %hu\n",
-		       inet_ntoa(addr), sp->p_port, sp->sp_port);
+		slog_debug(FILE_LEVEL, "Removed superpeer with address %s, p_port %hu,"
+						 " sp_port %hu", inet_ntoa(addr), sp->p_port,
+						 sp->sp_port);
 #endif
 		free(sp);
 	}
@@ -114,27 +119,29 @@ static void normal_query_res(const struct handler_data *data,
 
 	sp = read_sp_by_type(&num_sp, msg->peer_type);
 	if (!sp) {
-		fprintf(stderr, "\nUnable to read the sp from the sp manager\n");
+		slog_error(FILE_LEVEL, "Unable to read the sp from the sp manager");
 		return;
 	}
 
 	query_res = fsnp_create_query_res(ntohl(data->addr.sin_addr.s_addr), num_sp,
 									  sp);
 	if (!query_res) {
-		fprintf(stderr, "\nUnable to create the query_res\n");
+		slog_error(FILE_LEVEL, "Unable to create the query_res");
 		return;
 	}
 
 	free(sp);
+	slog_debug(FILE_LEVEL, "Sending a filled query_res to %s:hu",
+			inet_ntoa(data->addr.sin_addr), ntohs(data->addr.sin_port));
 	err = fsnp_send_query_res(data->sock, query_res);
 	if (err != E_NOERR) {
-		fsnp_print_err_msg(err);
+		fsnp_log_err_msg(err, false);
 	}
 
 #ifdef FSNP_DEBUG
 	static uint64_t counter = 0;
-	printf("\nQuery response n. %llu sent to peer %s port %hu\n", counter,
-	       inet_ntoa(data->addr.sin_addr), ntohs(data->addr.sin_port));
+	slog_debug(FILE_LEVEL, "Query response n. %llu sent to peer %s:%hu\n",
+			counter, inet_ntoa(data->addr.sin_addr), ntohs(data->addr.sin_port));
 	counter++;
 #endif
 
@@ -157,39 +164,43 @@ static void first_query_res(const struct handler_data *data,
 	query_res = fsnp_create_query_res(ntohl(data->addr.sin_addr.s_addr), 0,
 									  NULL);
 	if (!query_res) {
-		fprintf(stderr, "\nUnable to create the query_res\n");
+		slog_error(FILE_LEVEL, "fsnp_create_query_res. Error: %d", errno);
 		return;
 	}
 
+	slog_debug(FILE_LEVEL, "Sending an empty query_res to %s:%hu",
+			   inet_ntoa(data->addr.sin_addr), ntohs(data->addr.sin_port));
 	err = fsnp_send_query_res(data->sock, query_res);
 	if (err != E_NOERR && err != E_PEER_DISCONNECTED) {
-		fsnp_print_err_msg(err);
+		fsnp_log_err_msg(err, false);
 		return;
 	} else if (err == E_PEER_DISCONNECTED) {
 		// the peer has closed the connection
+		slog_info(FILE_LEVEL, "The peer has terminated the connection");
 		return;
 	}
 
 	free(query_res);
+	slog_debug(FILE_LEVEL, "Reading the answer from peer %s:%hu",
+			   inet_ntoa(data->addr.sin_addr), ntohs(data->addr.sin_port));
 	m = fsnp_read_msg_tcp(data->sock, 0, &r, &err);
 	if (!m) {
 		if (r < 0) {
-			fsnp_print_err_msg(err);
+			fsnp_log_err_msg(err, false);
 		}
 
 		return;
 	}
 
 	if (m->msg_type != ADD_SP) {
-		fprintf(stderr, "Unexpected msg_type, aborting\n");
+		slog_info(FILE_LEVEL, "Unexpected msg_type: %u, the server was waiting for: %u."
+			" Closing the communication with %s:%hu", m->msg_type, ADD_SP,
+			inet_ntoa(data->addr.sin_addr), ntohs(data->addr.sin_port));
 		return;
 	}
 
-#ifdef FSNP_DEBUG
-	printf("Telling to %s:%hu that he is the first peer\n",
+	slog_info(FILE_LEVEL, "%s:hu is the first peer in the network",
 			inet_ntoa(data->addr.sin_addr), ntohs(data->addr.sin_port));
-#endif
-
 	add_sp_msg(data, (struct fsnp_add_sp *)m);
 	free(m);
 }
@@ -201,17 +212,19 @@ static void query_msg(const struct handler_data *data,
                       const struct fsnp_query *msg)
 {
 	if (msg->peer_type != PEER && msg->peer_type != SUPERPEER) {
-		fprintf(stderr, "\nfsnp_query_msg: unknown peer type\n");
+		slog_debug(FILE_LEVEL, "fsnp_query_msg: unknown peer type");
 		return;
 	}
 
 	lock_sp_list();
 
 	if (count_sp() == 0) { // We're dealing with the first peer of the network
+		slog_debug(FILE_LEVEL, "first_query_res is being called");
 		first_query_res(data, msg);
 		unlock_sp_list();
 	} else {
 		unlock_sp_list();
+		slog_debug(FILE_LEVEL, "normal_query_res is being called");
 		normal_query_res(data, msg);
 	}
 }
@@ -228,32 +241,38 @@ static void *handler_thread(void *val)
 
 	msg = fsnp_read_msg_tcp(data->sock, 0, NULL, &err);
 	if (!msg) {
-		fsnp_print_err_msg(err);
+		fsnp_log_err_msg(err, false);
 		// goto used in order to avoid the boilerplate of conditional compilation
 		goto server_handler_exit;
 	}
 
 	switch (msg->msg_type) {
 		case QUERY:
+			slog_debug(FILE_LEVEL, "QUERY message received");
 			query_msg(data, (struct fsnp_query *)msg);
 			break;
 
 		case ADD_SP:
+			slog_debug(FILE_LEVEL, "ADD_SP message received");
 			add_sp_msg(data, (struct fsnp_add_sp *)msg);
 			break;
 
 		case RM_SP:
+			slog_debug(FILE_LEVEL, "RM_SP message received");
 			rm_sp_msg(data, (struct fsnp_rm_sp *)msg);
 			break;
 
 		default:
-			fprintf(stderr, "\nA message of an unexpected type has been received\n");
+			slog_debug(FILE_LEVEL, "A message of an unexpected type has been"
+						           " received");
 			break;
 	}
 
 	free(msg);
 
 server_handler_exit:
+	slog_info(FILE_LEVEL, "Closing thread used for peer %s:hu",
+	          inet_ntoa(data->addr.sin_addr), ntohs(data->addr.sin_port));
 	close(data->sock);
 	free(data);
 #ifndef FSNP_MEM_DEBUG
@@ -271,7 +290,7 @@ static void launch_handler_thread(int sock, const struct sockaddr_in *addr)
 
 	data = malloc(sizeof(struct handler_data));
 	if (!data) {
-		perror("malloc in launch_handler_thread");
+		slog_error(FILE_LEVEL, "malloc. Error: %d", errno)
 		close(sock);
 		return;
 	}
@@ -281,17 +300,20 @@ static void launch_handler_thread(int sock, const struct sockaddr_in *addr)
 #ifndef FSNP_MEM_DEBUG
 	ret = pthread_create(&tid, NULL, handler_thread, data);
 	if (ret) {
-		fprintf(stderr, "\nUnable to start the handler thread\n");
+		slog_error(FILE_LEVEL, "Unable to start the handler thread");
 		close(sock);
 		free(data);
 	}
 
 	ret = pthread_detach(tid);
 	if (ret) {
-		fprintf(stderr, "\nUnable to detach the thread. (You may want to reset the"
-				  " server if this happens again... Memory leaks are on their way!)\n");
+		slog_warn(STDOUT_LEVEL, "Unable to detach a thread. (You may want to"
+						        " reset the server if this happens again... "
+			                    "Memory leaks are on their way!)");
 	}
-#else // ifdef FSNP_MEM_DEBUG
+
+#else// ifdef FSNP_MEM_DEBUG
+	slog_debug(FILE_LEVEL, "handler_thread called on main thread");
 	handler_thread(data);
 #endif
 }
@@ -308,20 +330,23 @@ static void accept_conn(int main_sock)
 	memset(&addr, 0, len);
 	sock = accept(main_sock, (struct sockaddr *)&addr, &len);
 	if (sock < 0) {
-		perror("Error while accepting a new connection");
+		slog_warn(FILE_LEVEL, "Error while accepting a new connection");
 		return;
 	}
 
+	slog_info(FILE_LEVEL, "Server contacted by peer %s:hu",
+			inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
 	launch_handler_thread(sock, &addr);
 }
 
 void server_socket_handler(int main_sock, short revents)
 {
 	if (revents & POLLERR || revents & POLLHUP || revents & POLLNVAL) {
-		fprintf(stderr, "\nAn error has occurred on the main socket\n");
+		slog_warn(STDOUT_LEVEL, "An error has occurred on the main socket");
+		slog_error(FILE_LEVEL, "revents: %hd", revents);
 	} else if (revents & POLLIN || revents & POLLPRI || revents & POLLRDBAND) {
 		accept_conn(main_sock);
 	} else {
-		fprintf(stderr, "\nUnknown poll revent\n");
+		slog_warn(FILE_LEVEL, "Unknown poll revent: %hd", revents);
 	}
 }

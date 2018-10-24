@@ -19,6 +19,7 @@
 #define FSNP_SERVER_MAIN_H
 
 #include <stdbool.h>
+#include <stdio.h>
 #include <arpa/inet.h> // for in_port_t
 
 #include "compiler.h"
@@ -29,6 +30,8 @@ FSNP_BEGIN_DECL
  * Main server function
  */
 int server_main(in_port_t port, bool localhost);
+
+#define PRINT_SERVER printf("\nServer: "); fflush(stdout)
 
 FSNP_END_DECL
 
