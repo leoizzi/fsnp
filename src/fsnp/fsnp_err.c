@@ -17,93 +17,97 @@
 
 #include <stdio.h>
 #include <errno.h>
+#include <stdbool.h>
 
 #include "fsnp/fsnp_err.h"
 
-static void print_e_errno_err(void)
+#include "slog/slog.h"
+
+static void log_e_errno_err(int level)
 {
-	fprintf(stderr, "fsnp error type: E_ERRNO. errno value: %d.\n", errno);
-	perror("Explanation");
+	slog_warn(level, "fsnp error type: E_ERRNO. errno value: %d.", errno);
 }
 
-static void print_e_timeout_err(void)
+static void log_e_timeout_err(int level)
 {
-	fprintf(stderr, "fsnp error type: E_TIMEOUT.\nExplanation: A connection's"
+	slog_warn(level, "fsnp error type: E_TIMEOUT.\nExplanation: A connection's"
 				 " timer has fired. That could happens because the network have"
 	             " lost the packet, or because the other host had some kind of"
-			     " trouble.\n");
+			     " trouble.");
 }
 
-static void print_e_not_fsnp_msg_err(void)
+static void log_e_not_fsnp_msg_err(int level)
 {
-	fprintf(stderr, "fsnp error type: E_NOT_FSNP_MSG.\nExplanation: The message"
-				    " received is not part of the fsnp protocol\n");
+	slog_warn(level, "fsnp error type: E_NOT_FSNP_MSG.\nExplanation: The message"
+				    " received is not part of the fsnp protocol");
 }
 
-static void print_e_out_of_mem_err(void)
+static void log_e_out_of_mem_err(int level)
 {
-	fprintf(stderr, "fsnp error type: E_OUT_OF_MEM.\nExplanation: The system is"
+	slog_warn(level, "fsnp error type: E_OUT_OF_MEM.\nExplanation: The system is"
 				    " out of memory. Try to kill some executables, or to reset"
-		            " the system\n");
+		            " the system");
 }
 
-static void print_e_peer_disconnected(void)
+static void log_e_peer_disconnected(int level)
 {
-	fprintf(stderr, "fsnp error type: E_PEER_DISCONNECTED.\nExplanation: The "
-				    "peer connected has closed its socket.\n");
+	slog_warn(level, "fsnp error type: E_PEER_DISCONNECTED.\nExplanation: The "
+				    "peer connected has closed its socket.");
 }
 
-static void print_e_unknown(void)
+static void log_e_unknown(int level)
 {
-	fprintf(stderr, "fsnp error type: E_UNKNOWN.\nExplanation: An unknown error"
+	slog_warn(level, "fsnp error type: E_UNKNOWN.\nExplanation: An unknown error"
 				    " to the protocol has happened.\n");
 }
 
-static void print_e_invalid_param(void)
+static void log_e_invalid_param(int level)
 {
-	fprintf(stderr, "fsnp error type: E_INVALID_PARAM.\nExplanation: An invalid"
+	slog_warn(level, "fsnp error type: E_INVALID_PARAM.\nExplanation: An invalid"
 				 " parameter was passed to a function.\n");
 }
 
-static void print_default(void) {
-	fprintf(stderr, "fsnp error type: unknown fsnp_err_t passed!\n");
+static void log_default(int level) {
+	slog_warn(level, "fsnp error type: unknown fsnp_err_t passed!\n");
 }
 
-void fsnp_print_err_msg(fsnp_err_t err)
+void fsnp_log_err_msg(fsnp_err_t err, bool to_print)
 {
+	int level = to_print ? STDOUT_LEVEL : FILE_LEVEL;
+
 	switch (err) {
 		case E_NOERR:
 			return;
 
 		case E_ERRNO:
-			print_e_errno_err();
+			log_e_errno_err(level);
 			break;
 
 		case E_TIMEOUT:
-			print_e_timeout_err();
+			log_e_timeout_err(level);
 			break;
 
 		case E_NOT_FSNP_MSG:
-			print_e_not_fsnp_msg_err();
+			log_e_not_fsnp_msg_err(level);
 			break;
 
 		case E_OUT_OF_MEM:
-			print_e_out_of_mem_err();
+			log_e_out_of_mem_err(level);
 			break;
 
 		case E_PEER_DISCONNECTED:
-			print_e_peer_disconnected();
+			log_e_peer_disconnected(level);
 			break;
 
 		case E_UNKNOWN:
-			print_e_unknown();
+			log_e_unknown(level);
 			break;
 
 		case E_INVALID_PARAM:
-			print_e_invalid_param();
+			log_e_invalid_param(level);
 
 		default:
-			print_default();
+			log_default(level);
 			break;
 	}
 }

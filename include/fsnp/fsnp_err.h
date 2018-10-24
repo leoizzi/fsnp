@@ -53,7 +53,7 @@ typedef enum fsnp_err fsnp_err_t;
  * Utility function that prints on the standard error a message that explains
  * the error (of fsnp_err_t type) received by the system
  */
-EXPORT void fsnp_print_err_msg(fsnp_err_t err);
+EXPORT void fsnp_log_err_msg(fsnp_err_t err, bool to_print);
 
 FSNP_END_DECL
 
