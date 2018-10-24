@@ -64,7 +64,7 @@ static void connect_to_server(void)
 	w = fsnp_write_msg_tcp(s, 0, (const struct fsnp_msg *)&add_sp, &err);
 	if (w < 0) {
 		fprintf(stderr, "Unable to send the add_sp message to the server\n");
-		fsnp_print_err_msg(err);
+		fsnp_log_err_msg(err, NULL);
 		exit(EXIT_FAILURE);
 	}
 }
@@ -117,7 +117,7 @@ static void join_received(struct fsnp_join *join)
 	fsnp_init_ack(&ack);
 	w = fsnp_write_msg_tcp(peer_sock, 0, (const struct fsnp_msg *)&ack, &err);
 	if (w < 0) {
-		fsnp_print_err_msg(err);
+		fsnp_log_err_msg(err, NULL);
 		exit(EXIT_FAILURE);
 	}
 }
@@ -161,7 +161,7 @@ static void read_messages(void)
 		printf("Waiting for a join/update message...\n");
 		msg = fsnp_read_msg_tcp(peer_sock, USHRT_MAX, &r, &err);
 		if (!msg) {
-			fsnp_print_err_msg(err);
+			fsnp_log_err_msg(err, NULL);
 			if (err == E_NOT_FSNP_MSG) {
 				exit(EXIT_FAILURE);
 			}

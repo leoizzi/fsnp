@@ -1,6 +1,8 @@
 This file is taken from the slog library (https://github.com/kala13x/slog).
 
-I've only fixed the header position, added some macros and switched the
-compilation from make to cmake, keeping all the compiler flags used in the
-makefile.
-
+I've slightly modified the library for styling and performance reason.
+In particular:
+    - I've added some macros for specifying the level
+    - The file is no longer opened and closed every time is made a log, instead
+      is opened with slog_init and closed with a new function called slog_close.
+    -The compilation uses CMake instead of make

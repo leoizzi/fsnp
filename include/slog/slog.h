@@ -32,17 +32,12 @@ extern "C" {
 #endif
 
 #include <pthread.h>
+#include <stdio.h>
 
-//****************************************************************************//
-// Custom additions made by Leonardo Izzi
-
-#define MAX_LOG_LEVEL 3
-#define LOG_DEBUG 0
-#define LOG_INFO 1
-#define LOG_WARN 2
-#define LOG_STDOUT 3
-
-//****************************************************************************//
+#define MAX_LOG_STDOUT_LEVEL 0
+#define STDOUT_LEVEL 0
+#define FILE_LEVEL 1
+#define MAX_LOG_FILE_LEVEL 1
 
 /* Definations for version info */
 #define SLOGVERSION_MAJOR  1
@@ -106,6 +101,7 @@ extern "C" {
 /* Flags */
 typedef struct {
     char sFileName[64];
+    FILE *pfile;
     unsigned short nFileLevel;
     unsigned short nLogLevel;
     unsigned short nFileStamp:1;
@@ -142,6 +138,7 @@ void slog_config_set(SlogConfig *pCfg);
 
 void slog_init(const char* pName, const char* pConf, int nLogLevel, int nTdSafe);
 void slog(int level, int flag, const char *pMsg, ...);
+void slog_close(void);
 
 /* For include header in CPP code */
 #ifdef __cplusplus

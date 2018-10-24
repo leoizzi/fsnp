@@ -77,7 +77,7 @@ static void add_peer(void)
 	fsnp_init_add_sp(&add_sp, p_port, sp_port);
 	w = fsnp_write_msg_tcp(s, 0, (const struct fsnp_msg *)&add_sp, &err);
 	if (w < 0) {
-		fsnp_print_err_msg(err);
+		fsnp_log_err_msg(err, NULL);
 		close(s);
 		exit(EXIT_FAILURE);
 	}
@@ -99,7 +99,7 @@ static void rm_peer(void)
 	fsnp_init_rm_sp(&rm, &p, PEER);
 	w = fsnp_write_msg_tcp(s, 0, (const struct fsnp_msg *)&rm, &err);
 	if (w < 0) {
-		fsnp_print_err_msg(err);
+		fsnp_log_err_msg(err, NULL);
 		close(s);
 		exit(EXIT_FAILURE);
 	}
@@ -123,7 +123,7 @@ static void query(int i)
 	fsnp_init_query(&query, type);
 	w = fsnp_write_msg_tcp(s, 0, (const struct fsnp_msg *)&query, &err);
 	if (w < 0) {
-		fsnp_print_err_msg(err);
+		fsnp_log_err_msg(err, NULL);
 		close(s);
 		exit(EXIT_FAILURE);
 	}
@@ -140,7 +140,7 @@ static void query_res(void)
 
 	msg = fsnp_read_msg_tcp(s, 0, &r, &err);
 	if (!msg) {
-		fsnp_print_err_msg(err);
+		fsnp_log_err_msg(err, NULL);
 		close(s);
 		exit(EXIT_FAILURE);
 	}

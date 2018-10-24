@@ -37,6 +37,9 @@
 #define MAXMSG 8196
 #define BIGSTR 4098
 
+#define DELIM_LEN 80
+char delim[DELIM_LEN];
+
 static SlogConfig g_slogCfg;
 static SlogTag g_SlogTags[] =
 {
@@ -189,21 +192,11 @@ void slog_prepare_output(const char* pStr, const SlogDate *pDate, int nType, int
     }
 }
 
-void slog_to_file(char *pStr, const char *pFile, SlogDate *pDate)
+void slog_to_file(char *pStr)
 {
-    char sFileName[PATH_MAX];
-    memset(sFileName, 0, sizeof(sFileName));
+    if (g_slogCfg.pfile == NULL) return;
 
-    if (g_slogCfg.nFileStamp) 
-        snprintf(sFileName, sizeof(sFileName), "%s-%02d-%02d-%02d.log", pFile, pDate->year, pDate->mon, pDate->day);
-    else 
-        snprintf(sFileName, sizeof(sFileName), "%s.log", pFile);
-
-    FILE *fp = fopen(sFileName, "a");
-    if (fp == NULL) return;
-
-    fprintf(fp, "%s\n", pStr);
-    fclose(fp);
+    fprintf(g_slogCfg.pfile, "%s\n", pStr);
 }
 
 int slog_parse_config(const char *pConfig)
@@ -293,7 +286,7 @@ void slog(int nLevel, int nFlag, const char *pMsg, ...)
                 slog_prepare_output(sInput, &date, nFlag, 0, sMessage, sizeof(sMessage));
             }
 
-            slog_to_file(sMessage, g_slogCfg.sFileName, &date);
+            slog_to_file(sMessage);
         }
     }
 
@@ -349,6 +342,9 @@ void slog_config_set(SlogConfig *pCfg)
 
 void slog_init(const char* pName, const char* pConf, int nLogLevel, int nTdSafe)
 {
+    char logname[PATH_MAX];
+    SlogDate date;
+
     /* Set up default values */
     memset(g_slogCfg.sFileName, 0, sizeof(g_slogCfg.sFileName));
     strcpy(g_slogCfg.sFileName, pName);
@@ -356,16 +352,38 @@ void slog_init(const char* pName, const char* pConf, int nLogLevel, int nTdSafe)
     g_slogCfg.nLogLevel = nLogLevel;
     g_slogCfg.nTdSafe = nTdSafe;
     g_slogCfg.nFileStamp = 1;
-    g_slogCfg.nFileLevel = 0;
+    g_slogCfg.nFileLevel = MAX_LOG_FILE_LEVEL;
     g_slogCfg.nErrLog = 0;
     g_slogCfg.nSilent = 0;
-    g_slogCfg.nToFile = 0;
-    g_slogCfg.nPretty = 0;
+    g_slogCfg.nToFile = 1;
+    g_slogCfg.nPretty = 1;
     g_slogCfg.nSync = 0;
 
+    slog_get_date(&date);
+    snprintf(logname, sizeof(logname), "%s-%02d-%02d-%02d.log", g_slogCfg.sFileName, date.year, date.mon, date.day);
+    g_slogCfg.pfile = fopen(logname, "a");
     /* Init mutex sync */
     slog_sync_init();
 
     /* Parse config file */
     slog_parse_config(pConf);
+
+    if (g_slogCfg.pfile != NULL) {
+        memset(delim, '*', (DELIM_LEN - 1) * sizeof(char));
+        fprintf(g_slogCfg.pfile, "%s\n", delim);
+        slog_info(FILE_LEVEL, "Log created");
+    }
+}
+
+void slog_close(void)
+{
+    if (g_slogCfg.pfile == NULL) {
+        return;
+    }
+
+    slog_info(FILE_LEVEL, "Log closed");
+    if (g_slogCfg.pfile != NULL) {
+        fprintf(g_slogCfg.pfile, "\n\n");
+        fclose(g_slogCfg.pfile);
+    }
 }
