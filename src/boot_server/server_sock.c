@@ -27,8 +27,10 @@
 #include <errno.h>
 
 #include "fsnp/fsnp.h"
+
 #include "boot_server/server_sock.h"
 #include "boot_server/sp_manager.h"
+#include "boot_server/server.h"
 
 #include "slog/slog.h"
 
@@ -310,6 +312,7 @@ static void launch_handler_thread(int sock, const struct sockaddr_in *addr)
 		slog_warn(STDOUT_LEVEL, "Unable to detach a thread. (You may want to"
 						        " reset the server if this happens again... "
 			                    "Memory leaks are on their way!)");
+		PRINT_SERVER;
 	}
 
 #else// ifdef FSNP_MEM_DEBUG
@@ -343,6 +346,7 @@ void server_socket_handler(int main_sock, short revents)
 {
 	if (revents & POLLERR || revents & POLLHUP || revents & POLLNVAL) {
 		slog_warn(STDOUT_LEVEL, "An error has occurred on the main socket");
+		PRINT_SERVER;
 		slog_error(FILE_LEVEL, "revents: %hd", revents);
 	} else if (revents & POLLIN || revents & POLLPRI || revents & POLLRDBAND) {
 		accept_conn(main_sock);

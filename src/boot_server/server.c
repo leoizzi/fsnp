@@ -202,8 +202,6 @@ static void handle_poll_ret(struct pollfd *pollfd, int ret)
 		if (pollfd[STDIN_FD].revents) {
 			server_stdin_handler();
 		}
-
-		PRINT_SERVER;
 	} else if (ret < 0) {
 		if (errno != EINTR) {
 			slog_error(STDOUT_LEVEL, "poll: errno %d", errno);
