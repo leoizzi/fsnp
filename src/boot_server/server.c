@@ -171,7 +171,7 @@ static void server_stdin_handler(void)
 		slog_error(STDOUT_LEVEL, "Error %d for fgets", errno);
 	}
 
-	slog_debug(FILE_LEVEL, "server_stdin_handler: msg \"%s\"", user_msg);
+	slog_info(FILE_LEVEL, "server_stdin_handler: msg %s", user_msg);
 	if (!strncmp(user_msg, quit, sizeof(quit))) {
 		should_exit = true;
 		return;
