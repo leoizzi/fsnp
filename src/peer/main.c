@@ -19,8 +19,11 @@
 #include <stdbool.h>
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "peer/peer.h"
+
+#include "slog/slog.h"
 
 static void usage(void)
 {
@@ -37,22 +40,33 @@ static void peer_conf(int argc, char *argv[], bool *localhost)
 
 	for (i = 1; i < argc; i++) {
 		if (!strncmp(argv[i], help_opt, sizeof(help_opt))) {
+			slog_info(FILE_LEVEL, "Print usage");
 			usage();
 			exit(EXIT_SUCCESS);
 		} else if (!strncmp(argv[i], localhost_opt, sizeof(localhost_opt))) {
+			slog_info(FILE_LEVEL, "localhost option enabled");
 			*localhost = true;
 		} else {
-			fprintf(stderr, "Unknown command line argument: %s\n\n", argv[i]);
+			slog_warn(STDOUT_LEVEL, "Unknown command line argument: %s", argv[i]);
 			usage();
 			exit(EXIT_SUCCESS);
 		}
 	}
 }
 
+/*
+ * Initialize the slog library
+ */
+static void start_log(void)
+{
+	slog_init("peer_log", NULL, MAX_LOG_STDOUT_LEVEL, 1);
+}
+
 int main(int argc, char *argv[])
 {
 	bool localhost = false;
 
+	start_log();
 	peer_conf(argc, argv, &localhost);
 	return peer_main(localhost);
 }

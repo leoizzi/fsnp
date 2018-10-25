@@ -33,6 +33,8 @@
 
 #include "fsnp/fsnp.h"
 
+#include "slog/slog.h"
+
 #define MAX_STDIN_SIZE 32U
 
 static pthread_mutex_t stdin_mtx;
@@ -40,28 +42,28 @@ static pthread_mutex_t stdin_mtx;
 void init_stdin(void)
 {
 	if (pthread_mutex_init(&stdin_mtx, NULL)) {
-		fprintf(stderr, "Unable to initialize the stdin subsystem\n");
+		slog_error(FILE_LEVEL, "Unable to initialize the stdin subsystem");
 	}
 }
 
 void close_stdin(void)
 {
 	if (pthread_mutex_destroy(&stdin_mtx)) {
-		fprintf(stderr, "Unable to close properly the stdin subsystem");
+		slog_error(FILE_LEVEL, "Unable to close properly the stdin subsystem");
 	}
 }
 
 void block_stdin(void)
 {
 	if (pthread_mutex_lock(&stdin_mtx)) {
-		fprintf(stderr, "Unable to block the stdin subsystem\n");
+		slog_error(FILE_LEVEL, "Unable to block the stdin subsystem");
 	}
 }
 
 void release_stdin(void)
 {
 	if (pthread_mutex_unlock(&stdin_mtx)) {
-		fprintf(stderr, "Unable to release the stdin subsystem\n");
+		slog_error(FILE_LEVEL, "Unable to release the stdin subsystem");
 	}
 }
 
@@ -100,8 +102,10 @@ static void cleanup_stdin(void)
 static size_t read_stdin(char *msg, int size)
 {
 	if (!fgets(msg, size, stdin)) {
+		slog_warn(FILE_LEVEL, "Unable to read stdin. Error returned: %d", errno);
 		return 0;
 	} else {
+		slog_info(FILE_LEVEL, "String read from stdin: %s", msg);
 		return strlen(msg);
 	}
 }
@@ -121,14 +125,15 @@ bool request_user_ip_port(struct sockaddr_in *addr)
 
 	printf("Insert the IP address: ");
 	fflush(stdout);
+	slog_debug(FILE_LEVEL, "Reading an IP address");
 	n = read_stdin(ip, IP_STR_SIZE);
 	if (!n) {
-		fprintf(stderr, "An error has occurred while reading the stdin\n");
+		slog_warn(STDOUT_LEVEL, "An error has occurred while reading the stdin");
 		return false;
 	}
 
 	if (!inet_aton(ip, &addr->sin_addr)) {
-		fprintf(stderr, "Invalid IP address: %s\n", ip);
+		slog_warn(STDOUT_LEVEL, "The IP address is invalid: %s", ip);
 		cleanup_stdin();
 		return false;
 	}
@@ -138,15 +143,16 @@ bool request_user_ip_port(struct sockaddr_in *addr)
 	cleanup_stdin();
 	printf("Insert the port: ");
 	fflush(stdout);
+	slog_debug(FILE_LEVEL, "Reading a port number");
 	n = read_stdin(port, PORT_STR_SIZE);
 	if (!n) {
-		fprintf(stderr, "An error has occurred while reading the stdin\n");
+		slog_warn(STDOUT_LEVEL, "An error has occurred while reading the stdin");
 		return false;
 	}
 
 	p = (in_port_t)strtol(port, NULL, 10);
 	if (!p) {
-		fprintf(stderr, "Invalid port number: %s\n", port);
+		slog_warn(STDOUT_LEVEL, "Invalid port number: %s", port);
 		cleanup_stdin();
 		return false;
 	}
@@ -188,7 +194,8 @@ static void join_sp_handler(void)
 	peer.port = addr.sin_port;
 	query_res = fsnp_create_query_res(0, 1, &peer);
 	if (!query_res) {
-		fprintf(stderr, "Unable to join\n");
+		slog_warn(STDOUT_LEVEL, "Unable to join");
+		slog_error(FILE_LEVEL, "Unable to create query_res: error %d", errno);
 		return;
 	}
 
@@ -217,9 +224,11 @@ static int request_dir(char *path)
 
 	printf("Insert the path: ");
 	fflush(stdout);
+	slog_debug(FILE_LEVEL, "Reading a path");
 	l = read_stdin(path, PATH_MAX - 1);
 	if (l == 0) {
-		fprintf(stderr, "An error has occurred while reading from the stdin\n");
+		slog_warn(STDOUT_LEVEL, "An error has occurred while reading from the "
+						        "stdin");
 		return -1;
 	}
 
@@ -251,7 +260,7 @@ static void update_shared_dir(void)
 
 	ret = set_shared_dir(path);
 	if (ret < 0) {
-		perror("An error occurred while parsing the directory");
+		slog_warn(STDOUT_LEVEL, "An error occurred while parsing the directory");
 	}
 }
 
@@ -279,8 +288,6 @@ static void update_download_dir(void)
 static void print_download_path(void)
 {
 	show_download_path();
-	printf("\nPeer: ");
-	fflush(stdout);
 }
 
 #define FILENAME_SIZE 256
@@ -295,23 +302,23 @@ static void who_has_handler(void)
 	size_t s = 0;
 
 	if (get_peer_sock() == 0 && !is_superpeer()) {
-		printf("You have to join a superpeer before searching for a file,\n");
-		PRINT_PEER;
+		slog_warn(STDOUT_LEVEL, "You have to join a superpeer before searching"
+						        " for a file");
 		return;
 	}
 
 	if (file_already_asked()) {
-		printf("You've already asked a file. Wait until a response for it arrive"
-		 " before asking for another one,\n");
-		PRINT_PEER;
+		slog_info(STDOUT_LEVEL, "You've already asked a file. Wait until a "
+						  "response for it arrive before asking for another one");
 		return;
 	}
 
 	printf("Insert the name of the file (max 255 character): ");
 	fflush(stdout);
+	slog_debug(FILE_LEVEL, "Reading file name to download");
 	s = read_stdin(filename, FILENAME_SIZE);
 	if (s == 0) {
-		fprintf(stderr, "An error occurred while reading from the stdin\n");
+		slog_warn(STDOUT_LEVEL, "An error occurred while reading from the stdin");
 		return;
 	}
 
@@ -397,6 +404,7 @@ static void parse_msg(const char *msg, size_t n)
 		quit_peer();
 	} else {
 		printf("?\n");
+		slog_debug(FILE_LEVEL, "Unknown message received");
 	}
 }
 

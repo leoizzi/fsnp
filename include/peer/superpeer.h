@@ -36,6 +36,7 @@ struct peer_info {
 	 * down the communication with him */
 	bool joined;
 	unsigned int timeouts;
+	char pretty_addr[32]; // for printing and logging purposes
 };
 
 #define PIPE_QUIT 1

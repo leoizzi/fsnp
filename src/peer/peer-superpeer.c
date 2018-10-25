@@ -23,6 +23,7 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <poll.h>
+#include <errno.h>
 
 #include "fsnp/fsnp.h"
 
@@ -31,6 +32,8 @@
 #include "peer/file_manager.h"
 #include "peer/peer.h"
 #include "peer/thread_manager.h"
+
+#include "slog/slog.h"
 
 struct periodic_data {
 	pthread_mutex_t mtx;
@@ -42,13 +45,15 @@ static struct periodic_data pd; // it's not a political party :)
 
 static void stop_update_thread(void)
 {
-	/* safe to check without mutex since it was set by the main thread itself
-	 * when it has started the update thread, and this function is called only
-	 * by the main thread. */
+	slog_info(FILE_LEVEL, "Stopping the update thread");
+	/* 'is_running' is safe to check without acquiring the mutex since it was
+	 * set by the main thread itself when it has started the update thread, and
+	 * this function is called only by the main thread. */
 	if (pd.is_running) {
 		pthread_mutex_lock(&pd.mtx);
 		pd.closing = true;
 		pthread_mutex_unlock(&pd.mtx);
+		slog_info(FILE_LEVEL, "Update thread has been notified to stop");
 		pd.is_running = false;
 	}
 }
@@ -64,23 +69,17 @@ static void send_update_msg(void)
 	int sock = 0;
 	fsnp_err_t err;
 
-#ifdef FSNP_DEBUG
-	printf("Sending an update message\n");
-#endif
+	slog_debug(FILE_LEVEL, "Sending an update message");
 
 	keys = retrieve_all_keys(&num_k);
 	if (!keys) {
-#ifdef FSNP_DEBUG
-		fprintf(stderr, "send_update_msg - Unable to retrieve all the keys!\n");
-#endif
+		slog_error(FILE_LEVEL, "Unable to retrive all keys");
 		return;
 	}
 
 	update = fsnp_create_update(num_k, keys);
 	if (!update) {
-#ifdef FSNP_DEBUG
-		fprintf(stderr, "Unable to create the update msg\n");
-#endif
+		slog_error(FILE_LEVEL, "Unable to create the update msg");
 		free(keys);
 		return;
 	}
@@ -88,16 +87,11 @@ static void send_update_msg(void)
 	free(keys);
 	sock = get_peer_sock();
 	err = fsnp_send_update(sock, update);
-#ifdef FSNP_DEBUG
 	if (err != E_NOERR) {
-		fsnp_print_err_msg(err);
-#endif
+		fsnp_log_err_msg(err, false);
 	}
 
-#ifdef FSNP_DEBUG
-	printf("Update message successfully sent");
-#endif
-
+	slog_debug(FILE_LEVEL, "Update message successfully sent");
 	free(update);
 }
 
@@ -141,6 +135,7 @@ static void periodic_update(void *data)
 		
 		ret = pthread_mutex_lock(&pd.mtx);
 		if (ret) {
+			slog_error(FILE_LEVEL, "pthread_mutex_lock error %d", errno);
 			break;
 		}
 		
@@ -150,6 +145,7 @@ static void periodic_update(void *data)
 
 		ret = pthread_mutex_unlock(&pd.mtx);
 		if (ret) {
+			slog_error(FILE_LEVEL, "pthread_mutex_unlock error %d", errno);
 			break;
 		}
 		
@@ -162,6 +158,7 @@ static void periodic_update(void *data)
 		unslept.tv_nsec = 0;
 	}
 
+	slog_info(FILE_LEVEL, "Update thread is about to exit");
 	pthread_mutex_destroy(&pd.mtx);
 }
 
@@ -179,8 +176,8 @@ static int show_sp(const struct fsnp_peer *sp_list, uint8_t num_sp)
 
 	if (num_sp == 1) {
 		addr.s_addr = htonl(sp_list[0].ip);
-		printf("\nConnecting to superpeer %s:%hu\n", inet_ntoa(addr),
-				                                     sp_list[0].port);
+		slog_info(STDOUT_LEVEL, "Connecting to superpeer %s:%hu",
+				inet_ntoa(addr), sp_list[0].port);
 		return 0; // Don't even propose the choice to the user
 	}
 
@@ -199,15 +196,17 @@ static int show_sp(const struct fsnp_peer *sp_list, uint8_t num_sp)
 		scanf("%u", &choice);
 		release_stdin();
 		if (choice == 0) {
+			slog_info(FILE_LEVEL, "User chose to not connect");
 			return -1;
 		} else if (choice >= num_sp) {
-			fprintf(stderr, "choice %u is not valid!\n", choice);
+			slog_warn(STDOUT_LEVEL, "choice %u is not valid", choice);
 			retry = true;
 		} else {
 			retry = false;
 		}
 	} while (retry);
 
+	PRINT_PEER;
 	return choice - 1;
 }
 
@@ -219,14 +218,17 @@ static int connect_to_sp(const struct fsnp_peer *sp)
 	struct in_addr a;
 	int sock = 0;
 
-	a.s_addr = sp->ip;
+	a.s_addr = htonl(sp->ip);
 
 #ifdef FSNP_DEBUG
-	printf("Sending a connection request to the superpeer\n");
+	a.s_addr = htonl(a.s_addr);
+	slog_info(FILE_LEVEL, "Sending a connection request to the superpeer %s:hu",
+			inet_ntoa(a), sp->port);
+	a.s_addr = sp->ip; // restore to the format expected by fsnp
 #endif
 	sock = fsnp_create_connect_tcp_sock(a, sp->port);
 	if (sock < 0) {
-		perror("fsnp_create_connect_tcp_sock - connect_to_sp");
+		slog_error(FILE_LEVEL, "fsnp_create_connect_to_tcp_sock error %d", errno);
 		return -1;
 	}
 
@@ -245,25 +247,22 @@ static int send_join_msg(int sock)
 
 	keys = retrieve_all_keys(&num_keys);
 	if (!keys) {
-		fprintf(stderr, "Unable to retrieve all the keys!"
-				        " Sending the request without sharing files...\n");
+		slog_error(FILE_LEVEL, "Unable to retrieve all the keys. Sending the"
+						 " request without sharing files");
 	}
 
 	join = fsnp_create_join(num_keys, keys);
-
 	free(keys);
 
 	if (!join) {
-		fprintf(stderr, "Unable to create the join message\n");
+		slog_error(FILE_LEVEL, "Unable to create the join message. Error %d", errno);
 		return -1;
 	}
 
-#ifdef FSNP_DEBUG
-	printf("Sending the join message\n");
-#endif
+	slog_debug(FILE_LEVEL, "Sending the join message");
 	err = fsnp_send_join(sock, join);
 	if (err != E_NOERR) {
-		fsnp_print_err_msg(err);
+		fsnp_log_err_msg(err, false);
 		free(join);
 		return -1;
 	}
@@ -282,33 +281,32 @@ static int read_join_res(int sock)
 	fsnp_err_t err;
 	int ret = 0;
 
-#ifdef FSNP_DEBUG
-	printf("Wating for the ACK\n");
-#endif
+	slog_debug(FILE_LEVEL, "Waiting for the ACK");
 	msg = fsnp_read_msg_tcp(sock, 0, &r, &err);
 	if (!msg) {
-		fsnp_print_err_msg(err);
+		fsnp_log_err_msg(err, false);
 		return -1;
 	}
 
 	if (msg->msg_type != ACK) {
-		fprintf(stderr, "The superpeer didn't respond with an ACK\nClosing the"
-				        " communications with him\n");
+		slog_debug(FILE_LEVEL, "The superpeer didn't respond with an ACK (%d)"
+						 " but with %u. Closing the communications with him",
+						 ACK, msg->msg_type);
 		free(msg);
 		return -1;
 	}
 
 	free(msg);
-	printf("Superpeer join successfully!\n");
+	slog_info(STDOUT_LEVEL, "Superpeer joined successfully.");
 	PRINT_PEER;
 
 #ifndef FSNP_MEM_DEBUG
 	// launch the periodic update thread
 	ret = pthread_mutex_init(&pd.mtx, NULL);
 	if (ret) {
-		fprintf(stderr, "Unable to initialize the mutex for the periodic update"
-		                " thread. It won't be spawned. This means that the"
-		                " superpeer will never receive an update message.\n");
+		slog_error(FILE_LEVEL, "Unable to initialize the mutex for the periodic"
+						       " update thread. It won't be spawned. The"
+			                   " superpeer will never receive an update message.");
 		return -1;
 	}
 
@@ -347,13 +345,50 @@ void file_res_rcvd(struct fsnp_file_res *file_res)
 		   "download it from one of them by inserting the string 'download' from"
            " the command line.\n\n", file_res->num_peers);
 
+	slog_info(FILE_LEVEL, "%hhu peers own the file searched", file_res->num_peers);
 	for (i = 0; i < file_res->num_peers; i++) {
 		addr.s_addr = htonl(file_res->peers[i].ip);
 		printf("Peer %hhu: %s:%hu\n", i, inet_ntoa(addr),
 				file_res->peers[i].port);
+		slog_info(FILE_LEVEL, "Peer %s:%hu", inet_ntoa(addr),
+				file_res->peers[i].port);
 	}
 
 	PRINT_PEER;
+}
+
+/*
+ * Check if the superpeer is still alive. If not close the communications and
+ * quit the thread
+ */
+static void is_alive(void)
+{
+	fsnp_err_t err;
+	struct fsnp_alive alive;
+
+	tcp_state.timeouts++;
+	slog_debug(FILE_LEVEL, "The peer_tcp_thread's poll has fired its timeout"
+	                      " timer. Now the timeouts are %u", tcp_state.timeouts);
+	if (tcp_state.timeouts > 4) {
+		// the peer didn't contacted us for more than 2 minutes
+		slog_warn(STDOUT_LEVEL, "This peer has not received any sign of life"
+						  " from the superpeer for more then 2 minutes."
+						  " Join another one please.");
+		PRINT_PEER;
+		tcp_state.quit_loop = true;
+		return;
+	}
+
+	fsnp_init_alive(&alive);
+	err = fsnp_send_alive(tcp_state.sock, &alive);
+	slog_info(FILE_LEVEL, "Sending an alive message to the superpeer from the"
+					   " is_alive function");
+	if (err == E_PEER_DISCONNECTED) {
+		slog_warn(STDOUT_LEVEL, "The superpeer has disconnected itself. Join"
+						  " another one please");
+		PRINT_PEER;
+		tcp_state.quit_loop = true;
+	}
 }
 
 static void read_sock_msg(void)
@@ -364,7 +399,7 @@ static void read_sock_msg(void)
 
 	msg = fsnp_read_msg_tcp(tcp_state.sock, 0, NULL, &err);
 	if (!msg) {
-		fsnp_print_err_msg(err);
+		fsnp_log_err_msg(err, false);
 		if (err == E_PEER_DISCONNECTED) {
 			tcp_state.quit_loop = true;
 		}
@@ -374,30 +409,42 @@ static void read_sock_msg(void)
 
 	switch (msg->msg_type) {
 		case FILE_RES:
+			slog_info(FILE_LEVEL, "file_res msg received. Timeouts before this"
+						  " message: %u", tcp_state.timeouts);
 			file_res_rcvd((struct fsnp_file_res *)msg);
 			tcp_state.timeouts = 0;
 			break;
 
 		case ALIVE:
+			slog_info(FILE_LEVEL, "Alive msg received. Timeouts before this"
+			                       " message: %u", tcp_state.timeouts);
 			tcp_state.timeouts = 0;
 			fsnp_init_ack(&ack);
-			fsnp_send_ack(tcp_state.sock, &ack);
+			err = fsnp_send_ack(tcp_state.sock, &ack);
+			if (err == E_TIMEOUT) {
+				is_alive();
+			}
+
+			slog_info(FILE_LEVEL, "ACK sent to the superpeer");
 			break;
 
 		case ACK:
+			slog_info(FILE_LEVEL, "Ack msg received. Timeouts before this "
+						  "message: %u", tcp_state.timeouts);
 			tcp_state.timeouts = 0;
 			break;
 
 		case LEAVE:
+			slog_info(FILE_LEVEL, "Leave msg received");
 			tcp_state.timeouts = 0;
 			fsnp_init_ack(&ack);
 			fsnp_send_ack(tcp_state.sock, &ack);
+			slog_info(FILE_LEVEL, "Ack sent to the superpeer");
 			tcp_state.quit_loop = true;
 			break;
 
 		default:
-			fprintf(stderr, "Unexpected message type: %d\n", msg->msg_type);
-			PRINT_PEER;
+			slog_warn(FILE_LEVEL, "Unexpected message type: %d", msg->msg_type);
 	}
 
 	free(msg);
@@ -411,12 +458,13 @@ static void sock_event(short revents)
 	if (revents & POLLIN || revents & POLLRDBAND || revents & POLLPRI) {
 		read_sock_msg();
 	} else if (revents & POLLHUP) {
-		printf("The superpeer has disconnected itself. Please join another"
-		       " one\n");
+		slog_warn(STDOUT_LEVEL, "The superpeer has disconnected itself. Please"
+						  " join another one");
 		PRINT_PEER;
 		tcp_state.quit_loop = true;
 	} else {
 		tcp_state.quit_loop = true;
+		slog_error(FILE_LEVEL, "revents %hd", revents);
 	}
 }
 
@@ -439,21 +487,27 @@ static size_t read_filename_from_pipe(char *msg)
 	pipe_read = tcp_state.pipe_fd[READ_END];
 	r = fsnp_timed_read(pipe_read, &size, sizeof(size_t), 1000, &err);
 	if (r < 0) {
-		fsnp_print_err_msg(err);
-		PRINT_PEER;
+		fsnp_log_err_msg(err, false);
+		slog_error(FILE_LEVEL, "Unable to read the length of the filename");
 		return 0;
 	}
 
 	r = fsnp_timed_read(pipe_read, msg, size, 1000, &err);
 	if (r < 0) {
-		fsnp_print_err_msg(err);
-		PRINT_PEER;
+		fsnp_log_err_msg(err, false);
+		slog_error(FILE_LEVEL, "Unable to read the filename from the pipe");
 		return 0;
 	}
 
+	slog_info(FILE_LEVEL, "Filename %s of length %llu has been read from the"
+					   " pipe", msg, size);
 	return size;
 }
 
+#define STRINGIFY_HASH(key_str, key, i) \
+					for (i = 0; i < SHA256_BYTES / sizeof(char); i++) { \
+						snprintf(key_str + i, sizeof(char), "%hhx", key[i]); \
+					}
 /*
  *  Send a who_has message to the superpeer
  */
@@ -464,6 +518,10 @@ static void send_file_req(void)
 	fsnp_err_t err;
 	struct fsnp_file_req file_req;
 	sha256_t sha;
+#ifdef FSNP_DEBUG
+	char key_str[SHA256_BYTES];
+	unsigned i = 0;
+#endif
 
 	size = read_filename_from_pipe(msg);
 	if (size == 0) {
@@ -472,20 +530,28 @@ static void send_file_req(void)
 
 	if (tcp_state.file_asked) {
 		// If the user was quick enough to ask two times for a file stop him here
+		slog_info(FILE_LEVEL, "The user tried to download a file while another"
+						" request is pending");
 		return;
 	}
 
 	sha256(msg, size, sha);
+#ifdef FSNP_DEBUG
+	STRINGIFY_HASH(key_str, sha, i);
+	slog_debug(FILE_LEVEL, "SHA-256 of the file searched: %s", key_str);
+#endif
 	fsnp_init_file_req(&file_req, sha);
 	err = fsnp_send_file_req(tcp_state.sock, &file_req);
+	slog_info(FILE_LEVEL, "Sending a file_req to the superpeer");
 	if (err != E_NOERR) {
-		fsnp_print_err_msg(err);
-		PRINT_PEER;
+		fsnp_log_err_msg(err, false);
 		return;
 	}
 
 	tcp_state.file_asked = true;
 }
+
+#undef STRINGIFY_HASH
 
 /*
  * Read a message from the pipe and call the right handler
@@ -494,9 +560,13 @@ static void read_pipe_msg(void)
 {
 	int type = 0;
 	ssize_t ret = 0;
+	char err_msg[] = "An internal error has occurred. Leaving the P2P network";
 
 	ret = fsnp_read(tcp_state.pipe_fd[READ_END], &type, sizeof(int));
 	if (ret < 0) {
+		slog_error(FILE_LEVEL, "Unable to read a msg from the pipe");
+		printf("%s\n", err_msg);
+		PRINT_PEER;
 		tcp_state.quit_loop = true;
 		return;
 	}
@@ -517,8 +587,9 @@ static void read_pipe_msg(void)
 		default:
 			// if we're here something really weird happened. Close everything
 			tcp_state.quit_loop = true;
-			fprintf(stderr, "Quitting the 'peer_tcp_thread'. An unexpected error"
-				   " has occurred\n");
+			slog_error(FILE_LEVEL, "Quitting the 'peer_tcp_thread'. An"
+						  " unexpected error has occurred");
+			printf("%s\n", err_msg);
 			PRINT_PEER;
 			break;
 	}
@@ -534,6 +605,10 @@ static void pipe_event(short revents)
 	if (revents & POLLIN || revents & POLLRDBAND || revents & POLLPRI) {
 		read_pipe_msg();
 	} else {
+		slog_error(FILE_LEVEL, "Unexpected revents value: %hu", revents);
+		printf("An unexpected error has occurred internally. Leaving the"
+		 "superpeer\n");
+		PRINT_PEER;
 		tcp_state.quit_loop = true;
 	}
 }
@@ -553,29 +628,6 @@ static void setup_peer_tcp_poll(struct pollfd *fds)
 	fds[PIPE].events = POLLIN | POLLPRI;
 }
 
-/*
- * Check if the superpeer is still alive. If not close the communications and
- * quit the thread
- */
-static void is_alive(void)
-{
-	fsnp_err_t err;
-	struct fsnp_alive alive;
-
-	tcp_state.timeouts++;
-	if (tcp_state.timeouts > 4) {
-		// the peer didn't contacted us for more than 2 minutes
-		tcp_state.quit_loop = true;
-		return;
-	}
-
-	fsnp_init_alive(&alive);
-	err = fsnp_send_alive(tcp_state.sock, &alive);
-	if (err == E_PEER_DISCONNECTED) {
-		tcp_state.quit_loop = true;
-	}
-}
-
 #define POLL_ALIVE_TIMEOUT 30000 // ms
 /*
  * Entry point for the thread spawned by 'launch_peer_thread'.
@@ -592,12 +644,14 @@ static void peer_tcp_thread(void *data)
 
 	UNUSED(data);
 
+	slog_info(FILE_LEVEL, "Setting up the poll for the peer_tcp_thread");
 	setup_peer_tcp_poll(fds);
 
 	tcp_state.quit_loop = false;
 	tcp_state.send_leave_msg = false;
 	tcp_state.file_asked = false;
 
+	slog_info(FILE_LEVEL, "Entering the event loop for the peer_tcp_thread");
 	while (!tcp_state.quit_loop) {
 		ret = poll(fds, 2, POLL_ALIVE_TIMEOUT);
 		if (ret > 0) {
@@ -613,17 +667,20 @@ static void peer_tcp_thread(void *data)
 		} else if (ret == 0) {
 			is_alive();
 		} else {
-			perror("poll");
+			slog_error(FILE_LEVEL, "poll. Error %d", errno);
 			tcp_state.quit_loop = true;
 		}
 	}
 
+	slog_info(STDOUT_LEVEL, "Leaving the superpeer...");
+
 	if (tcp_state.send_leave_msg) {
 		fsnp_init_leave(&leave);
 		err = fsnp_send_leave(tcp_state.sock, &leave);
+		slog_info(FILE_LEVEL, "Sending an alive msg to the sp from the"
+						" peer_tcp_thread");
 		if (err != E_NOERR) {
-			fsnp_print_err_msg(err);
-			PRINT_PEER;
+			fsnp_log_err_msg(err, false);
 		}
 	}
 
@@ -647,7 +704,10 @@ static void launch_peer_thread(int sock)
 
 	ret = pipe(tcp_state.pipe_fd);
 	if (ret < 0) {
-		perror("pipe");
+		slog_error(FILE_LEVEL, "pipe. Error %d", errno);
+		printf("An internal error has occurred. The peer will not join a"
+		 " superpeer.\n");
+		PRINT_PEER;
 		close(sock);
 		stop_update_thread();
 		return;
@@ -658,6 +718,10 @@ static void launch_peer_thread(int sock)
 	tcp_state.send_leave_msg = false;
 	ret = start_new_thread(peer_tcp_thread, NULL, "peer_tcp_thread");
 	if (ret < 0) {
+		slog_error(FILE_LEVEL, "unable to start the peer_tcp_thread", errno);
+		printf("An internal error has occurred. The peer will not join a"
+		       " superpeer.\n");
+		PRINT_PEER;
 		close(sock);
 		close(tcp_state.pipe_fd[READ_END]);
 		close(tcp_state.pipe_fd[WRITE_END]);
@@ -672,12 +736,15 @@ void join_sp(const struct fsnp_query_res *query_res)
 	int ret = 0;
 
 	if (is_superpeer()) {
+		slog_debug(FILE_LEVEL, "The user has tried to join a sp as sp");
 		printf("You're a superpeer, you can't join another superpeer\n");
 		PRINT_PEER;
 		return;
 	}
 
 	if (tcp_state.sock != 0) { // we're already connected to a superpeer
+		slog_debug(FILE_LEVEL, "The user has tried to join a sp while he's "
+						 "already connected to another one");
 		printf("You're already connected to a superpeer. Leave him before"
 		       " trying to join another one\n");
 		PRINT_PEER;
@@ -691,17 +758,24 @@ void join_sp(const struct fsnp_query_res *query_res)
 
 	sock = connect_to_sp(&query_res->sp_list[choice]);
 	if (sock < 0) {
+		slog_warn(STDOUT_LEVEL, "Unable to establish a connection with the "
+						  "superpeer");
+		PRINT_PEER;
 		return;
 	}
 
 	ret = send_join_msg(sock);
 	if (ret < 0) {
+		slog_warn(STDOUT_LEVEL, "Unable to join the superpeer");
+		PRINT_PEER;
 		close(sock);
 		return;
 	}
 
 	ret = read_join_res(sock);
 	if (ret < 0) {
+		slog_warn(STDOUT_LEVEL, "Unable to join the superpeer");
+		PRINT_PEER;
 		close(sock);
 		return;
 	}
@@ -713,23 +787,23 @@ void ask_file(const char *filename, size_t size)
 {
 	ssize_t ret = 0;
 	int to_write = PIPE_WHO_HAS;
-	static const char err_msg[] = "peer-pipe: unable to send WHO_HAS";
+	static const char err_msg[] = "unable to send WHO_HAS";
 
 	ret = fsnp_write(tcp_state.pipe_fd[WRITE_END], &to_write, sizeof(int));
 	if (ret < 0) {
-		perror(err_msg);
+		slog_error(FILE_LEVEL, "%s", err_msg);
 		return;
 	}
 
 	ret = fsnp_write(tcp_state.pipe_fd[WRITE_END], &size, sizeof(size_t));
 	if (ret < 0) {
-		perror(err_msg);
+		slog_error(FILE_LEVEL, "%s", err_msg);
 		return;
 	}
 
 	ret = fsnp_write(tcp_state.pipe_fd[WRITE_END], filename, size);
 	if (ret < 0) {
-		perror(err_msg);
+		slog_error(FILE_LEVEL, "%s", err_msg);
 		return;
 	}
 }
@@ -754,7 +828,9 @@ void leave_sp(void)
 	ret = fsnp_write(tcp_state.pipe_fd[WRITE_END], &to_write, sizeof(int));
 	if (ret < 0) {
 		tcp_state.quit_loop = true; // force the thread to quit
-		perror("Forcing to quit 'peer_tcp_thread'");
+		slog_error(STDOUT_LEVEL, "Forcing to quit peer_tcp_thread for an"
+						   " internal error");
+		slog_error(FILE_LEVEL, "fsnp_write. Error %d", errno);
 	}
 }
 

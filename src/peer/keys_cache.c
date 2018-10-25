@@ -19,6 +19,8 @@
 #include <stdint.h>
 #include <memory.h>
 #include <stdlib.h>
+#include <errno.h>
+#include <arpa/inet.h>
 
 #include "peer/keys_cache.h"
 #include "peer/file_manager.h"
@@ -28,7 +30,14 @@
 
 #include "fsnp/fsnp.h"
 
+#include "slog/slog.h"
+
 #define CACHE_MAX_SIZE 1UL << 22 // 4.194.304
+
+#define STRINGIFY_HASH(key_str, key, i) \
+					for (i = 0; i < SHA256_BYTES / sizeof(char); i++) { \
+						snprintf(key_str + i, sizeof(char), "%hhx", key[i]); \
+					}
 
 static hashtable_t *cache = NULL;
 
@@ -57,8 +66,10 @@ static void list_free_callback(void *item)
 
 bool init_keys_cache(void)
 {
+	slog_debug(FILE_LEVEL, "Creating the keys_cache hashtable")
 	cache = ht_create(0, CACHE_MAX_SIZE, ht_free_callback);
 	if (!cache) {
+		slog_error(FILE_LEVEL, "Unable to create the keys_cache hashtable");
 		return false;
 	}
 
@@ -74,30 +85,41 @@ static int add_new_key(sha256_t key, const struct fsnp_peer *owner)
 	struct key_cached *kc = NULL;
 	struct fsnp_peer *o = NULL;
 	int ret = 0;
+	char sha_str[SHA256_BYTES];
+	unsigned i = 0;
+	struct in_addr addr;
 
 	kc = malloc(sizeof(struct key_cached));
 	if (!kc) {
+		slog_error(FILE_LEVEL, "malloc error %d", errno);
 		return -1;
 	}
 
 	kc->owners = list_create();
 	if (!kc->owners) {
+		slog_error(FILE_LEVEL, "list_create");
 		free(kc);
 		return -1;
 	}
 
 	o = malloc(sizeof(struct fsnp_peer));
 	if (!o) {
+		slog_error(FILE_LEVEL, "malloc error %d", errno);
 		list_destroy(kc->owners);
 		free(kc);
 		return -1;
 	}
 
+	STRINGIFY_HASH(sha_str, key, i);
+	addr.s_addr = htonl(owner->ip);
+	slog_info(FILE_LEVEL, "Added key %s, owner %s:%hu", sha_str,
+			inet_ntoa(addr), owner->port);
 	list_set_free_value_callback(kc->owners, list_free_callback);
 	memcpy(kc->key, key, sizeof(sha256_t));
 	memcpy(o, owner, sizeof(struct fsnp_peer));
 	ret = list_push_value(kc->owners, o);
 	if (ret < 0) {
+		slog_error(FILE_LEVEL, "Unable to push new entry in key->owners");
 		list_destroy(kc->owners);
 		free(kc);
 		free(o);
@@ -106,6 +128,7 @@ static int add_new_key(sha256_t key, const struct fsnp_peer *owner)
 
 	ret = ht_set(cache, key, sizeof(sha256_t), kc, sizeof(struct key_cached));
 	if (ret < 0) {
+		slog_error(FILE_LEVEL, "Unable to set new entry in cache hashtable");
 		list_destroy(kc->owners);
 		free(kc);
 		free(o);
@@ -151,22 +174,34 @@ static int add_to_key(struct key_cached *kc, struct fsnp_peer *owner)
 	struct fsnp_peer *o = NULL;
 	int ret = 0;
 	struct duplicate duplicate;
+	char sha_str[SHA256_BYTES];
+	unsigned i = 0;
+	struct in_addr addr;
 
 	duplicate.owner = owner;
 	duplicate.d = false;
+	addr.s_addr = htonl(owner->ip);
+	STRINGIFY_HASH(sha_str, kc->key, i);
 	list_foreach_value(kc->owners, avoid_duplicate_callback, &duplicate);
 	if (duplicate.d) {
+		slog_warn(FILE_LEVEL, "%s:%hu tried to add %s twice", inet_ntoa(addr),
+				owner->port, sha_str);
 		return 0;
 	}
 
 	o = malloc(sizeof(struct fsnp_peer));
 	if (!o) {
+		slog_error(FILE_LEVEL, "malloc error %d", errno);
 		return -1;
 	}
 
+
 	memcpy(o, owner, sizeof(struct fsnp_peer));
+	slog_info(FILE_LEVEL, "Adding to %s's owners %s:%hu", inet_ntoa(addr),
+			owner->port);
 	ret = list_push_value(kc->owners, o);
 	if (ret < 0) {
+		slog_error(FILE_LEVEL, "kc->owners list_push_value");
 		free(o);
 		return -1;
 	}
@@ -249,6 +284,10 @@ void cache_rm_keys(struct fsnp_peer *owner)
 
 void close_keys_cache(void)
 {
+	slog_debug(FILE_LEVEL, "Destroying cache hashtable");
 	ht_destroy(cache);
 	cache = NULL;
 }
+
+#undef STRINGIFY_HASH
+#undef CACHE_MAX_SIZE

@@ -17,10 +17,13 @@
 
 #include <stdio.h>
 #include <stdbool.h>
+#include <errno.h>
 
 #include "struct/linklist.h"
 
 #include "peer/thread_manager.h"
+
+#include "slog/slog.h"
 
 #ifdef FSNP_DEBUG
 #include "peer/peer.h" // for PRINT_PEER
@@ -57,13 +60,17 @@ static void free_callback(void *val)
 
 int init_thread_manager(void)
 {
+	slog_debug(FILE_LEVEL, "Creating running_threads list");
 	running_threads = list_create();
 	if (!running_threads) {
+		slog_error(FILE_LEVEL, "Unable to create running_theads list");
 		return -1;
 	}
 
+	slog_debug(FILE_LEVEL, "Creating closed_threads list");
 	closed_threads = list_create();
 	if (!closed_threads) {
+		slog_error(FILE_LEVEL, "Unable to create closed_theads list");
 		list_destroy(running_threads);
 		return -1;
 	}
@@ -103,20 +110,24 @@ static void *start(void *d)
 	int ret = 0;
 	struct launch_data *ld = (struct launch_data *)d;
 
+	slog_info(FILE_LEVEL, "Thread %s is running", ld->name);
+	slog_debug(FILE_LEVEL, "Pushing %s inside running_threads", ld->name);
 	ret = list_push_value(running_threads, ld);
 	if (ret < 0) {
-		fprintf(stderr, "thread-manager - Unable to add the entry to the running"
-				  " list\n");
+		slog_error(FILE_LEVEL, "Unable to add %s to running_threads", ld->name);
 	}
 
 	ld->e(ld->data);
 
+	slog_debug(FILE_LEVEL, "Removing %s from the running_threads list", ld->name);
 	list_foreach_value(running_threads, find_n_remove_callback, ld);
+	slog_debug(FILE_LEVEL, "Pushing %s inside closed_threads", ld->name);
 	ret = list_push_value(closed_threads, ld);
 	if (ret < 0) {
-		fprintf(stderr, "thread-manager - Unable to add the entry to the closed"
-		                " list\n");
+		slog_error(FILE_LEVEL, "Unable to add %s to closed_threads", ld->name);
 	}
+
+	slog_info(FILE_LEVEL, "Thread %s is exiting", ld->name);
 #ifndef FSNP_MEM_DEBUG
 	pthread_exit(NULL);
 #else
@@ -128,26 +139,29 @@ int start_new_thread(entry_point e, void *data, const char *name)
 {
 
 	struct launch_data *ld = NULL;
+	int ret = 0;
 
 	ld = malloc(sizeof(struct launch_data));
 	if (!ld) {
+		slog_error(FILE_LEVEL, "malloc error: %d", errno);
 		return -1;
 	}
 
 	ld->data = data;
 	ld->e = e;
-	if (name) {
-		strncpy(ld->name, name, sizeof(ld->name));
-	}
+	strncpy(ld->name, name, sizeof(ld->name));
 
 #ifndef FSNP_MEM_DEBUG
-	if (pthread_create(&ld->tid, NULL, start, ld)) {
+	ret = pthread_create(&ld->tid, NULL, start, ld)
+	if (ret) {
+		slog_error(FILE_LEVEL, "pthread_create error: %d", ret);
 		free(ld);
 		return -1;
 	}
 
 	return 0;
 #else
+	slog_debug(FILE_LEVEL, "FSNP_MEM_DEBUG defined: just calling start");
 	sha256(&ld->data, sizeof(void *), ld->tid);
 	start(ld);
 #endif
@@ -156,7 +170,9 @@ int start_new_thread(entry_point e, void *data, const char *name)
 void close_thread_manager(void)
 {
 	list_set_free_value_callback(running_threads, free_callback);
+	slog_debug(FILE_LEVEL, "Destroying running_threads");
 	list_destroy(running_threads);
+	slog_debug(FILE_LEVEL, "Destroying closed_threads");
 	list_destroy(closed_threads);
 }
 
@@ -172,11 +188,10 @@ static int join_callback(void *item, size_t idx, void *user)
 
 #ifndef FSNP_MEM_DEBUG
 	pthread_join(ld->tid, NULL);
-#ifdef FSNP_DEBUG
-	printf("Thread %s joined.\n", ld->name);
-#endif // FSNP_DEBUG
+	slog_info(FILE_LEVEL, "Thread %s joined", ld->name);
 	free_callback(ld);
 #else // !FSNP_MEM_DEBUG
+	slog_debug(FILE_LEVEL, "FSNP_MEM_DEBUG defined: just freeing the memory");
 	free_callback(ld);
 #endif // FSNP_MEM_DEBUG
 	return REMOVE_AND_GO;

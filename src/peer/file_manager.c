@@ -30,6 +30,8 @@
 
 #include "fsnp/sha-256.h"
 
+#include "slog/slog.h"
+
 struct directory {
 	char path[PATH_MAX]; // the root path
 	hashtable_t *hashtable;
@@ -48,6 +50,11 @@ struct h_entry {
 };
 
 #define HASH_MAX_SIZE 1UL << 32
+
+#define STRINGIFY_HASH(key_str, key, i) \
+					for (i = 0; i < SHA256_BYTES / sizeof(char); i++) { \
+						snprintf(key_str + i, sizeof(char), "%hhx", key[i]); \
+					}
 
 static struct directory shared;
 static struct directory download;
@@ -68,6 +75,8 @@ static void add_file_to_table(hashtable_t *hashtable, const char *name,
 	sha256_t key;
 	struct h_entry *e = NULL;
 	int ret = 0;
+	char key_str[SHA256_BYTES];
+	unsigned i = 0;
 
 	e = malloc(sizeof(struct h_entry));
 	if (!e) {
@@ -87,20 +96,12 @@ static void add_file_to_table(hashtable_t *hashtable, const char *name,
 	ret = ht_set(hashtable, key, sizeof(key), e, sizeof(e));
 	if (ret < 0) {
 		free(e);
-#ifdef FSNP_DEBUG
-		fprintf(stderr, "Unable to add file \"%s\"\n", name);
-#endif
+		slog_debug(FILE_LEVEL, "Unable to add file \"%s\"", name);
 	}
 
-#ifdef FSNP_DEBUG
-	printf("Adding file \"%s\", path \"%s\"\n", name, path);
-	printf("SHA-256: ");
-	for (uint32_t i = 0; i < sizeof(sha256_t); i++) {
-		printf("%02x", key[i]);
-	}
-
-	printf("\n\n");
-#endif
+	STRINGIFY_HASH(key_str, key, i);
+	slog_info(FILE_LEVEL, "Adding file \"%s\", path \"%s\", SHA-256 \"%s\"",
+			name, path, key_str);
 }
 
 #define ERR -1
@@ -154,7 +155,7 @@ static int parse_dir(hashtable_t *hashtable, const char *path, bool first_time)
 
 	dir = opendir(path);
 	if (!dir) {
-		fprintf(stderr, "%s is not a directory!\n", path);
+		slog_warn(STDOUT_LEVEL, "%s is not a directory!", path);
 		return ERR;
 	}
 
@@ -169,11 +170,13 @@ static int parse_dir(hashtable_t *hashtable, const char *path, bool first_time)
 			strcat(filename, "/\0");
 		}
 
+		slog_debug(FILE_LEVEL, "Analyzing dirent %s", dirent->d_name);
 		name_len = strlen(dirent->d_name) + 1; // consider the '\0' char
 		strncat(filename, dirent->d_name, name_len);
 		ret = stat(filename, &s);
 		if (ret < 0) {
 			if (errno == EACCES) { // not enough permission: go to the next one
+				slog_debug(FILE_LEVEL, "Not enough permission to stat %s", filename);
 				continue;
 			} else {
 				break;
@@ -183,6 +186,7 @@ static int parse_dir(hashtable_t *hashtable, const char *path, bool first_time)
 		mode = s.st_mode & S_IFMT;
 
 		if (mode == S_IFREG) {
+			slog_debug(FILE_LEVEL, "%s is a file", dirent->d_name);
 			if (first_time) {
 				add_file_to_table(hashtable, dirent->d_name, name_len, path,
 				                  NULL);
@@ -196,6 +200,7 @@ static int parse_dir(hashtable_t *hashtable, const char *path, bool first_time)
 				}
 			}
 		} else if (mode == S_IFDIR) {
+			slog_debug(FILE_LEVEL, "%s is a directory", dirent->d_name);
 			prev_res = res;
 			res = parse_dir(hashtable, filename, first_time); // recursion step
 			/* HACK: same HACK as for the file */
@@ -218,11 +223,13 @@ int init_file_manager(void)
 {
 	shared.hashtable = ht_create(0, HASH_MAX_SIZE, free_callback);
 	if (!shared.hashtable) {
+		slog_error(FILE_LEVEL, "Unable to create shared.hashtable");
 		return -1;
 	}
 
 	download.hashtable = ht_create(0, HASH_MAX_SIZE, free_callback);
 	if (!download.hashtable) {
+		slog_error(FILE_LEVEL, "Unable to create downlaod.hashtable");
 		ht_destroy(shared.hashtable);
 		return -1;
 	}
@@ -235,6 +242,7 @@ int init_file_manager(void)
 	set_download_dir(".\0"); // set the standard download path
 	download.is_set = true;
 
+	slog_debug(FILE_LEVEL, "init_file_manager successfully initialized");
 	return 0;
 }
 
@@ -242,6 +250,7 @@ void close_file_manager(void)
 {
 	ht_destroy(shared.hashtable);
 	ht_destroy(download.hashtable);
+	slog_debug(FILE_LEVEL, "file_manager closed");
 }
 
 int set_shared_dir(const char *path)
@@ -257,17 +266,20 @@ int set_shared_dir(const char *path)
 	}
 
 	strncpy(shared.path, path, PATH_MAX);
+	slog_info(FILE_LEVEL, "Setting shared_dir to %s", path);
 	ret = parse_dir(shared.hashtable, shared.path, true);
 	if (ret < 0) {
 		ht_clear(shared.hashtable);
 		memset(shared.path, 0, sizeof(path));
 		shared.is_set = false;
+		slog_error(FILE_LEVEL, "Unable to parse shared_dir. shared_dir is unset"
+						 " now");
 		return -1;
 	}
 
-	printf("All the files were parsed. You're sharing %lu files.\n",
-			ht_count(shared.hashtable));
-	printf("New shared directory: \"%s\"\n", shared.path);
+	slog_info(STDOUT_LEVEL, "All the files were parsed. You're sharing %lu "
+						 "files.", ht_count(shared.hashtable));
+	slog_info(STDOUT_LEVEL, "New shared directory: \"%s\"", shared.path);
 	shared.is_set = true;
 
 	return 0;
@@ -285,8 +297,7 @@ int set_download_dir(const char *path)
 		memcpy(download.path, path, strnlen(path, sizeof(download.path)));
 	}
 
-	printf("New download directory: \"%s\"\n", download.path);
-
+	slog_info(STDOUT_LEVEL, "New download directory: \"%s\"", download.path);
 	return 0;
 }
 
@@ -323,13 +334,16 @@ sha256_t *retrieve_all_keys(uint32_t *num)
 		return NULL;
 	}
 
+	slog_debug(FILE_LEVEL, "Retrieving all keys (%u)", n);
 	k_list = ht_get_all_keys(shared.hashtable);
 	if (!k_list) {
+		slog_warn(FILE_LEVEL, "Unable to retrieve the keys");
 		return NULL;
 	}
 
 	keys = malloc(sizeof(sha256_t) * n);
 	if (!keys) {
+		slog_error(FILE_LEVEL, "malloc. Error %d", errno);
 		list_destroy(k_list);
 		return NULL;
 	}
@@ -356,6 +370,8 @@ static int search_delete_file_iterator(void *item, size_t idx, void *user)
 	struct h_entry *entry = (struct h_entry *)v->data;
 	struct search_delete_file_data *d = (struct search_delete_file_data *)user;
 	sha256_t key;
+	char key_str[SHA256_BYTES];
+	unsigned i = 0;
 
 	UNUSED(idx);
 
@@ -365,6 +381,8 @@ static int search_delete_file_iterator(void *item, size_t idx, void *user)
 	} else {
 		sha256(entry->name, entry->name_len, key);
 		ht_delete(d->table, key, sizeof(key), NULL, NULL);
+		STRINGIFY_HASH(key_str, key, i);
+		slog_info(FILE_LEVEL, "Deleting file corresponding to key %s", key_str);
 		d->changes = NEW;
 		return REMOVE_AND_GO;
 	}
@@ -409,3 +427,9 @@ void show_download_path(void)
 		printf("You're downloading files in \"%s\".\n", download.path);
 	}
 }
+
+#undef STRINGIFY_HASH
+#undef HASH_MAX_SIZE
+#undef ERR
+#undef OK
+#undef NEW

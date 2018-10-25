@@ -22,6 +22,7 @@
 #include <unistd.h>
 #include <poll.h>
 #include <arpa/inet.h>
+#include <errno.h>
 
 #include "peer/peer.h"
 #include "peer/superpeer.h"
@@ -36,6 +37,8 @@
 #include "fsnp/fsnp.h"
 
 #include "struct/linklist.h"
+
+#include "slog/slog.h"
 
 #define SP_BACKLOG 128
 #define MAX_KNOWN_PEER 8
@@ -65,22 +68,33 @@ static int add_sp_to_server(void)
 	struct in_addr ip;
 	struct fsnp_add_sp add_sp;
 	fsnp_err_t err;
+	in_port_t sp_port;
+	in_port_t p_port;
 
 	get_server_addr(&server_addr);
 	if (server_addr.ip == 0 && server_addr.port == 0) {
 		// if the peer doesn't know any server how is possible that we are here?
+		slog_panic(FILE_LEVEL, "The peer doesn't know a peer, yet it's becoming"
+						 " an sp");
 		return -1;
 	}
 
 	ip.s_addr = server_addr.ip;
+	slog_info(FILE_LEVEL, "Connecting with the server");
 	sock = fsnp_create_connect_tcp_sock(ip, server_addr.port);
 	if (sock < 0) {
+		slog_error(FILE_LEVEL, "Unable to contact the server");
 		return -1;
 	}
 
-	fsnp_init_add_sp(&add_sp, get_tcp_sp_port(), get_tcp_sp_port());
+	sp_port = get_udp_sp_port();
+	p_port = get_tcp_sp_port();
+	fsnp_init_add_sp(&add_sp, sp_port, p_port);
+	slog_info(FILE_LEVEL, "Sending an add_sp msg with 'sp port: %hu', 'peer "
+					   "port: %hu'", sp_port, p_port);
 	err = fsnp_send_add_sp(sock, &add_sp);
 	if (err != E_NOERR) {
+		fsnp_log_err_msg(err, false);
 		close(sock);
 		return -1;
 	}
@@ -101,13 +115,17 @@ static bool initialize_sp(void)
 	in_port_t tcp_port = SP_TCP_PORT;
 	bool localhost = is_localhost();
 
+	slog_info(FILE_LEVEL, "Creating and binding the TCP socket");
 	tcp = fsnp_create_bind_tcp_sock(&tcp_port, localhost);
 	if (tcp < 0) {
+		slog_error(FILE_LEVEL, "Unable to create/bind the TCP socket. Error: %d", errno);
 		return false;
 	}
 
+	slog_info(FILE_LEVEL, "Creating and binding the UDP socket");
 	udp = fsnp_create_bind_udp_sock(&udp_port, localhost);
 	if (udp < 0) {
+		slog_error(FILE_LEVEL, "Unable to create/bind the UDP socket. Error: %d", errno);
 		close(tcp);
 		return false;
 	}
@@ -116,16 +134,16 @@ static bool initialize_sp(void)
 bool print_peer = false;
 
 	if (tcp != SP_TCP_PORT) {
-		fprintf(stderr, "Unable to bind the superpeer TCP socket to the port"
-		                " %hu. The port %hu has been used instead\n",
-		        (in_port_t)SP_TCP_PORT, tcp_port);
+		slog_warn(STDOUT_LEVEL, "Unable to bind the superpeer TCP socket to the "
+						  "port %hu. The port %hu has been used instead",
+		                  (in_port_t)SP_TCP_PORT, tcp_port);
 		print_peer = true;
 	}
 
 	if (udp_port != SP_UDP_PORT) {
-		fprintf(stderr, "Unable to bind the superpeer UDP socket to the port"
-		                " %hu. The port %hu has been used instead\n",
-		        (in_port_t)SP_UDP_PORT, udp_port);
+		slog_warn(STDOUT_LEVEL, "Unable to bind the superpeer UDP socket to the"
+						  " port %hu. The port %hu has been used instead",
+		                  (in_port_t)SP_UDP_PORT, udp_port);
 		print_peer = true;
 	}
 
@@ -136,7 +154,7 @@ bool print_peer = false;
 
 	ret = listen(tcp, SP_BACKLOG);
 	if (ret < 0) {
-		fprintf(stderr, "Unable to listen on the TCP port.\n");
+		slog_error(FILE_LEVEL, "Unable to listen on the TCP port.");
 		close(tcp);
 		close(udp);
 		PRINT_PEER;
@@ -154,18 +172,17 @@ bool print_peer = false;
 	ret = add_sp_to_server();
 	if (ret < 0) {
 		fprintf(stderr, "Unable to contact the server for add this superpeer to"
-				        " its list. Please join again a superpeer\n");
+				        " its list. Please join again a superpeer");
 		close(tcp);
 		close(udp);
 		set_udp_sp_port(0);
 		set_tcp_sp_port(0);
-		PRINT_PEER;
 		return false;
 	}
 
 	ret = enter_sp_network(udp);
 	if (ret < 0) {
-		fprintf(stderr, "Unable to enter the superpeer network\n");
+		slog_error(FILE_LEVEL, "Unable to enter the superpeer network");
 		close(tcp);
 		close(udp);
 		set_udp_sp_port(0);
@@ -202,11 +219,14 @@ static void promote_peer(void)
 	int msg = PIPE_PROMOTE;
 	ssize_t w = 0;
 	struct peer_info *to_promote = NULL;
+	struct in_addr a;
 
 	to_promote = list_shift_value(known_peers);
+	a.s_addr = htonl(to_promote->addr.ip);
+	slog_info(FILE_LEVEL, "Promoting peer %s:%hu", inet_ntoa(a), to_promote->addr.port);
 	w = fsnp_write(to_promote->pipefd[WRITE_END], &msg, sizeof(int));
 	if (w < 0) {
-		perror("Unable to promote a peer");
+		slog_error(FILE_LEVEL, "fsn_write error %d", errno);
 	}
 }
 
@@ -230,18 +250,21 @@ static void accept_peer(void)
 
 	s = get_tcp_sp_port();
 
+	slog_info(FILE_LEVEL, "Accepting a new connection on the sp's TCP socket");
 	peer_sock = accept(s, (struct sockaddr *)&addr, &socklen);
 	if (peer_sock < 0) {
-		perror("Unable to accept a new TCP connection");
-		PRINT_PEER;
+		slog_error(FILE_LEVEL, "Unable to accept the connection");
 		return;
 	}
 
-	addr.sin_addr.s_addr = ntohl(addr.sin_addr.s_addr);
 	addr.sin_port = ntohs(addr.sin_port);
+	slog_info(FILE_LEVEL, "Superpeer contacted by peer %s:%hu",
+			inet_ntoa(addr.sin_addr), addr.sin_port);
+	addr.sin_addr.s_addr = ntohl(addr.sin_addr.s_addr);
 	num_peers = list_count(known_peers);
 	n = (size_t)list_foreach_value(known_peers, peer_already_known, &addr);
 	if (num_peers != n) { // the peer is already known, don't accept it
+		slog_warn(FILE_LEVEL, "Sp contacted by an already known peer");
 		close(peer_sock);
 		return;
 	}
@@ -249,33 +272,34 @@ static void accept_peer(void)
 	peer_info = malloc(sizeof(struct peer_info));
 	if (!peer_info) {
 		close(peer_sock);
-		perror("Unable to allocate enough memory");
-		PRINT_PEER;
+		slog_error(FILE_LEVEL, "malloc error %d", errno);
 		return;
 	}
 
-	peer_info->addr.ip = ntohl(addr.sin_addr.s_addr);
 	peer_info->addr.port = ntohs(addr.sin_port);
+	memset(peer_info->pretty_addr, 0, sizeof(char) * 32);
+	snprintf(peer_info->pretty_addr, sizeof(char) * 32, "%s:%hu",
+			inet_ntoa(addr.sin_addr), peer_info->addr.port);
+	peer_info->addr.ip = ntohl(addr.sin_addr.s_addr);
 	peer_info->sock = peer_sock;
 	peer_info->joined = false;
 	peer_info->timeouts = 0;
 	ret = pipe(peer_info->pipefd);
 	if (ret < 0) {
-		perror("accept_peer-pipe");
+		slog_error(FILE_LEVEL, "pipe error %d", errno);
 		close(peer_sock);
 		free(peer_info);
-		PRINT_PEER;
+		return;
 	}
 
 	added = list_push_value(known_peers, peer_info);
 	if (ret < 0) {
-		fprintf(stderr, "Unable to add the peer to the known_peer_list\n");
-		PRINT_PEER;
+		slog_warn(FILE_LEVEL, "Unable to add the peer to the known_peer_list");
 	}
 
 	ret = start_new_thread(sp_tcp_thread, peer_info, "sp_tcp_thread");
 	if (ret < 0) {
-		fprintf(stderr, "Unable to start 'sp_tcp_thread' for peer %s:%hu\n",
+		slog_error(FILE_LEVEL, "Unable to start 'sp_tcp_thread' for peer %s:%hu",
 				inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
 		close(peer_sock);
 		if (added == 0) {
@@ -304,11 +328,7 @@ void sp_tcp_sock_event(short revents)
 	if (revents & POLLIN || revents & POLLRDBAND || revents & POLLPRI) {
 		accept_peer();
 	} else {
-#ifdef FSNP_DEBUG
-		fprintf(stderr, "sp TCP socket. Case not covered!\n");
-		printf("revents: %hd\n", revents);
-		PRINT_PEER;
-#endif
+		slog_warn(FILE_LEVEL, "Unexpected revents %d [TCP sp socket]", revents);
 	}
 }
 
@@ -317,11 +337,7 @@ void sp_udp_sock_event(short revents)
 	if (revents & POLLIN || revents & POLLRDBAND || revents & POLLPRI) {
 		read_udp_sock();
 	} else {
-#ifdef FSNP_DEBUG
-		fprintf(stderr, "sp UDP socket. Case not covered!\n");
-		printf("revents: %hd\n", revents);
-		PRINT_PEER;
-#endif
+		slog_warn(FILE_LEVEL, "Unexpected revents %d [UDP sp socket]", revents);
 	}
 }
 
@@ -355,21 +371,29 @@ void rm_peer_from_list(struct fsnp_peer *peer)
 bool enter_sp_mode(void)
 {
 	bool ret = false;
+	char err_msg[] = "Unable to enter the sp_mode";
 
 	ret = init_keys_cache();
 	if (!ret) {
+		printf("%s\n", err_msg);
+		PRINT_PEER;
 		return false;
 	}
 
 	known_peers = list_create();
 	if (!known_peers) {
 		close_keys_cache();
+		printf("%s\n", err_msg);
+		PRINT_PEER;
 		return false;
 	}
 
 	ret = initialize_sp();
 	if (!ret) {
 		close_keys_cache();
+		list_destroy(known_peers);
+		printf("%s\n", err_msg);
+		PRINT_PEER;
 		return false;
 	}
 
@@ -392,9 +416,9 @@ static int quit_peer_threads(void *item, size_t idx, void *user)
 	w = fsnp_write(info->pipefd[WRITE_END], &msg, sizeof(int));
 	if (w < 0) {
 		addr.s_addr = htonl(info->addr.ip);
-		fprintf(stderr, "Unable to communicate to the 'sp_tcp_thread' of peer"
-				  "%s:%hu to quit\n", inet_ntoa(addr), htons(info->addr.port));
-		PRINT_PEER;
+		slog_warn(FILE_LEVEL, "Unable to communicate to the 'sp_tcp_thread' of"
+						" peer %s:%hu to quit\n", inet_ntoa(addr),
+						htons(info->addr.port));
 	}
 
 	return GO_AHEAD;
@@ -415,10 +439,13 @@ static void rm_sp_from_server(void)
 	get_server_addr(&server_addr);
 	if (server_addr.ip == 0 && server_addr.port == 0) {
 		// if the peer doesn't know any server how is possible that we are here?
+		slog_panic(FILE_LEVEL, "The peer doesn't know a peer, yet it's becoming"
+		                       " an sp");
 		return;
 	}
 
 	ip.s_addr = server_addr.ip;
+	slog_info(FILE_LEVEL, "Connecting with the server");
 	sock = fsnp_create_connect_tcp_sock(ip, server_addr.port);
 	if (sock < 0) {
 		return;
@@ -426,9 +453,11 @@ static void rm_sp_from_server(void)
 
 	sp_addr.ip = get_peer_ip();
 	sp_addr.port = get_udp_sp_port();
+	slog_info(FILE_LEVEL, "Sending a rm_sp msg to the server");
 	fsnp_init_rm_sp(&rm_sp, &sp_addr, SUPERPEER);
 	err = fsnp_send_rm_sp(sock, &rm_sp);
 	if (err != E_NOERR) {
+		fsnp_log_err_msg(err, false);
 		close(sock);
 		return;
 	}
@@ -438,13 +467,21 @@ static void rm_sp_from_server(void)
 
 void exit_sp_mode(void)
 {
-	exit_sp_network();
-	rm_sp_from_server();
-	close_keys_cache();
+	slog_info(FILE_LEVEL, "Exiting the sp mode...");
+	slog_info(FILE_LEVEL, "Leaving all the peers");
 	list_foreach_value(known_peers, quit_peer_threads, NULL);
+	slog_info(FILE_LEVEL, "Extiting the sp network");
+	exit_sp_network();
+	slog_info(FILE_LEVEL, "Removing the sp from the server");
+	rm_sp_from_server();
+	slog_info(FILE_LEVEL, "Closing the keys_cache");
+	close_keys_cache();
+	slog_info(FILE_LEVEL, "Removing the sp_sock from the main poll");
 	rm_poll_sp_sock();
+	slog_info(FILE_LEVEL, "Destroying the known_peers list");
 	list_destroy(known_peers);
 	known_peers = NULL;
+	slog_info(STDOUT_LEVEL, "You're no longer a superpeer");
 }
 
 #undef READ_END

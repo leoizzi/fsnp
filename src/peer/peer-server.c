@@ -21,6 +21,7 @@
 #include <unistd.h>
 #include <memory.h>
 #include <arpa/inet.h>
+#include <errno.h>
 
 #include "peer/peer.h"
 #include "peer/superpeer.h"
@@ -31,6 +32,8 @@
 
 #include "fsnp/fsnp.h"
 
+#include "slog/slog.h"
+
 /*
  * Send a fsnp_query message to the server
  */
@@ -40,9 +43,10 @@ static bool send_query(int sock)
 	fsnp_err_t err;
 
 	fsnp_init_query(&query, PEER);
+	slog_debug(FILE_LEVEL, "Sending query msg to the server");
 	err = fsnp_send_query(sock, &query);
 	if (err != E_NOERR) {
-		fsnp_print_err_msg(err);
+		fsnp_log_err_msg(err, false);
 		return false;
 	}
 
@@ -59,9 +63,17 @@ static struct fsnp_query_res *read_res(int sock)
 	struct fsnp_msg *msg = NULL;
 	struct fsnp_query_res *query_res = NULL;
 
+	slog_debug(FILE_LEVEL, "Reading query_res sent by the server");
 	msg = fsnp_read_msg_tcp(sock, 0, &t, &err);
 	if (!msg) {
-		fsnp_print_err_msg(err);
+		fsnp_log_err_msg(err, false);
+		return NULL;
+	}
+
+	if (msg->msg_type != QUERY_RES) {
+		slog_debug(FILE_LEVEL, "msg_type mismatch: expected %u, received %u",
+				QUERY_RES, msg->msg_type);
+		free(msg);
 		return NULL;
 	}
 
@@ -78,27 +90,27 @@ static void first_peer(int sock)
 	fsnp_err_t err;
 	bool ret = false;
 
+	slog_debug(FILE_LEVEL, "This peer is the first to join the network");
 	if (is_superpeer()) { // something really wrong happened with the server
-		fprintf(stderr, "This program is already a superpeer and the server"
-				  " doesn't know about it.\nSending a request to add this"
-	              " superpeer to its list\n");
+		slog_warn(FILE_LEVEL, "This peer is already a superpeer and the server"
+				  " doesn't know about it. Sending a request to add us to its "
+	              "list");
 		fsnp_init_add_sp(&add_sp, get_tcp_sp_port(), get_udp_sp_port());
 		err = fsnp_send_add_sp(sock, &add_sp);
 		if (err != E_NOERR) {
-			fsnp_print_err_msg(err);
-			PRINT_PEER;
+			fsnp_log_err_msg(err, false);
 			return;
 		}
 	} else {
 		ret = enter_sp_mode();
 		if (ret == false) {
-			perror("enter_sp_mode-first_peer");
+			slog_error(STDOUT_LEVEL, "Unable to enter the sp_mode");
 			PRINT_PEER;
 			return;
 		}
 	}
 
-	printf("\nYou're the first peer in the network!\n");
+	slog_info(STDOUT_LEVEL, "You're the first peer in the network!");
 	PRINT_PEER;
 }
 
@@ -117,6 +129,7 @@ static void parse_query_res(int sock, struct fsnp_query_res *query_res)
 		}
 	}
 
+	close(sock);
 	join_sp(query_res);
 }
 
@@ -129,19 +142,27 @@ static void query_server(void *data)
 	struct sockaddr_in *addr = (struct sockaddr_in *)data;
 	struct fsnp_query_res *query_res = NULL;
 	struct fsnp_peer server_addr;
+	char err_msg[] = "An error has occurred while contacting the superpeer. See"
+				     " the log for more details";
 
 	sock = fsnp_create_connect_tcp_sock(addr->sin_addr, addr->sin_port);
 	if (sock < 0) {
-		perror("fsnp_create_connect_tcp_sock peer-server");
+		slog_error(FILE_LEVEL, "fsnp_create_connect_tcp_sock error: %d", errno);
+		printf("%s\n", err_msg);
+		PRINT_PEER;
 		return;
 	}
 
 	if (!send_query(sock)) {
+		printf("%s\n", err_msg);
+		PRINT_PEER;
 		return;
 	}
 
 	query_res = read_res(sock);
 	if (!query_res) {
+		printf("%s\n", err_msg);
+		PRINT_PEER;
 		return;
 	}
 
@@ -151,7 +172,6 @@ static void query_server(void *data)
 
 	parse_query_res(sock, query_res);
 
-	close(sock);
 	free(query_res);
 }
 
@@ -161,7 +181,9 @@ void launch_query_server_sp(const struct sockaddr_in *addr)
 
 	addr_cp = malloc(sizeof(struct sockaddr_in));
 	if (!addr_cp) {
-		perror("launch_query_server_sp-malloc");
+		slog_error(FILE_LEVEL, "malloc. Error %d", errno);
+		printf("An internal error has occurred while contacting the server\n");
+		PRINT_PEER;
 		return;
 	}
 

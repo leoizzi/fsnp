@@ -24,6 +24,7 @@
 #include <memory.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <errno.h>
 
 #include "peer/peer.h"
 #include "peer/superpeer.h"
@@ -34,6 +35,8 @@
 #include "peer/peer-superpeer.h" // for stop_update_thread
 
 #include "fsnp/fsnp.h"
+
+#include "slog/slog.h"
 
 #define POLLFD_NUM 2
 
@@ -58,19 +61,26 @@ struct state {
 
 static struct state state;
 
-static const char err_lock_msg[] = "Unable to lock state_mtx.\n The data from"
+static const char err_lock_msg[] = "Unable to lock state_mtx. The data from"
 								   " now on can be compromised. It's suggested"
-		                           " to restart the peer\n";
-static const char err_unlock_msg[] = "Unable to unlock state_mtx.\n The data"
+		                           " to restart the peer";
+static const char err_unlock_msg[] = "Unable to unlock state_mtx. The data"
 									 " from now on can be compromised. It's"
-		                             " suggested to restart the peer\n";
+		                             " suggested to restart the peer";
+
+#define LOCK_STATE  if (pthread_mutex_lock(&state.state_mtx)) { \
+						slog_error(STDOUT_LEVEL, "%s", err_lock_msg); \
+						PRINT_PEER; \
+					}
+
+#define UNLOCK_STATE    if (pthread_mutex_unlock(&state.state_mtx)) { \
+							slog_error(STDOUT_LEVEL, "%s", err_unlock_msg); \
+							PRINT_PEER; \
+						}
 
 void add_poll_sp_sock(int tcp_sock)
 {
-	if (pthread_mutex_lock(&state.state_mtx)) {
-		fprintf(stderr, err_lock_msg);
-		PRINT_PEER;
-	}
+	LOCK_STATE
 
 	state.fds[POLL_SP_TCP].fd = tcp_sock;
 	state.fds[POLL_SP_TCP].events = POLLIN | POLLPRI;
@@ -78,10 +88,7 @@ void add_poll_sp_sock(int tcp_sock)
 
 	state.num_fd = SP_POLLFD_NUM; // add the socket to the poll count
 
-	if (pthread_mutex_unlock(&state.state_mtx)) {
-		fprintf(stderr, err_unlock_msg);
-		PRINT_PEER;
-	}
+	UNLOCK_STATE;
 }
 
 void rm_poll_sp_sock(void)
@@ -90,10 +97,7 @@ void rm_poll_sp_sock(void)
 		return;
 	}
 
-	if (pthread_mutex_lock(&state.state_mtx)) {
-		fprintf(stderr, err_lock_msg);
-		PRINT_PEER;
-	}
+	LOCK_STATE;
 
 	close(state.fds[POLL_SP_TCP].fd);
 
@@ -104,10 +108,7 @@ void rm_poll_sp_sock(void)
 	// remove the sockets from the poll interface
 	state.num_fd = SP_POLLFD_NUM - 1;
 
-	if (pthread_mutex_unlock(&state.state_mtx)) {
-		fprintf(stderr, err_unlock_msg);
-		PRINT_PEER;
-	}
+	UNLOCK_STATE;
 
 	set_udp_sp_port(0);
 	set_tcp_sp_port(0);
@@ -119,17 +120,11 @@ int get_tcp_sp_sock(void)
 		return 0;
 	}
 
-	if (pthread_mutex_lock(&state.state_mtx)) {
-		fprintf(stderr, err_lock_msg);
-		PRINT_PEER;
-	}
+	LOCK_STATE;
 
 	int sock = state.fds[POLL_SP_TCP].fd;
 
-	if (pthread_mutex_unlock(&state.state_mtx)) {
-		fprintf(stderr, err_unlock_msg);
-		PRINT_PEER;
-	}
+	UNLOCK_STATE;
 
 	return sock;
 }
@@ -138,17 +133,11 @@ bool is_superpeer(void)
 {
 	bool res;
 
-	if (pthread_mutex_lock(&state.state_mtx)) {
-		fprintf(stderr, err_lock_msg);
-		PRINT_PEER;
-	}
+	LOCK_STATE;
 
 	res = state.sp;
 
-	if (pthread_mutex_unlock(&state.state_mtx)) {
-		fprintf(stderr, err_unlock_msg);
-		PRINT_PEER;
-	}
+	UNLOCK_STATE;
 
 	return res;
 }
@@ -165,11 +154,13 @@ in_port_t get_tcp_sp_port(void)
 
 void set_tcp_sp_port(in_port_t port)
 {
+	slog_info(FILE_LEVEL, "Setting tcp_sp_port to %hu", port);
 	state.tcp_sp_port = port;
 }
 
 void set_udp_sp_port(in_port_t port)
 {
+	slog_info(FILE_LEVEL, "Setting udp_sp_port to %hu", port);
 	state.udp_sp_port = port;
 }
 
@@ -180,36 +171,32 @@ in_port_t get_udp_sp_port(void)
 
 void set_server_addr(const struct fsnp_peer *addr)
 {
-	if (pthread_mutex_lock(&state.state_mtx)) {
-		fprintf(stderr, err_lock_msg);
-		PRINT_PEER;
-	}
+	struct in_addr a;
+	LOCK_STATE;
 
+	a.s_addr = htonl(addr->ip);
+	slog_info(FILE_LEVEL, "Setting server_addr to %s:%hu", inet_ntoa(a),
+			addr->port);
 	memcpy(&state.server_addr, addr, sizeof(struct fsnp_peer));
 
-	if (pthread_mutex_unlock(&state.state_mtx)) {
-		fprintf(stderr, err_unlock_msg);
-		PRINT_PEER;
-	}
+	UNLOCK_STATE;
 }
 
 void get_server_addr(struct fsnp_peer *addr)
 {
-	if (pthread_mutex_lock(&state.state_mtx)) {
-		fprintf(stderr, err_lock_msg);
-		PRINT_PEER;
-	}
+	LOCK_STATE;
 
 	memcpy(addr, &state.server_addr, sizeof(struct fsnp_peer));
 
-	if (pthread_mutex_unlock(&state.state_mtx)) {
-		fprintf(stderr, err_unlock_msg);
-		PRINT_PEER;
-	}
+	UNLOCK_STATE;
 }
 
 void set_peer_ip(in_addr_t peer_ip)
 {
+	struct in_addr a;
+
+	a.s_addr = htonl(peer_ip);
+	slog_info(FILE_LEVEL, "Setting peer_ip to %s", inet_ntoa(a));
 	state.peer_ip = peer_ip;
 }
 
@@ -242,8 +229,8 @@ static void setup_signal_handler(void)
 	s.sa_flags = SA_RESTART;
 	err = sigaction(SIGINT, &s, NULL);
 	if (err < 0) {
-		perror("Unable to set up the signal handler for ^C.\n"
-		       "You can still exit by entering 'quit' from the command line.\n");
+		slog_warn(STDOUT_LEVEL, "Unable to set up the signal handler for ^C. "
+		       "You can still exit by entering 'quit' from the command line.");
 	}
 }
 
@@ -273,7 +260,7 @@ static void handle_poll_ret(int ret)
 	} else if (ret == 0) { // timeout
 		join_threads_if_any();
 	} else {
-		perror("poll");
+		slog_error(STDOUT_LEVEL, "poll error %d", errno);
 		state.should_exit = true;
 	}
 }
@@ -284,59 +271,62 @@ int peer_main(bool localhost)
 {
 	int ret = 0;
 
-	printf("Initializing the peer...\n");
+	slog_info(STDOUT_LEVEL, "Initializing the peer...");
 
 	state.localhost = localhost;
 	if (pthread_mutex_init(&state.state_mtx, NULL)) {
-		fprintf(stderr, "Unable to initialize tnum_fd_mtx.\nAborting\n");
+		slog_error(STDOUT_LEVEL, "Unable to initialize tnum_fd_mtx. Aborting");
 		exit(EXIT_FAILURE);
 	}
 
-	printf("Initializing the thread manager...\n");
+	slog_info(STDOUT_LEVEL, "Initializing the thread manager...");
 	ret = init_thread_manager();
 	if (ret < 0) {
-		fprintf(stderr, "Unable to start the thread manager.\nAborting");
+		slog_error(STDOUT_LEVEL, "Unable to start the thread manager. Aborting");
 		pthread_mutex_destroy(&state.state_mtx);
 		exit(EXIT_FAILURE);
 	}
 
-	printf("Initializing the file manager...\n");
+	slog_info(STDOUT_LEVEL, "Initializing the file manager...");
 	ret = init_file_manager();
 	if (ret < 0) {
-		fprintf(stderr, "Unable to start the file manager.\nAborting");
+		slog_error(STDOUT_LEVEL, "Unable to start the file manager. Aborting");
 		pthread_mutex_destroy(&state.state_mtx);
 		exit(EXIT_FAILURE);
 	}
 
-	printf("Setting up the 'ctrl C' signal handler...\n");
+	slog_info(STDOUT_LEVEL, "Setting up the ^C signal handler...");
 	setup_signal_handler();
+	slog_info(STDOUT_LEVEL, "Initializing the stdin subsystem...");
 	init_stdin();
 	state.num_fd = PEER_POLLFD_NUM;
-	printf("Setting up the poll interface...\n");
+	slog_info(STDOUT_LEVEL, "Setting up the poll interface...");
 	setup_poll();
 
-	printf("The peer is successfully initialized!\n");
+	slog_info(STDOUT_LEVEL, "The peer is successfully initialized!");
 	PRINT_PEER;
 	while (!state.should_exit) {
 		ret = poll(state.fds, state.num_fd, POLL_TIMEOUT);
 		handle_poll_ret(ret);
 	}
 
-	printf("Quitting...\n");
+	slog_info(STDOUT_LEVEL, "Quitting...");
 	// TODO: free all the resources of the struct library
 	if (is_superpeer()) {
-		printf("Closing the superpeer's sockets...\n");
+		slog_info(FILE_LEVEL, "Exiting sp mode");
 		exit_sp_mode();
 	} else if (get_peer_sock() != 0) {
 		leave_sp();
 	}
 
-	printf("Closing the thread manager...\n");
+	slog_info(STDOUT_LEVEL, "Closing the thread manager...");
 	close_thread_manager();
-	printf("Closing the file manager...\n");
+	slog_info(STDOUT_LEVEL, "Closing the file manager...");
 	close_file_manager();
+	slog_info(STDOUT_LEVEL, "De-initializing the stdin subsystem");
 	close_stdin();
 	pthread_mutex_destroy(&state.state_mtx);
+	slog_close();
 	if (ret >= 0) { // just return a standard value
 		printf("\nThe peer is exiting successfully!\n\n");
 		ret = EXIT_SUCCESS;
