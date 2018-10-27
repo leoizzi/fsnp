@@ -82,13 +82,12 @@ static void join_rcvd(struct fsnp_join *join, struct peer_info *info,
 	info->joined = true;
 	if (join->num_files == 0) {
 		slog_info(FILE_LEVEL, "%s is not sharing any file", info->pretty_addr);
-		return;
-	}
-
-	ret = cache_add_keys(join->num_files, join->files_hash, &info->addr);
-	if (ret < 0) {
-		slog_error(FILE_LEVEL, "Unable to add %s's files to the file cache",
-				info->pretty_addr);
+	} else {
+		ret = cache_add_keys(join->num_files, join->files_hash, &info->addr);
+		if (ret < 0) {
+			slog_error(FILE_LEVEL, "Unable to add %s's files to the file cache",
+			           info->pretty_addr);
+		}
 	}
 
 	fsnp_init_ack(&ack);
@@ -326,7 +325,7 @@ static void is_alive(struct peer_info *info, bool *should_exit)
 	}
 
 	fsnp_init_alive(&alive);
-	slog_info(FILE_LEVEL, "Sending a LEAVE msg to %s", info->pretty_addr);
+	slog_info(FILE_LEVEL, "Sending an ALIVE msg to %s", info->pretty_addr);
 	err = fsnp_send_alive(info->sock, &alive);
 	if (err == E_PEER_DISCONNECTED) {
 		fsnp_log_err_msg(err, false);

@@ -505,9 +505,10 @@ static size_t read_filename_from_pipe(char *msg)
 }
 
 #define STRINGIFY_HASH(key_str, key, i) \
-					for (i = 0; i < SHA256_BYTES / sizeof(char); i++) { \
-						snprintf(key_str + i, sizeof(char), "%hhx", key[i]); \
-					}
+	for (i = 0; i < SHA256_BYTES; i++) { \
+		snprintf(&key_str[i], sizeof(uint8_t) + 1, "%hhx", key[i]); \
+	}
+
 /*
  *  Send a who_has message to the superpeer
  */

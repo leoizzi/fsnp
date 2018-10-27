@@ -52,9 +52,9 @@ struct h_entry {
 #define HASH_MAX_SIZE 1UL << 32
 
 #define STRINGIFY_HASH(key_str, key, i) \
-					for (i = 0; i < SHA256_BYTES / sizeof(char); i++) { \
-						snprintf(key_str + i, sizeof(char), "%hhx", key[i]); \
-					}
+	for (i = 0; i < SHA256_BYTES; i++) { \
+		snprintf(&key_str[i], sizeof(uint8_t) + 1, "%hhx", key[i]); \
+	}
 
 static struct directory shared;
 static struct directory download;

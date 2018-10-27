@@ -247,12 +247,12 @@ static void accept_peer(void)
 	int ret = 0;
 	int added = 0;
 
-	s = get_tcp_sp_port();
+	s = get_tcp_sp_sock();
 	memset(&addr, 0, socklen);
 	slog_info(FILE_LEVEL, "Accepting a new connection on the sp's TCP socket");
 	peer_sock = accept(s, (struct sockaddr *)&addr, &socklen);
 	if (peer_sock < 0) {
-		slog_error(FILE_LEVEL, "Unable to accept the connection");
+		slog_error(FILE_LEVEL, "Unable to accept the connection. Error %d", errno);
 		return;
 	}
 
@@ -275,11 +275,12 @@ static void accept_peer(void)
 		return;
 	}
 
-	peer_info->addr.port = ntohs(addr.sin_port);
+	peer_info->addr.port = addr.sin_port;
 	memset(peer_info->pretty_addr, 0, sizeof(char) * 32);
+	peer_info->addr.ip = addr.sin_addr.s_addr;
+	addr.sin_addr.s_addr = htonl(addr.sin_addr.s_addr);
 	snprintf(peer_info->pretty_addr, sizeof(char) * 32, "%s:%hu",
 			inet_ntoa(addr.sin_addr), peer_info->addr.port);
-	peer_info->addr.ip = ntohl(addr.sin_addr.s_addr);
 	peer_info->sock = peer_sock;
 	peer_info->joined = false;
 	peer_info->timeouts = 0;
@@ -299,7 +300,7 @@ static void accept_peer(void)
 	ret = start_new_thread(sp_tcp_thread, peer_info, "sp_tcp_thread");
 	if (ret < 0) {
 		slog_error(FILE_LEVEL, "Unable to start 'sp_tcp_thread' for peer %s:%hu",
-				inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+				inet_ntoa(addr.sin_addr), addr.sin_port);
 		close(peer_sock);
 		if (added == 0) {
 			list_pop_value(known_peers);

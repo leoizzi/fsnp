@@ -35,9 +35,9 @@
 #define CACHE_MAX_SIZE 1UL << 22 // 4.194.304
 
 #define STRINGIFY_HASH(key_str, key, i) \
-					for (i = 0; i < SHA256_BYTES / sizeof(char); i++) { \
-						snprintf(key_str + i, sizeof(char), "%hhx", key[i]); \
-					}
+	for (i = 0; i < SHA256_BYTES; i++) { \
+		snprintf(&key_str[i], sizeof(uint8_t) + 1, "%hhx", key[i]); \
+	}
 
 static hashtable_t *cache = NULL;
 
@@ -246,6 +246,7 @@ static int cache_list_rm_keys_callback(void *item, size_t idx, void *user)
 
 	if (owner->ip == o->ip) {
 		if (owner->port == o->port) {
+			slog_info(FILE_LEVEL, "Item found");
 			return REMOVE_AND_GO;
 		} else {
 			return GO_AHEAD;
@@ -265,10 +266,14 @@ static ht_iterator_status_t cache_ht_rm_keys_callback(hashtable_t *table,
                                                       void *user)
 {
 	struct key_cached *kc = (struct key_cached *)value;
+	char key_str[SHA256_BYTES];
+	unsigned i = 0;
 
 	UNUSED(table);
 	UNUSED(vlen);
 
+	STRINGIFY_HASH(key_str, kc->key, i);
+	slog_debug(FILE_LEVEL, "Removing item %s", key_str);
 	list_foreach_value(kc->owners, cache_list_rm_keys_callback, user);
 	if (list_count(kc->owners) == 0) {
 		return HT_ITERATOR_REMOVE;
