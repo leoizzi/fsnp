@@ -41,7 +41,7 @@ struct periodic_data {
 	bool is_running;
 };
 
-static struct periodic_data pd; // it's not a political party :)
+static struct periodic_data pd;
 
 static void stop_update_thread(void)
 {
