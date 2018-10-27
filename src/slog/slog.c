@@ -360,7 +360,9 @@ void slog_init(const char* pName, const char* pConf, int nLogLevel, int nTdSafe)
     g_slogCfg.nSync = 0;
 
     slog_get_date(&date);
-    snprintf(logname, sizeof(logname), "%s-%02d-%02d-%02d.log", g_slogCfg.sFileName, date.year, date.mon, date.day);
+    snprintf(logname, sizeof(logname), "%s-%02d-%02d-%02d.%02d:%02d:%0d2:%06d.log",
+            g_slogCfg.sFileName, date.year, date.mon, date.day, date.hour,
+            date.min, date.sec, date.usec);
     g_slogCfg.pfile = fopen(logname, "a");
     /* Init mutex sync */
     slog_sync_init();

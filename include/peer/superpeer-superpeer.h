@@ -20,13 +20,15 @@
 
 #include "compiler.h"
 
+#include "fsnp/fsnp_types.h"
+
 FSNP_BEGIN_DECL
 
 /*
  * Enter the superpeers' overlay network with the 'udp' socket.
  * Return 0 on success, -1 otherwise
  */
-int enter_sp_network(int udp);
+int enter_sp_network(int udp, struct fsnp_peer *sps, unsigned n);
 
 /*
  * Exit the superpeer's overlay network. The socket passed when entered will be

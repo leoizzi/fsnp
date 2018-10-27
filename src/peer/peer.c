@@ -260,7 +260,11 @@ static void handle_poll_ret(int ret)
 	} else if (ret == 0) { // timeout
 		join_threads_if_any();
 	} else {
-		slog_error(STDOUT_LEVEL, "poll error %d", errno);
+		if (errno != EINTR) {
+			slog_error(STDOUT_LEVEL, "poll error %d", errno);
+		} else {
+			slog_info(FILE_LEVEL, "Poll has been interrupted by a signal");
+		}
 		state.should_exit = true;
 	}
 }
@@ -308,6 +312,9 @@ int peer_main(bool localhost)
 	while (!state.should_exit) {
 		ret = poll(state.fds, state.num_fd, POLL_TIMEOUT);
 		handle_poll_ret(ret);
+		if (ret < 0 && errno == EINTR) {
+			ret = 0;
+		}
 	}
 
 	slog_info(STDOUT_LEVEL, "Quitting...");

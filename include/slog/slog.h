@@ -34,10 +34,17 @@ extern "C" {
 #include <pthread.h>
 #include <stdio.h>
 
+#ifndef FSNP_DEBUG
 #define MAX_LOG_STDOUT_LEVEL 0
 #define STDOUT_LEVEL 0
 #define FILE_LEVEL 1
 #define MAX_LOG_FILE_LEVEL 1
+#else // ifdef FSNP_DEBUG
+#define MAX_LOG_STDOUT_LEVEL 1
+#define STDOUT_LEVEL 0
+#define FILE_LEVEL 1
+#define MAX_LOG_FILE_LEVEL 1
+#endif // FSNP_DEBUG
 
 /* Definations for version info */
 #define SLOGVERSION_MAJOR  1

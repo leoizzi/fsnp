@@ -46,7 +46,7 @@ struct peer_info {
  * Enter the superpeer mode.
  * Here will be done all the initializations steps needed for being a superpeer
  */
-bool enter_sp_mode(void);
+bool enter_sp_mode(struct fsnp_peer *sps, unsigned n);
 
 /*
  * Exit the superpeer mode, freeing all the resources previously allocated.

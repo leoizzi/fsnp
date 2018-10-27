@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <errno.h>
+#include <unistd.h>
 
 #include "struct/linklist.h"
 
@@ -152,7 +153,7 @@ int start_new_thread(entry_point e, void *data, const char *name)
 	strncpy(ld->name, name, sizeof(ld->name));
 
 #ifndef FSNP_MEM_DEBUG
-	ret = pthread_create(&ld->tid, NULL, start, ld)
+	ret = pthread_create(&ld->tid, NULL, start, ld);
 	if (ret) {
 		slog_error(FILE_LEVEL, "pthread_create error: %d", ret);
 		free(ld);
@@ -170,6 +171,8 @@ int start_new_thread(entry_point e, void *data, const char *name)
 void close_thread_manager(void)
 {
 	list_set_free_value_callback(running_threads, free_callback);
+	sleep(2); // give the threads enough time to finish their work
+	join_threads_if_any();
 	slog_debug(FILE_LEVEL, "Destroying running_threads");
 	list_destroy(running_threads);
 	slog_debug(FILE_LEVEL, "Destroying closed_threads");
@@ -200,9 +203,4 @@ static int join_callback(void *item, size_t idx, void *user)
 void join_threads_if_any(void)
 {
 	list_foreach_value(closed_threads, join_callback, NULL);
-#ifndef FSNP_MEM_DEBUG
-#ifdef FSNP_DEBUG
-	PRINT_PEER;
-#endif // FSNP_DEBUG
-#endif // FSNP_MEM_DEBUG
 }

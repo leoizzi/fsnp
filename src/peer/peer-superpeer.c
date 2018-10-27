@@ -641,6 +641,7 @@ static void peer_tcp_thread(void *data)
 	int ret = 0;
 	struct fsnp_leave leave;
 	fsnp_err_t err;
+	struct fsnp_msg *msg = NULL;
 
 	UNUSED(data);
 
@@ -681,6 +682,17 @@ static void peer_tcp_thread(void *data)
 						" peer_tcp_thread");
 		if (err != E_NOERR) {
 			fsnp_log_err_msg(err, false);
+		}
+
+		// read the ACK
+		msg = fsnp_read_msg_tcp(tcp_state.sock, 0, NULL, &err);
+		if (!msg) {
+			fsnp_log_err_msg(err, false);
+		} else if (msg->msg_type != ACK) {
+			slog_warn(FILE_LEVEL, "The peer didn't get an ACK after the leave"
+						 " msg. It has get instead %u", msg->msg_type);
+		} else {
+			slog_info(FILE_LEVEL, "The superpeer sent an ACK");
 		}
 	}
 

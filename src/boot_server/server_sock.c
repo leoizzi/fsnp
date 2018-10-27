@@ -52,10 +52,7 @@ static void add_sp_msg(const struct handler_data *data,
 {
 	struct fsnp_server_sp *fsp = NULL;
 	int ret = 0;
-
-#ifdef FSNP_DEBUG
 	struct in_addr address; // for printing purposes only
-#endif
 
 	fsp = malloc(sizeof(struct fsnp_server_sp));
 	if (!fsp) {
@@ -75,11 +72,9 @@ static void add_sp_msg(const struct handler_data *data,
 		free(fsp);
 	}
 
-#ifdef FSNP_DEBUG
 	address.s_addr = htonl(fsp->addr.s_addr);
-	slog_debug(FILE_LEVEL, "Superpeer added: address: %s, p_port: %hu, sp_port:"
+	slog_info(FILE_LEVEL, "Superpeer added: address: %s, p_port: %hu, sp_port:"
 						" %hu", inet_ntoa(address), fsp->p_port, fsp->sp_port);
-#endif
 }
 
 /*
@@ -133,7 +128,7 @@ static void normal_query_res(const struct handler_data *data,
 	}
 
 	free(sp);
-	slog_debug(FILE_LEVEL, "Sending a filled query_res to %s:hu",
+	slog_debug(FILE_LEVEL, "Sending a filled query_res to %s:%hu",
 			inet_ntoa(data->addr.sin_addr), ntohs(data->addr.sin_port));
 	err = fsnp_send_query_res(data->sock, query_res);
 	if (err != E_NOERR) {
@@ -201,7 +196,7 @@ static void first_query_res(const struct handler_data *data,
 		return;
 	}
 
-	slog_info(FILE_LEVEL, "%s:hu is the first peer in the network",
+	slog_info(FILE_LEVEL, "%s:%hu is the first peer in the network",
 			inet_ntoa(data->addr.sin_addr), ntohs(data->addr.sin_port));
 	add_sp_msg(data, (struct fsnp_add_sp *)m);
 	free(m);
@@ -273,7 +268,7 @@ static void *handler_thread(void *val)
 	free(msg);
 
 server_handler_exit:
-	slog_info(FILE_LEVEL, "Closing thread used for peer %s:hu",
+	slog_info(FILE_LEVEL, "Closing thread used for peer %s:%hu",
 	          inet_ntoa(data->addr.sin_addr), ntohs(data->addr.sin_port));
 	close(data->sock);
 	free(data);
@@ -337,7 +332,7 @@ static void accept_conn(int main_sock)
 		return;
 	}
 
-	slog_info(FILE_LEVEL, "Server contacted by peer %s:hu",
+	slog_info(FILE_LEVEL, "Server contacted by peer %s:%hu",
 			inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
 	launch_handler_thread(sock, &addr);
 }

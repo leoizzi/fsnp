@@ -262,8 +262,7 @@ struct packed fsnp_whohas {
 /*
  * Sent to a peer by a superpeer to inform him that he is now a superpeer.
  * The promoter, if know another superpeer, will pass it to the promoted so that
- * he can still communicate with the network if the promoter will leave the
- * network
+ * he can still communicate with the network if the promoter will leave.
  */
 struct packed fsnp_promote {
 	struct fsnp_msg header;

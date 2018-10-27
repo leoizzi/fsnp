@@ -84,25 +84,39 @@ static struct fsnp_query_res *read_res(int sock)
 /*
  * Add the peer to the server superpeer list
  */
-static void first_peer(int sock)
+static void first_peer(void)
 {
 	struct fsnp_add_sp add_sp;
+	struct fsnp_peer server;
+	struct in_addr ip;
 	fsnp_err_t err;
 	bool ret = false;
+	int sock = 0;
 
 	slog_debug(FILE_LEVEL, "This peer is the first to join the network");
 	if (is_superpeer()) { // something really wrong happened with the server
 		slog_warn(FILE_LEVEL, "This peer is already a superpeer and the server"
 				  " doesn't know about it. Sending a request to add us to its "
 	              "list");
+		get_server_addr(&server);
+		ip.s_addr = server.ip;
+		sock = fsnp_create_connect_tcp_sock(ip, server.port);
+		if (sock < 0) {
+			slog_error(FILE_LEVEL, "fsnp_create_connect_tcp_sock error %d", errno);
+			return;
+		}
+
 		fsnp_init_add_sp(&add_sp, get_tcp_sp_port(), get_udp_sp_port());
 		err = fsnp_send_add_sp(sock, &add_sp);
 		if (err != E_NOERR) {
 			fsnp_log_err_msg(err, false);
+			close(sock);
 			return;
 		}
+
+		close(sock);
 	} else {
-		ret = enter_sp_mode();
+		ret = enter_sp_mode(NULL, 0);
 		if (ret == false) {
 			slog_error(STDOUT_LEVEL, "Unable to enter the sp_mode");
 			PRINT_PEER;
@@ -118,18 +132,16 @@ static void first_peer(int sock)
  * Parse the server response, checking if the peer is the first one to contact
  * the server or not
  */
-static void parse_query_res(int sock, struct fsnp_query_res *query_res)
+static void parse_query_res(struct fsnp_query_res *query_res)
 {
 	set_peer_ip(query_res->peer_addr);
-
 	if (query_res->num_sp == 1) {
 		if (query_res->sp_list[0].ip == 0 && query_res->sp_list[0].port == 0) {
-			first_peer(sock);
+			first_peer();
 			return;
 		}
 	}
 
-	close(sock);
 	join_sp(query_res);
 }
 
@@ -166,11 +178,12 @@ static void query_server(void *data)
 		return;
 	}
 
+	close(sock);
 	server_addr.ip = addr->sin_addr.s_addr;
 	server_addr.port = addr->sin_port;
 	set_server_addr(&server_addr);
 
-	parse_query_res(sock, query_res);
+	parse_query_res(query_res);
 
 	free(query_res);
 }

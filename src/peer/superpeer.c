@@ -74,8 +74,8 @@ static int add_sp_to_server(void)
 	get_server_addr(&server_addr);
 	if (server_addr.ip == 0 && server_addr.port == 0) {
 		// if the peer doesn't know any server how is possible that we are here?
-		slog_panic(FILE_LEVEL, "The peer doesn't know a peer, yet it's becoming"
-						 " an sp");
+		slog_panic(FILE_LEVEL, "The peer doesn't know a server, yet it's "
+						 "becoming an sp");
 		return -1;
 	}
 
@@ -89,7 +89,7 @@ static int add_sp_to_server(void)
 
 	sp_port = get_udp_sp_port();
 	p_port = get_tcp_sp_port();
-	fsnp_init_add_sp(&add_sp, sp_port, p_port);
+	fsnp_init_add_sp(&add_sp, p_port, sp_port);
 	slog_info(FILE_LEVEL, "Sending an add_sp msg with 'sp port: %hu', 'peer "
 					   "port: %hu'", sp_port, p_port);
 	err = fsnp_send_add_sp(sock, &add_sp);
@@ -106,7 +106,7 @@ static int add_sp_to_server(void)
 /*
  * Create the superpeer's sockets and enter the overlay network
  */
-static bool initialize_sp(void)
+static bool initialize_sp(struct fsnp_peer *sps, unsigned n)
 {
 	int udp = 0;
 	int tcp = 0;
@@ -115,14 +115,14 @@ static bool initialize_sp(void)
 	in_port_t tcp_port = SP_TCP_PORT;
 	bool localhost = is_localhost();
 
-	slog_info(FILE_LEVEL, "Creating and binding the TCP socket");
+	slog_info(FILE_LEVEL, "Creating and binding the sp's TCP socket");
 	tcp = fsnp_create_bind_tcp_sock(&tcp_port, localhost);
 	if (tcp < 0) {
 		slog_error(FILE_LEVEL, "Unable to create/bind the TCP socket. Error: %d", errno);
 		return false;
 	}
 
-	slog_info(FILE_LEVEL, "Creating and binding the UDP socket");
+	slog_info(FILE_LEVEL, "Creating and binding the sp's UDP socket");
 	udp = fsnp_create_bind_udp_sock(&udp_port, localhost);
 	if (udp < 0) {
 		slog_error(FILE_LEVEL, "Unable to create/bind the UDP socket. Error: %d", errno);
@@ -154,7 +154,7 @@ bool print_peer = false;
 
 	ret = listen(tcp, SP_BACKLOG);
 	if (ret < 0) {
-		slog_error(FILE_LEVEL, "Unable to listen on the TCP port.");
+		slog_error(FILE_LEVEL, "Unable to start listening on the sp's TCP port.");
 		close(tcp);
 		close(udp);
 		PRINT_PEER;
@@ -180,7 +180,7 @@ bool print_peer = false;
 		return false;
 	}
 
-	ret = enter_sp_network(udp);
+	ret = enter_sp_network(udp, sps, n);
 	if (ret < 0) {
 		slog_error(FILE_LEVEL, "Unable to enter the superpeer network");
 		close(tcp);
@@ -368,11 +368,13 @@ void rm_peer_from_list(struct fsnp_peer *peer)
 	list_foreach_value(known_peers, rm_peer_callback, peer);
 }
 
-bool enter_sp_mode(void)
+bool enter_sp_mode(struct fsnp_peer *sps, unsigned n)
 {
 	bool ret = false;
 	char err_msg[] = "Unable to enter the sp_mode";
 
+	slog_info(FILE_LEVEL, "Entering the sp_mode...");
+	slog_info(FILE_LEVEL, "Initializing the file cache");
 	ret = init_keys_cache();
 	if (!ret) {
 		printf("%s\n", err_msg);
@@ -380,6 +382,7 @@ bool enter_sp_mode(void)
 		return false;
 	}
 
+	slog_info(FILE_LEVEL, "Creating the known_peers list");
 	known_peers = list_create();
 	if (!known_peers) {
 		close_keys_cache();
@@ -388,7 +391,7 @@ bool enter_sp_mode(void)
 		return false;
 	}
 
-	ret = initialize_sp();
+	ret = initialize_sp(sps, n);
 	if (!ret) {
 		close_keys_cache();
 		list_destroy(known_peers);

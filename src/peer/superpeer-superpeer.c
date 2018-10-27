@@ -17,8 +17,15 @@
 
 #include "peer/superpeer-superpeer.h"
 
-int enter_sp_network(int udp)
+#include "fsnp/fsnp.h"
+
+int enter_sp_network(int udp, struct fsnp_peer *sps, unsigned n)
 {
+	if (n == 0) {
+		return 0;
+	} else {
+		return -1;
+	}
 	// TODO: implement (start another thread here...)
 }
 
