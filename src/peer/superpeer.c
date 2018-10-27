@@ -247,9 +247,8 @@ static void accept_peer(void)
 	int ret = 0;
 	int added = 0;
 
-
 	s = get_tcp_sp_port();
-
+	memset(&addr, 0, socklen);
 	slog_info(FILE_LEVEL, "Accepting a new connection on the sp's TCP socket");
 	peer_sock = accept(s, (struct sockaddr *)&addr, &socklen);
 	if (peer_sock < 0) {
