@@ -57,6 +57,9 @@ static void ht_free_callback(void *item)
 	free(kc);
 }
 
+/*
+ * Free callback fot the 'owners' field of a key_cached struct
+ */
 static void list_free_callback(void *item)
 {
 	struct fsnp_peer *peer = (struct fsnp_peer *)item;

@@ -62,10 +62,10 @@ bool shared_dir_is_set(void);
 sha256_t *retrieve_all_keys(uint32_t *num);
 
 /*
- * Ask the file manager to update itself. If something changed returns true,
- * otherwise false
+ * Ask to the file manager if something has changed. Return true if changes are
+ * present,false otherwise
  */
-bool update_file_manager(void);
+bool check_for_updates(void);
 
 /*
  * Show the user the path where he's saving the files

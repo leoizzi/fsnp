@@ -24,6 +24,7 @@
 #include <unistd.h>
 #include <poll.h>
 #include <errno.h>
+#include <sys/time.h>
 
 #include "fsnp/fsnp.h"
 
@@ -37,13 +38,14 @@
 
 struct periodic_data {
 	pthread_mutex_t mtx;
+	pthread_cond_t cond;
 	bool closing;
 	bool is_running;
 };
 
 static struct periodic_data pd;
 
-static void stop_update_thread(void)
+static void stop_peer_update_thread(void)
 {
 	slog_info(FILE_LEVEL, "Stopping the update thread");
 	/* 'is_running' is safe to check without acquiring the mutex since it was
@@ -52,6 +54,7 @@ static void stop_update_thread(void)
 	if (pd.is_running) {
 		pthread_mutex_lock(&pd.mtx);
 		pd.closing = true;
+		pthread_cond_signal(&pd.cond);
 		pthread_mutex_unlock(&pd.mtx);
 		slog_info(FILE_LEVEL, "Update thread has been notified to stop");
 		pd.is_running = false;
@@ -73,7 +76,7 @@ static void send_update_msg(void)
 
 	keys = retrieve_all_keys(&num_k);
 	if (!keys) {
-		slog_error(FILE_LEVEL, "Unable to retrive all keys");
+		slog_error(FILE_LEVEL, "Unable to retrieve all keys");
 		return;
 	}
 
@@ -95,17 +98,6 @@ static void send_update_msg(void)
 	free(update);
 }
 
-/*
- * Ask to the file manager if something has changed
- */
-static bool check_for_changes(void)
-{
-	bool changes;
-
-	changes = update_file_manager();
-	return changes;
-}
-
 #define SEC_TO_SLEEP 20
 
 /*
@@ -115,31 +107,34 @@ static bool check_for_changes(void)
 static void periodic_update(void *data)
 {
 	struct timespec to_sleep;
-	struct timespec unslept;
+	struct timeval tod;
 	int ret = 0;
 	bool changes;
 
 	UNUSED(data);
 
-	unslept.tv_sec = SEC_TO_SLEEP;
-	unslept.tv_nsec = 0;
+	to_sleep.tv_sec = SEC_TO_SLEEP;
+	to_sleep.tv_nsec = 0;
 	while (true) {
-		to_sleep.tv_sec = unslept.tv_sec;
-		to_sleep.tv_nsec = unslept.tv_nsec;
-		unslept.tv_sec = 0;
-		unslept.tv_nsec = 0;
-		ret = nanosleep(&to_sleep, &unslept);
-		if (ret < 0) { // thread woke up earlier
-			continue;
-		}
-		
+		gettimeofday(&tod, NULL);
+		to_sleep.tv_sec += tod.tv_sec;
 		ret = pthread_mutex_lock(&pd.mtx);
 		if (ret) {
-			slog_error(FILE_LEVEL, "pthread_mutex_lock error %d", errno);
+			slog_error(FILE_LEVEL, "pthread_mutex_lock error %d", ret);
+		}
+
+		ret = pthread_cond_timedwait(&pd.cond, &pd.mtx, &to_sleep);
+		if (ret < 0 && ret != ETIMEDOUT) {
+			slog_fatal(FILE_LEVEL, "pthread_cond_timedwait returned EINVAL");
 			break;
 		}
 		
 		if (pd.closing) {
+			ret = pthread_mutex_unlock(&pd.mtx);
+			if (ret) {
+				slog_error(FILE_LEVEL, "pthread_mutex_unlock error %d", ret);
+			}
+
 			break;
 		}
 
@@ -149,13 +144,10 @@ static void periodic_update(void *data)
 			break;
 		}
 		
-		changes = check_for_changes();
+		changes = check_for_updates();
 		if (changes) {
 			send_update_msg();
 		}
-
-		unslept.tv_sec = SEC_TO_SLEEP;
-		unslept.tv_nsec = 0;
 	}
 
 	slog_info(FILE_LEVEL, "Update thread is about to exit");
@@ -705,7 +697,7 @@ static void peer_tcp_thread(void *data)
 	tcp_state.pipe_fd[READ_END] = 0;
 	tcp_state.pipe_fd[WRITE_END] = 0;
 
-	stop_update_thread();
+	stop_peer_update_thread();
 }
 
 /*
@@ -722,7 +714,7 @@ static void launch_peer_thread(int sock)
 		 " superpeer.\n");
 		PRINT_PEER;
 		close(sock);
-		stop_update_thread();
+		stop_peer_update_thread();
 		return;
 	}
 
@@ -738,7 +730,7 @@ static void launch_peer_thread(int sock)
 		close(sock);
 		close(tcp_state.pipe_fd[READ_END]);
 		close(tcp_state.pipe_fd[WRITE_END]);
-		stop_update_thread();
+		stop_peer_update_thread();
 	}
 }
 

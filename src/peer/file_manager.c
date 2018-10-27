@@ -23,8 +23,12 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <pthread.h>
+#include <sys/time.h>
 
 #include "peer/file_manager.h"
+#include "peer/thread_manager.h"
+
 
 #include "struct/hashtable.h"
 
@@ -170,13 +174,12 @@ static int parse_dir(hashtable_t *hashtable, const char *path, bool first_time)
 			strcat(filename, "/\0");
 		}
 
-		slog_debug(FILE_LEVEL, "Analyzing dirent %s", dirent->d_name);
 		name_len = strlen(dirent->d_name) + 1; // consider the '\0' char
 		strncat(filename, dirent->d_name, name_len);
 		ret = stat(filename, &s);
 		if (ret < 0) {
 			if (errno == EACCES) { // not enough permission: go to the next one
-				slog_debug(FILE_LEVEL, "Not enough permission to stat %s", filename);
+				slog_warn(FILE_LEVEL, "Not enough permission to stat %s", filename);
 				continue;
 			} else {
 				break;
@@ -186,7 +189,6 @@ static int parse_dir(hashtable_t *hashtable, const char *path, bool first_time)
 		mode = s.st_mode & S_IFMT;
 
 		if (mode == S_IFREG) {
-			slog_debug(FILE_LEVEL, "%s is a file", dirent->d_name);
 			if (first_time) {
 				add_file_to_table(hashtable, dirent->d_name, name_len, path,
 				                  NULL);
@@ -200,7 +202,6 @@ static int parse_dir(hashtable_t *hashtable, const char *path, bool first_time)
 				}
 			}
 		} else if (mode == S_IFDIR) {
-			slog_debug(FILE_LEVEL, "%s is a directory", dirent->d_name);
 			prev_res = res;
 			res = parse_dir(hashtable, filename, first_time); // recursion step
 			/* HACK: same HACK as for the file */
@@ -217,40 +218,6 @@ static int parse_dir(hashtable_t *hashtable, const char *path, bool first_time)
 	closedir(dir);
 
 	return res;
-}
-
-int init_file_manager(void)
-{
-	shared.hashtable = ht_create(0, HASH_MAX_SIZE, free_callback);
-	if (!shared.hashtable) {
-		slog_error(FILE_LEVEL, "Unable to create shared.hashtable");
-		return -1;
-	}
-
-	download.hashtable = ht_create(0, HASH_MAX_SIZE, free_callback);
-	if (!download.hashtable) {
-		slog_error(FILE_LEVEL, "Unable to create downlaod.hashtable");
-		ht_destroy(shared.hashtable);
-		return -1;
-	}
-
-	memset(shared.path, 0, sizeof(shared.path));
-	memset(download.path, 0, sizeof(download.path));
-
-	shared.is_set = false;
-
-	set_download_dir(".\0"); // set the standard download path
-	download.is_set = true;
-
-	slog_debug(FILE_LEVEL, "init_file_manager successfully initialized");
-	return 0;
-}
-
-void close_file_manager(void)
-{
-	ht_destroy(shared.hashtable);
-	ht_destroy(download.hashtable);
-	slog_debug(FILE_LEVEL, "file_manager closed");
 }
 
 int set_shared_dir(const char *path)
@@ -388,7 +355,10 @@ static int search_delete_file_iterator(void *item, size_t idx, void *user)
 	}
 }
 
-bool update_file_manager(void)
+/*
+ * Update the file manager. If something changed returns true, otherwise false
+ */
+static bool update_file_manager(void)
 {
 	int changes = 0;
 	linked_list_t *l = NULL;
@@ -398,6 +368,7 @@ bool update_file_manager(void)
 		return false;
 	}
 
+	slog_debug(FILE_LEVEL, "Looking for changes in the shared dir...");
 	changes = parse_dir(shared.hashtable, shared.path, false);
 	if (changes == ERR) {
 		return false;
@@ -413,10 +384,93 @@ bool update_file_manager(void)
 	list_foreach_value(l, search_delete_file_iterator, &d);
 	list_destroy(l);
 	if (changes == NEW || d.changes == NEW) {
+		slog_debug(FILE_LEVEL, "Changes found");
 		return true;
 	} else {
+		slog_debug(FILE_LEVEL, "Changes not found");
 		return false;
 	}
+}
+
+struct update_thr_data {
+	pthread_mutex_t mtx;
+	pthread_cond_t cond;
+	bool run;
+	bool changes;
+};
+
+static struct update_thr_data utd;
+
+#define SEC_TO_SLEEP 30
+
+/*
+ * Entry point for the update thread. Every 30 seconds go through all the
+ * entries in the shared_dir for checking if something has changed.
+ */
+static void update_thread(void *data)
+{
+	struct timespec to_sleep;
+	struct timeval tod;
+	int ret = 0;
+
+	UNUSED(data);
+
+	to_sleep.tv_sec = SEC_TO_SLEEP;
+	to_sleep.tv_nsec = 0;
+	while (true) {
+		gettimeofday(&tod, NULL);
+		to_sleep.tv_sec += tod.tv_sec;
+		ret = pthread_mutex_lock(&utd.mtx);
+		if (ret) {
+			slog_error(FILE_LEVEL, "pthread_mutex_lock error %d", ret);
+		}
+
+		ret = pthread_cond_timedwait(&utd.cond, &utd.mtx, &to_sleep);
+		if (ret < 0 && ret != ETIMEDOUT) {
+			slog_fatal(FILE_LEVEL, "pthread_cond_timedwait returned EINVAL");
+			break;
+		}
+
+		if (utd.run == false) {
+			ret = pthread_mutex_unlock(&utd.mtx);
+			if (ret) {
+				slog_error(FILE_LEVEL, "pthread_mutex_unlock error %d", ret);
+			}
+
+			break;
+		}
+
+		utd.changes = update_file_manager();
+		ret = pthread_mutex_unlock(&utd.mtx);
+		if (ret) {
+			slog_error(FILE_LEVEL, "pthread_mutex_unlock error %d", ret);
+		}
+	}
+
+	pthread_mutex_destroy(&utd.mtx);
+	pthread_cond_destroy(&utd.cond);
+}
+
+bool check_for_updates(void)
+{
+	int ret = 0;
+	bool changes = false;
+
+	ret = pthread_mutex_lock(&utd.mtx);
+	if (ret) {
+		slog_error(FILE_LEVEL, "pthread_mutex_lock error %d", ret);
+		return false;
+	}
+
+	changes = utd.changes;
+
+	ret = pthread_mutex_unlock(&utd.mtx);
+	if (ret) {
+		slog_error(FILE_LEVEL, "pthread_mutex_unlock error %d", ret);
+		return false;
+	}
+
+	return changes;
 }
 
 void show_download_path(void)
@@ -428,8 +482,86 @@ void show_download_path(void)
 	}
 }
 
+int init_file_manager(void)
+{
+	int ret = 0;
+	const char update_err[] = "Unable to start the update thread. This means"
+	                          "that any file added after this point will not be"
+	                          "shared";
+
+	shared.hashtable = ht_create(0, HASH_MAX_SIZE, free_callback);
+	if (!shared.hashtable) {
+		slog_error(FILE_LEVEL, "Unable to create shared.hashtable");
+		pthread_mutex_destroy(&utd.mtx);
+		return -1;
+	}
+
+	download.hashtable = ht_create(0, HASH_MAX_SIZE, free_callback);
+	if (!download.hashtable) {
+		slog_error(FILE_LEVEL, "Unable to create downlaod.hashtable");
+		pthread_mutex_destroy(&utd.mtx);
+		ht_destroy(shared.hashtable);
+		return -1;
+	}
+
+	memset(shared.path, 0, sizeof(shared.path));
+	memset(download.path, 0, sizeof(download.path));
+
+	shared.is_set = false;
+
+	set_download_dir(".\0"); // set the standard download path
+	download.is_set = true;
+
+	utd.changes = false;
+	utd.run = false;
+
+	ret = pthread_mutex_init(&utd.mtx, NULL);
+	if (ret) {
+		slog_error(FILE_LEVEL, "Unable to initialize the mutex. Error %d", ret);
+		slog_warn(STDOUT_LEVEL, "%s", update_err);
+		goto update_fail;
+	}
+
+	ret = pthread_cond_init(&utd.cond, NULL);
+	if (ret) {
+		pthread_mutex_destroy(&utd.mtx);
+		slog_error(FILE_LEVEL, "Unable to initialize the condition. Error %d",ret);
+		slog_warn(STDOUT_LEVEL, "%s", update_err);
+	}
+
+	ret = start_new_thread(update_thread, NULL, "update-thread");
+	if (ret < 0) {
+		slog_warn(STDOUT_LEVEL, "%s", update_err);
+		pthread_mutex_destroy(&utd.mtx);
+		goto update_fail;
+	}
+
+	utd.run = true; // if we get here everything went ok with the update thread
+
+update_fail:
+	slog_info(FILE_LEVEL, "init_file_manager successfully initialized");
+	return 0;
+}
+
+void close_file_manager(void)
+{
+	ht_destroy(shared.hashtable);
+	ht_destroy(download.hashtable);
+	if (utd.run) {
+		slog_info(FILE_LEVEL, "Telling to update_thread to stop");
+		// don't care about errors here... we're exiting anyway
+		pthread_mutex_lock(&utd.mtx);
+		utd.run = false;
+		pthread_cond_signal(&utd.cond);
+		pthread_mutex_unlock(&utd.mtx);
+	}
+
+	slog_info(FILE_LEVEL, "file_manager closed");
+}
+
 #undef STRINGIFY_HASH
 #undef HASH_MAX_SIZE
 #undef ERR
 #undef OK
 #undef NEW
+#undef SEC_TO_SLEEP

@@ -32,7 +32,7 @@
 #include "peer/stdin.h"
 #include "peer/thread_manager.h"
 #include "peer/file_manager.h"
-#include "peer/peer-superpeer.h" // for stop_update_thread
+#include "peer/peer-superpeer.h"
 
 #include "fsnp/fsnp.h"
 
