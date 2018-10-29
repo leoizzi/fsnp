@@ -326,12 +326,12 @@ int peer_main(bool localhost)
 		leave_sp();
 	}
 
-	slog_info(STDOUT_LEVEL, "Closing the thread manager...");
-	close_thread_manager();
 	slog_info(STDOUT_LEVEL, "Closing the file manager...");
 	close_file_manager();
 	slog_info(STDOUT_LEVEL, "De-initializing the stdin subsystem");
 	close_stdin();
+	slog_info(STDOUT_LEVEL, "Closing the thread manager...");
+	close_thread_manager();
 	pthread_mutex_destroy(&state.state_mtx);
 	slog_close();
 	if (ret >= 0) { // just return a standard value
