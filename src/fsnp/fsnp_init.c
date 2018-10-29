@@ -210,8 +210,6 @@ void fsnp_init_whohas(struct fsnp_whohas *whohas, sha256_t req_id,
 void fsnp_init_promote(struct fsnp_promote *promote, in_port_t sp_port,
 					   struct fsnp_peer *sp)
 {
-	uint64_t size = 0;
-
 	memcpy(&promote->sp, sp, sizeof(promote->sp));
 	promote->sp_port = sp_port;
 	fsnp_init_msg(&promote->header, PROMOTE, sizeof(*promote));

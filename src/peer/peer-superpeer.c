@@ -217,13 +217,10 @@ static int connect_to_sp(const struct fsnp_peer *sp)
 	int sock = 0;
 
 	a.s_addr = htonl(sp->ip);
-
-#ifdef FSNP_DEBUG
-	a.s_addr = htonl(a.s_addr);
 	slog_info(FILE_LEVEL, "Sending a connection request to the superpeer %s:%hu",
 			inet_ntoa(a), sp->port);
 	a.s_addr = sp->ip; // restore to the format expected by fsnp
-#endif
+
 	sock = fsnp_create_connect_tcp_sock(a, sp->port);
 	if (sock < 0) {
 		slog_error(FILE_LEVEL, "fsnp_create_connect_to_tcp_sock error %d", errno);
