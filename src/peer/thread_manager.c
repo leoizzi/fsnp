@@ -185,13 +185,19 @@ void close_thread_manager(void)
 static int join_callback(void *item, size_t idx, void *user)
 {
 	struct launch_data *ld = (struct launch_data *)item;
+	int ret = 0;
 
 	UNUSED(idx);
 	UNUSED(user);
 
 #ifndef FSNP_MEM_DEBUG
-	pthread_join(ld->tid, NULL);
-	slog_info(FILE_LEVEL, "Thread %s joined", ld->name);
+	ret = pthread_join(ld->tid, NULL);
+	if (ret) {
+		slog_error(FILE_LEVEL, "pthread_join error %d for thread %s", errno, ld->name);
+	} else {
+		slog_info(FILE_LEVEL, "Thread %s joined", ld->name);
+	}
+	
 	free_callback(ld);
 #else // !FSNP_MEM_DEBUG
 	slog_debug(FILE_LEVEL, "FSNP_MEM_DEBUG defined: just freeing the memory");
