@@ -89,7 +89,12 @@ struct fsnp_join *fsnp_create_join(uint32_t num_files, sha256_t *files_hash)
 	struct fsnp_join *join = NULL;
 	uint32_t i = 0;
 
-	data_size = num_files * sizeof(sha256_t); // size of the field files_hash
+	if (num_files > 0) {
+		data_size = num_files * sizeof(sha256_t); // size of the field files_hash
+	} else {
+		data_size = sizeof(join->files_hash);
+	}
+
 	size = data_size +  sizeof(*join) - sizeof(join->files_hash);
 	join = malloc(size);
 	if (!join) {
@@ -155,7 +160,12 @@ struct fsnp_update *fsnp_create_update(uint32_t num_files,
 	uint64_t size = 0;
 	uint32_t i = 0;
 
-	data_size = num_files * sizeof(sha256_t); // size of the field files_hash
+	if (num_files > 0) {
+		data_size = num_files * sizeof(sha256_t); // size of the field files_hash
+	} else {
+		data_size = sizeof(update->files_hash);
+	}
+
 	size = data_size +  sizeof(*update) - sizeof(update->files_hash);
 	update = malloc(size);
 	if (!update) {

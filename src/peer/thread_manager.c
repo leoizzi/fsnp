@@ -192,6 +192,7 @@ static int join_callback(void *item, size_t idx, void *user)
 #ifndef FSNP_MEM_DEBUG
 	pthread_join(ld->tid, NULL);
 	slog_info(FILE_LEVEL, "Thread %s joined", ld->name);
+	free_callback(ld);
 #else // !FSNP_MEM_DEBUG
 	slog_debug(FILE_LEVEL, "FSNP_MEM_DEBUG defined: just freeing the memory");
 	free_callback(ld);

@@ -1,2 +1,3 @@
 implementare lo swap per l'endianness
 Attenzione ad ask_file in peer_superpeer. Usa di default la pipe del thread peer, ma se la usa anche il superpeer che si fa???
+Liberare la memoria usata da ogni entry in list_foreach_value quando si rimuove un elemento dalla lista...

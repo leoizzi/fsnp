@@ -700,6 +700,8 @@ static void peer_tcp_thread(void *data)
 		} else {
 			slog_info(FILE_LEVEL, "The superpeer sent an ACK");
 		}
+
+		free(msg);
 	}
 
 	close(tcp_state.sock);
