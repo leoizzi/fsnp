@@ -49,8 +49,8 @@ static void change_default_port(in_port_t *port, char *arg)
 		exit(EXIT_FAILURE);
 	}
 
-	if (new_port < 0 || new_port >= 65535) {
-		slog_warn(STDOUT_LEVEL, "The server port range value is 1-65536."
+	if (new_port < 1024 || new_port >= 65535) {
+		slog_warn(STDOUT_LEVEL, "The server port range value is 1024-65535."
 						   " You've passed %hu", new_port);
 		slog_close();
 		exit(EXIT_FAILURE);
