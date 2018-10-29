@@ -395,7 +395,7 @@ static void update_thread(void *data)
 		}
 
 		ret = pthread_cond_timedwait(&utd.cond, &utd.mtx, &to_sleep);
-		if (ret < 0 && ret != ETIMEDOUT) {
+		if (ret != 0 && ret != ETIMEDOUT) {
 			slog_fatal(FILE_LEVEL, "pthread_cond_timedwait returned EINVAL");
 			break;
 		}

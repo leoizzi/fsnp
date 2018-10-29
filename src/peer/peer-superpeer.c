@@ -125,9 +125,13 @@ static void periodic_update(void *data)
 
 		slog_debug(FILE_LEVEL, "peer-periodic-update thread is going to sleep");
 		ret = pthread_cond_timedwait(&pd.cond, &pd.mtx, &to_sleep);
-		if (ret < 0 && ret != ETIMEDOUT) {
+		if (ret != 0 && ret != ETIMEDOUT) {
 			slog_fatal(FILE_LEVEL, "pthread_cond_timedwait returned EINVAL");
 			break;
+		}
+
+		if (ret == ETIMEDOUT) {
+			slog_debug(FILE_LEVEL, "peer-periodic-update has timed out");
 		}
 		
 		if (pd.closing) {
@@ -216,7 +220,7 @@ static int connect_to_sp(const struct fsnp_peer *sp)
 
 #ifdef FSNP_DEBUG
 	a.s_addr = htonl(a.s_addr);
-	slog_info(FILE_LEVEL, "Sending a connection request to the superpeer %s:hu",
+	slog_info(FILE_LEVEL, "Sending a connection request to the superpeer %s:%hu",
 			inet_ntoa(a), sp->port);
 	a.s_addr = sp->ip; // restore to the format expected by fsnp
 #endif
@@ -298,10 +302,18 @@ static int read_join_res(int sock)
 	// launch the periodic update thread
 	ret = pthread_mutex_init(&pd.mtx, NULL);
 	if (ret) {
-		slog_error(FILE_LEVEL, "Unable to initialize the mutex for the periodic"
-						       " update thread. It won't be spawned. The"
+		slog_error(FILE_LEVEL, "Unable to initialize the mutex for the"
+						       " peer-periodic-update. It won't be spawned. The"
 			                   " superpeer will never receive an update message.");
 		return -1;
+	}
+
+	ret = pthread_cond_init(&pd.cond, NULL);
+	if (ret) {
+		slog_error(FILE_LEVEL, "Unable to initialize the condition for the"
+		                       " peer-periodic-update. It won't be spawned. The"
+		                       " superpeer will never receive an update message.");
+		pthread_mutex_destroy(&pd.mtx);
 	}
 
 	pd.is_running = true;
