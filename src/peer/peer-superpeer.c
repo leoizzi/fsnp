@@ -47,7 +47,7 @@ static struct periodic_data pd;
 
 static void stop_peer_update_thread(void)
 {
-	slog_info(FILE_LEVEL, "Stopping the update thread");
+	slog_info(FILE_LEVEL, "Stopping the peer-periodic-update thread");
 	/* 'is_running' is safe to check without acquiring the mutex since it was
 	 * set by the main thread itself when it has started the update thread, and
 	 * this function is called only by the main thread. */
@@ -89,16 +89,16 @@ static void send_update_msg(void)
 
 	free(keys);
 	sock = get_peer_sock();
+	slog_info(FILE_LEVEL, "Sending update msg");
 	err = fsnp_send_update(sock, update);
 	if (err != E_NOERR) {
 		fsnp_log_err_msg(err, false);
 	}
 
-	slog_debug(FILE_LEVEL, "Update message successfully sent");
 	free(update);
 }
 
-#define SEC_TO_SLEEP 20
+#define SEC_TO_SLEEP 30
 
 /*
  * Every SEC_TO_SLEEP check if something between the shared file is changed.
@@ -117,12 +117,13 @@ static void periodic_update(void *data)
 	to_sleep.tv_nsec = 0;
 	while (true) {
 		gettimeofday(&tod, NULL);
-		to_sleep.tv_sec += tod.tv_sec;
+		to_sleep.tv_sec = SEC_TO_SLEEP + tod.tv_sec;
 		ret = pthread_mutex_lock(&pd.mtx);
 		if (ret) {
 			slog_error(FILE_LEVEL, "pthread_mutex_lock error %d", ret);
 		}
 
+		slog_debug(FILE_LEVEL, "peer-periodic-update thread is going to sleep");
 		ret = pthread_cond_timedwait(&pd.cond, &pd.mtx, &to_sleep);
 		if (ret < 0 && ret != ETIMEDOUT) {
 			slog_fatal(FILE_LEVEL, "pthread_cond_timedwait returned EINVAL");
@@ -152,6 +153,7 @@ static void periodic_update(void *data)
 
 	slog_info(FILE_LEVEL, "Update thread is about to exit");
 	pthread_mutex_destroy(&pd.mtx);
+	pthread_cond_destroy(&pd.cond);
 }
 
 #undef SEC_TO_SLEEP
@@ -303,7 +305,7 @@ static int read_join_res(int sock)
 	}
 
 	pd.is_running = true;
-	start_new_thread(periodic_update, NULL, "periodic_update");
+	start_new_thread(periodic_update, NULL, "peer-periodic-update");
 #else // !FSNP_MEM_DEBUG
 	pd.is_running = false;
 #endif // FSNP_MEM_DEBUG

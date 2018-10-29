@@ -220,38 +220,6 @@ static int parse_dir(hashtable_t *hashtable, const char *path, bool first_time)
 	return res;
 }
 
-int set_shared_dir(const char *path)
-{
-	int ret = 0;
-
-	if (!path) {
-		return -1;
-	}
-
-	if (shared.is_set) { // clear everything before going forward
-		ht_clear(shared.hashtable);
-	}
-
-	strncpy(shared.path, path, PATH_MAX);
-	slog_info(FILE_LEVEL, "Setting shared_dir to %s", path);
-	ret = parse_dir(shared.hashtable, shared.path, true);
-	if (ret < 0) {
-		ht_clear(shared.hashtable);
-		memset(shared.path, 0, sizeof(path));
-		shared.is_set = false;
-		slog_error(FILE_LEVEL, "Unable to parse shared_dir. shared_dir is unset"
-						 " now");
-		return -1;
-	}
-
-	slog_info(STDOUT_LEVEL, "All the files were parsed. You're sharing %lu "
-						 "files.", ht_count(shared.hashtable));
-	slog_info(STDOUT_LEVEL, "New shared directory: \"%s\"", shared.path);
-	shared.is_set = true;
-
-	return 0;
-}
-
 int set_download_dir(const char *path)
 {
 	memset(download.path, 0, sizeof(download.path));
@@ -401,7 +369,7 @@ struct update_thr_data {
 
 static struct update_thr_data utd;
 
-#define SEC_TO_SLEEP 30
+#define SEC_TO_SLEEP 15
 
 /*
  * Entry point for the update thread. Every 30 seconds go through all the
@@ -412,6 +380,7 @@ static void update_thread(void *data)
 	struct timespec to_sleep;
 	struct timeval tod;
 	int ret = 0;
+	bool changes = false;
 
 	UNUSED(data);
 
@@ -419,7 +388,7 @@ static void update_thread(void *data)
 	to_sleep.tv_nsec = 0;
 	while (true) {
 		gettimeofday(&tod, NULL);
-		to_sleep.tv_sec += tod.tv_sec;
+		to_sleep.tv_sec = SEC_TO_SLEEP + tod.tv_sec;
 		ret = pthread_mutex_lock(&utd.mtx);
 		if (ret) {
 			slog_error(FILE_LEVEL, "pthread_mutex_lock error %d", ret);
@@ -440,7 +409,16 @@ static void update_thread(void *data)
 			break;
 		}
 
-		utd.changes = update_file_manager();
+		changes = update_file_manager();
+		/*
+		 * If utd.changes is false is ok to set it to changes. If it's true
+		 * no one checked the field before and it would be wrong set it to
+		 * changes, since it could be false.
+		 */
+		if (!utd.changes) {
+			utd.changes = changes;
+		}
+
 		ret = pthread_mutex_unlock(&utd.mtx);
 		if (ret) {
 			slog_error(FILE_LEVEL, "pthread_mutex_unlock error %d", ret);
@@ -449,6 +427,56 @@ static void update_thread(void *data)
 
 	pthread_mutex_destroy(&utd.mtx);
 	pthread_cond_destroy(&utd.cond);
+}
+
+/*
+ * Routine for spawning the update thread
+ */
+static void launch_update_thread(void)
+{
+	const char update_err[] = "Unable to start the update thread. This means"
+	                          "that any file added after this point will not be"
+	                          "shared";
+	int ret = 0;
+
+	utd.changes = false;
+	utd.run = false;
+	ret = pthread_mutex_init(&utd.mtx, NULL);
+	if (ret) {
+		slog_error(FILE_LEVEL, "Unable to initialize the mutex. Error %d", ret);
+		slog_warn(STDOUT_LEVEL, "%s", update_err);
+		return;
+	}
+
+	ret = pthread_cond_init(&utd.cond, NULL);
+	if (ret) {
+		pthread_mutex_destroy(&utd.mtx);
+		slog_error(FILE_LEVEL, "Unable to initialize the condition. Error %d",ret);
+		slog_warn(STDOUT_LEVEL, "%s", update_err);
+		return;
+	}
+
+	ret = start_new_thread(update_thread, NULL, "update-thread");
+	if (ret < 0) {
+		slog_warn(STDOUT_LEVEL, "%s", update_err);
+		pthread_mutex_destroy(&utd.mtx);
+		pthread_cond_destroy(&utd.cond);
+		return;
+	}
+
+	utd.run = true; // if we get here everything went ok with the update thread
+}
+
+static void stop_update_thread(void)
+{
+	if (utd.run) {
+		slog_info(FILE_LEVEL, "Telling to update_thread to stop");
+		// don't care about errors here
+		pthread_mutex_lock(&utd.mtx);
+		utd.run = false;
+		pthread_cond_signal(&utd.cond);
+		pthread_mutex_unlock(&utd.mtx);
+	}
 }
 
 bool check_for_updates(void)
@@ -463,6 +491,7 @@ bool check_for_updates(void)
 	}
 
 	changes = utd.changes;
+	utd.changes = false; // Avoid false positive in subsequents calls
 
 	ret = pthread_mutex_unlock(&utd.mtx);
 	if (ret) {
@@ -471,6 +500,41 @@ bool check_for_updates(void)
 	}
 
 	return changes;
+}
+
+int set_shared_dir(const char *path)
+{
+	int ret = 0;
+
+	if (!path) {
+		return -1;
+	}
+
+	stop_update_thread();
+	if (shared.is_set) {
+		ht_clear(shared.hashtable);
+	}
+
+	strncpy(shared.path, path, PATH_MAX);
+	slog_info(FILE_LEVEL, "Setting shared_dir to %s", path);
+	ret = parse_dir(shared.hashtable, shared.path, true);
+	if (ret < 0) {
+		ht_clear(shared.hashtable);
+		memset(shared.path, 0, sizeof(path));
+		shared.is_set = false;
+		slog_error(FILE_LEVEL, "Unable to parse shared_dir. shared_dir is unset"
+		                       " now");
+		return -1;
+	}
+
+	slog_info(STDOUT_LEVEL, "All the files were parsed. You're sharing %lu "
+	                        "files.", ht_count(shared.hashtable));
+	slog_info(STDOUT_LEVEL, "New shared directory: \"%s\"", shared.path);
+
+	launch_update_thread();
+	shared.is_set = true;
+
+	return 0;
 }
 
 void show_download_path(void)
@@ -484,11 +548,6 @@ void show_download_path(void)
 
 int init_file_manager(void)
 {
-	int ret = 0;
-	const char update_err[] = "Unable to start the update thread. This means"
-	                          "that any file added after this point will not be"
-	                          "shared";
-
 	shared.hashtable = ht_create(0, HASH_MAX_SIZE, free_callback);
 	if (!shared.hashtable) {
 		slog_error(FILE_LEVEL, "Unable to create shared.hashtable");
@@ -512,50 +571,16 @@ int init_file_manager(void)
 	set_download_dir(".\0"); // set the standard download path
 	download.is_set = true;
 
-	utd.changes = false;
-	utd.run = false;
-
-	ret = pthread_mutex_init(&utd.mtx, NULL);
-	if (ret) {
-		slog_error(FILE_LEVEL, "Unable to initialize the mutex. Error %d", ret);
-		slog_warn(STDOUT_LEVEL, "%s", update_err);
-		goto update_fail;
-	}
-
-	ret = pthread_cond_init(&utd.cond, NULL);
-	if (ret) {
-		pthread_mutex_destroy(&utd.mtx);
-		slog_error(FILE_LEVEL, "Unable to initialize the condition. Error %d",ret);
-		slog_warn(STDOUT_LEVEL, "%s", update_err);
-	}
-
-	ret = start_new_thread(update_thread, NULL, "update-thread");
-	if (ret < 0) {
-		slog_warn(STDOUT_LEVEL, "%s", update_err);
-		pthread_mutex_destroy(&utd.mtx);
-		goto update_fail;
-	}
-
-	utd.run = true; // if we get here everything went ok with the update thread
-
-update_fail:
-	slog_info(FILE_LEVEL, "init_file_manager successfully initialized");
+	launch_update_thread();
+	slog_info(FILE_LEVEL, "init_file_manager initialized");
 	return 0;
 }
 
 void close_file_manager(void)
 {
+	stop_update_thread();
 	ht_destroy(shared.hashtable);
 	ht_destroy(download.hashtable);
-	if (utd.run) {
-		slog_info(FILE_LEVEL, "Telling to update_thread to stop");
-		// don't care about errors here... we're exiting anyway
-		pthread_mutex_lock(&utd.mtx);
-		utd.run = false;
-		pthread_cond_signal(&utd.cond);
-		pthread_mutex_unlock(&utd.mtx);
-	}
-
 	slog_info(FILE_LEVEL, "file_manager closed");
 }
 
