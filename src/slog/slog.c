@@ -388,4 +388,6 @@ void slog_close(void)
         fprintf(g_slogCfg.pfile, "\n\n");
         fclose(g_slogCfg.pfile);
     }
+
+    g_slogCfg.pfile = NULL;
 }
