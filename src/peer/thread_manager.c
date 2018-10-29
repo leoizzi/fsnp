@@ -174,6 +174,7 @@ void close_thread_manager(void)
 	sleep(2); // give the threads enough time to finish their work
 	join_threads_if_any();
 	slog_debug(FILE_LEVEL, "Destroying running_threads");
+	slog_debug(FILE_LEVEL, "In running threads there are still %u threads", list_count(running_threads));
 	list_destroy(running_threads);
 	slog_debug(FILE_LEVEL, "Destroying closed_threads");
 	list_destroy(closed_threads);
@@ -197,7 +198,7 @@ static int join_callback(void *item, size_t idx, void *user)
 	} else {
 		slog_info(FILE_LEVEL, "Thread %s joined", ld->name);
 	}
-	
+
 	free_callback(ld);
 #else // !FSNP_MEM_DEBUG
 	slog_debug(FILE_LEVEL, "FSNP_MEM_DEBUG defined: just freeing the memory");
