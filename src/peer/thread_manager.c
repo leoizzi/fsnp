@@ -177,7 +177,7 @@ void close_thread_manager(void)
 	slog_debug(FILE_LEVEL, "In running threads there are still %u threads", list_count(running_threads));
 	list_destroy(running_threads);
 	slog_debug(FILE_LEVEL, "Destroying closed_threads");
-	slog_debug(FILE_LEVEL, "In closed threads there are still %u threads", list_count(running_threads));
+	slog_debug(FILE_LEVEL, "In closed threads there are still %u threads", list_count(closed_threads));
 	list_destroy(closed_threads);
 }
 
