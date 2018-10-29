@@ -36,6 +36,8 @@
 
 #include "slog/slog.h"
 
+// TODO: if a superpeer disconnect itself without sending a leave message it's dead. It has to be removed from the server list
+
 struct periodic_data {
 	pthread_mutex_t mtx;
 	pthread_cond_t cond;

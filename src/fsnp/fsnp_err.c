@@ -105,6 +105,7 @@ void fsnp_log_err_msg(fsnp_err_t err, bool to_print)
 
 		case E_INVALID_PARAM:
 			log_e_invalid_param(level);
+			break;
 
 		default:
 			log_default(level);

@@ -46,7 +46,7 @@ int fsnp_create_bind_tcp_sock(in_port_t *port, bool localhost)
 		addr.sin_addr.s_addr = htonl(INADDR_ANY);
 	}
 
-	while (*port <= USHRT_MAX) {
+	while (*port <= USHRT_MAX - 1) {
 		addr.sin_port = htons(*port);
 		ret = bind(sock, (struct sockaddr *)&addr, sizeof(addr));
 		if (!ret) {
