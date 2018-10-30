@@ -53,7 +53,10 @@ static void ht_free_callback(void *item)
 {
 	struct key_cached *kc = (struct key_cached *)item;
 
-	list_destroy(kc->owners);
+	if (kc->owners) {
+		list_destroy(kc->owners);
+	}
+	
 	free(kc);
 }
 
@@ -248,7 +251,7 @@ static int cache_list_rm_keys_callback(void *item, size_t idx, void *user)
 
 	if (owner->ip == o->ip) {
 		if (owner->port == o->port) {
-			list_free_callback(owner);
+			list_free_callback(o);
 			slog_info(FILE_LEVEL, "Item found");
 			return REMOVE_AND_GO;
 		} else {
@@ -279,6 +282,7 @@ static ht_iterator_status_t cache_ht_rm_keys_callback(hashtable_t *table,
 	slog_debug(FILE_LEVEL, "Removing item %s", key_str);
 	list_foreach_value(kc->owners, cache_list_rm_keys_callback, user);
 	if (list_count(kc->owners) == 0) {
+		kc->owners = NULL;
 		ht_free_callback(kc);
 		return HT_ITERATOR_REMOVE;
 	} else {

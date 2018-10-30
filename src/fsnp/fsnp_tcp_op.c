@@ -241,7 +241,9 @@ struct fsnp_msg *fsnp_read_msg_tcp(int sock, uint16_t timeout, ssize_t *r,
 	}
 
 	if (r1 == 0) {
-		*r = r1;
+		if (r) {
+			*r = r1;
+		}
 		*err = E_PEER_DISCONNECTED;
 		return NULL;
 	}
