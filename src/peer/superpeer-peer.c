@@ -379,11 +379,11 @@ void sp_tcp_thread(void *data)
 	 * Do not free the peer_info struct, it will be done by the thread_manager.
 	 * That said, we need to tell the list to remove this peer.
 	 */
-	slog_info(FILE_LEVEL, "Removing %s from the known_peer list", info->pretty_addr);
-	rm_peer_from_list(&info->addr);
 	close(info->sock);
 	close(info->pipefd[READ_END]);
 	close(info->pipefd[WRITE_END]);
+	slog_info(FILE_LEVEL, "Removing %s from the known_peer list", info->pretty_addr);
+	rm_peer_from_list(&info->addr);
 	slog_info(FILE_LEVEL, "Leaving procedure for %s completed", info->pretty_addr);
 }
 

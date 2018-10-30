@@ -354,7 +354,6 @@ static int rm_peer_callback(void *item, size_t idx, void *user)
 
 	if (info->addr.ip == peer->ip) {
 		if (info->addr.port == peer->port) {
-			free(info);
 			return REMOVE_AND_STOP;
 		} else {
 			return GO_AHEAD;
