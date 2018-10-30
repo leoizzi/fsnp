@@ -281,6 +281,7 @@ static ht_iterator_status_t cache_ht_rm_keys_callback(hashtable_t *table,
 	slog_debug(FILE_LEVEL, "Removing item %s", key_str);
 	list_foreach_value(kc->owners, cache_list_rm_keys_callback, user);
 	if (list_count(kc->owners) == 0) {
+		list_destroy(kc->owners);
 		kc->owners = NULL;
 		return HT_ITERATOR_REMOVE;
 	} else {
