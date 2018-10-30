@@ -1249,7 +1249,10 @@ slice_foreach_value(slice_t *slice, int (*item_handler)(void *item, size_t idx, 
                 list->cur = NULL;
             list->length--;
             slice->length--;
-            // the callback got the value and will take care of releasing it
+            if (list->free_value_cb) {
+                list->free_value_cb(d->value);
+            }
+
             destroy_entry(d);
             if (rc == -2) // -2 means : remove and stop the iteration
                 break;

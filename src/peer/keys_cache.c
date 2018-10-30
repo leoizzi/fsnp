@@ -251,7 +251,6 @@ static int cache_list_rm_keys_callback(void *item, size_t idx, void *user)
 
 	if (owner->ip == o->ip) {
 		if (owner->port == o->port) {
-			list_free_callback(o);
 			slog_info(FILE_LEVEL, "Item found");
 			return REMOVE_AND_GO;
 		} else {

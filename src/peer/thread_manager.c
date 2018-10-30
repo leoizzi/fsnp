@@ -200,10 +200,8 @@ static int join_callback(void *item, size_t idx, void *user)
 		slog_info(FILE_LEVEL, "Thread %s joined", ld->name);
 	}
 
-	free_callback(ld);
 #else // !FSNP_MEM_DEBUG
 	slog_debug(FILE_LEVEL, "FSNP_MEM_DEBUG defined: just freeing the memory");
-	free_callback(ld);
 #endif // FSNP_MEM_DEBUG
 	return REMOVE_AND_GO;
 }

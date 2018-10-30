@@ -262,7 +262,7 @@ static void accept_peer(void)
 	addr.sin_addr.s_addr = ntohl(addr.sin_addr.s_addr);
 	num_peers = list_count(known_peers);
 	n = (size_t)list_foreach_value(known_peers, peer_already_known, &addr);
-	if (num_peers != n) { // the peer is already known, don't accept it
+	if (num_peers != n) { // the peer is already known, don't accept it // TODO: this mechanism is broken: what if the peer already known is the last one?
 		slog_warn(FILE_LEVEL, "Sp contacted by an already known peer");
 		close(peer_sock);
 		return;
