@@ -92,9 +92,13 @@ extern "C" {
 
 #define slog_warn(LEVEL, ...) \
     slog(LEVEL, SLOG_WARN, __VA_ARGS__);
-
+    
+#ifdef FSNP_DEBUG
 #define slog_debug(LEVEL, ...) \
     slog(LEVEL, SLOG_DEBUG, __VA_ARGS__);
+#else // !FSNP_DEBUG
+#define slog_debug(LEVEL, ...)
+#endif
 
 #define slog_error(LEVEL, ...) \
     slog(LEVEL, SLOG_ERROR, SOURCE_THROW_LOCATION __VA_ARGS__);
