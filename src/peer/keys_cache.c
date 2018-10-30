@@ -283,7 +283,6 @@ static ht_iterator_status_t cache_ht_rm_keys_callback(hashtable_t *table,
 	list_foreach_value(kc->owners, cache_list_rm_keys_callback, user);
 	if (list_count(kc->owners) == 0) {
 		kc->owners = NULL;
-		ht_free_callback(kc);
 		return HT_ITERATOR_REMOVE;
 	} else {
 		return HT_ITERATOR_CONTINUE;
