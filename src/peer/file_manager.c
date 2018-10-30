@@ -97,7 +97,7 @@ static void add_file_to_table(hashtable_t *hashtable, const char *name,
 	strncpy(e->path, path, PATH_MAX);
 	e->name_len = name_len;
 	e->found = true;
-	ret = ht_set(hashtable, key, sizeof(key), e, sizeof(e));
+	ret = ht_set(hashtable, key, sizeof(key), e, sizeof(*e));
 	if (ret < 0) {
 		free(e);
 		slog_debug(FILE_LEVEL, "Unable to add file \"%s\"", name);
