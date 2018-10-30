@@ -557,7 +557,7 @@ int init_file_manager(void)
 
 	download.hashtable = ht_create(0, HASH_MAX_SIZE, free_callback);
 	if (!download.hashtable) {
-		slog_error(FILE_LEVEL, "Unable to create downlaod.hashtable");
+		slog_error(FILE_LEVEL, "Unable to create download.hashtable");
 		pthread_mutex_destroy(&utd.mtx);
 		ht_destroy(shared.hashtable);
 		return -1;
@@ -571,7 +571,6 @@ int init_file_manager(void)
 	set_download_dir(".\0"); // set the standard download path
 	download.is_set = true;
 
-	launch_update_thread();
 	slog_info(FILE_LEVEL, "init_file_manager initialized");
 	return 0;
 }
