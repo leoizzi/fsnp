@@ -56,7 +56,7 @@ static void ht_free_callback(void *item)
 	if (kc->owners) {
 		list_destroy(kc->owners);
 	}
-	
+
 	free(kc);
 }
 
