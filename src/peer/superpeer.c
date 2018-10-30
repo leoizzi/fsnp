@@ -406,7 +406,7 @@ bool enter_sp_mode(struct fsnp_peer *sps, unsigned n)
 /*
  * For each thread spawned for communicating with a peer tell it to quit
  */
-static int quit_peer_threads(void *item, size_t idx, void *user)
+static int quit_peer_threads_iterator(void *item, size_t idx, void *user)
 {
 	struct peer_info *info = (struct peer_info *)item;
 	struct in_addr addr;
@@ -468,15 +468,20 @@ static void rm_sp_from_server(void)
 	close(sock);
 }
 
+void prepare_exit_sp_mode(void)
+{
+	slog_info(FILE_LEVEL, "Removing the sp from the server");
+	rm_sp_from_server();
+	slog_info(FILE_LEVEL, "Leaving all the peers");
+	list_foreach_value(known_peers, quit_peer_threads_iterator, NULL);
+}
+
 void exit_sp_mode(void)
 {
 	slog_info(FILE_LEVEL, "Exiting the sp mode...");
-	slog_info(FILE_LEVEL, "Leaving all the peers");
-	list_foreach_value(known_peers, quit_peer_threads, NULL);
+	prepare_exit_sp_mode();
 	slog_info(FILE_LEVEL, "Extiting the sp network");
 	exit_sp_network();
-	slog_info(FILE_LEVEL, "Removing the sp from the server");
-	rm_sp_from_server();
 	slog_info(FILE_LEVEL, "Closing the keys_cache");
 	close_keys_cache();
 	slog_info(FILE_LEVEL, "Removing the sp_sock from the main poll");

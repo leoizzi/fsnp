@@ -320,9 +320,10 @@ int peer_main(bool localhost)
 	slog_info(STDOUT_LEVEL, "Quitting...");
 	// TODO: free all the resources of the struct library
 	if (is_superpeer()) {
-		slog_info(FILE_LEVEL, "Exiting sp mode");
-		exit_sp_mode();
+		slog_info(FILE_LEVEL, "Preparing the exit_sp_mode");
+		prepare_exit_sp_mode();
 	} else if (get_peer_sock() != 0) {
+		slog_info(FILE_LEVEL, "Leaving the superpeer");
 		leave_sp();
 	}
 
@@ -330,6 +331,11 @@ int peer_main(bool localhost)
 	close_file_manager();
 	slog_info(STDOUT_LEVEL, "De-initializing the stdin subsystem");
 	close_stdin();
+	if (is_superpeer()) {
+		slog_info(FILE_LEVEL, "Exiting sp mode");
+		exit_sp_mode();
+	}
+
 	slog_info(STDOUT_LEVEL, "Closing the thread manager...");
 	close_thread_manager();
 	pthread_mutex_destroy(&state.state_mtx);

@@ -64,6 +64,11 @@ void sp_tcp_sock_event(short revents);
 void sp_udp_sock_event(short revents);
 
 /*
+ * Tell the server lo remove us from its list and leave all the peers
+ */
+void prepare_exit_sp_mode(void);
+
+/*
  * Remove the peer passed in input from the list of known peer.
  */
 void rm_peer_from_list(struct fsnp_peer *peer);
