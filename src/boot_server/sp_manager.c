@@ -108,6 +108,7 @@ struct fsnp_server_sp *rm_sp(struct fsnp_peer *sp, fsnp_peer_type_t type)
 
 	user.sp = sp;
 	user.type = type;
+	user.pos = 0;
 	list_foreach_value(sp_list, list_rm_sp_iterator, &user);
 	return list_fetch_value(sp_list, user.pos);
 }

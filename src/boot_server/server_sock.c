@@ -85,6 +85,7 @@ static void rm_sp_msg(const struct handler_data *data,
 {
 	struct fsnp_peer p;
 	struct fsnp_server_sp *sp = NULL;
+	struct in_addr addr;
 
 	UNUSED(data);
 
@@ -92,13 +93,10 @@ static void rm_sp_msg(const struct handler_data *data,
 	p.port = msg->addr.port;
 	sp = rm_sp(&p, msg->peer_type);
 	if (sp) {
-#ifdef FSNP_DEBUG
-		struct in_addr addr;
 		addr.s_addr = htonl(sp->addr.s_addr);
-		slog_debug(FILE_LEVEL, "Removed superpeer with address %s, p_port %hu,"
+		slog_info(FILE_LEVEL, "Removed superpeer with address %s, p_port %hu,"
 						 " sp_port %hu", inet_ntoa(addr), sp->p_port,
 						 sp->sp_port);
-#endif
 		free(sp);
 	}
 }
@@ -128,7 +126,7 @@ static void normal_query_res(const struct handler_data *data,
 	}
 
 	free(sp);
-	slog_debug(FILE_LEVEL, "Sending a filled query_res to %s:%hu",
+	slog_info(FILE_LEVEL, "Sending a filled query_res to %s:%hu",
 			inet_ntoa(data->addr.sin_addr), ntohs(data->addr.sin_port));
 	err = fsnp_send_query_res(data->sock, query_res);
 	if (err != E_NOERR) {
@@ -165,7 +163,7 @@ static void first_query_res(const struct handler_data *data,
 		return;
 	}
 
-	slog_debug(FILE_LEVEL, "Sending an empty query_res to %s:%hu",
+	slog_info(FILE_LEVEL, "Sending an empty query_res to %s:%hu",
 			   inet_ntoa(data->addr.sin_addr), ntohs(data->addr.sin_port));
 	err = fsnp_send_query_res(data->sock, query_res);
 	if (err != E_NOERR && err != E_PEER_DISCONNECTED) {
@@ -245,22 +243,22 @@ static void *handler_thread(void *val)
 
 	switch (msg->msg_type) {
 		case QUERY:
-			slog_debug(FILE_LEVEL, "QUERY message received");
+			slog_info(FILE_LEVEL, "QUERY message received");
 			query_msg(data, (struct fsnp_query *)msg);
 			break;
 
 		case ADD_SP:
-			slog_debug(FILE_LEVEL, "ADD_SP message received");
+			slog_info(FILE_LEVEL, "ADD_SP message received");
 			add_sp_msg(data, (struct fsnp_add_sp *)msg);
 			break;
 
 		case RM_SP:
-			slog_debug(FILE_LEVEL, "RM_SP message received");
+			slog_info(FILE_LEVEL, "RM_SP message received");
 			rm_sp_msg(data, (struct fsnp_rm_sp *)msg);
 			break;
 
 		default:
-			slog_debug(FILE_LEVEL, "A message of an unexpected type has been"
+			slog_info(FILE_LEVEL, "A message of an unexpected type has been"
 						           " received");
 			break;
 	}
