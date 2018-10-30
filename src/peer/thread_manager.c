@@ -170,11 +170,11 @@ int start_new_thread(entry_point e, void *data, const char *name)
 
 void close_thread_manager(void)
 {
-	list_set_free_value_callback(running_threads, free_callback);
 	sleep(2); // give the threads enough time to finish their work
 	join_threads_if_any();
 	slog_debug(FILE_LEVEL, "Destroying running_threads");
 	slog_debug(FILE_LEVEL, "In running threads there are still %u threads", list_count(running_threads));
+	list_set_free_value_callback(running_threads, free_callback);
 	list_destroy(running_threads);
 	slog_debug(FILE_LEVEL, "Destroying closed_threads");
 	slog_debug(FILE_LEVEL, "In closed threads there are still %u threads", list_count(closed_threads));
