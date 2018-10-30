@@ -332,7 +332,6 @@ int peer_main(bool localhost)
 	slog_info(STDOUT_LEVEL, "De-initializing the stdin subsystem");
 	close_stdin();
 	if (is_superpeer()) {
-		slog_info(FILE_LEVEL, "Exiting sp mode");
 		exit_sp_mode();
 	}
 

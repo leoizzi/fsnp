@@ -479,7 +479,6 @@ void prepare_exit_sp_mode(void)
 void exit_sp_mode(void)
 {
 	slog_info(FILE_LEVEL, "Exiting the sp mode...");
-	prepare_exit_sp_mode();
 	slog_info(FILE_LEVEL, "Extiting the sp network");
 	exit_sp_network();
 	slog_info(FILE_LEVEL, "Closing the keys_cache");

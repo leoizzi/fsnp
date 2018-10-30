@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <arpa/inet.h>
+#include <unistd.h>
 
 #include "peer/keys_cache.h"
 #include "peer/file_manager.h"
@@ -297,6 +298,7 @@ void cache_rm_keys(struct fsnp_peer *owner)
 void close_keys_cache(void)
 {
 	slog_debug(FILE_LEVEL, "Destroying cache hashtable");
+	sleep(2); // give enough time to sp-tcp-thread to do their cleanup
 	ht_destroy(cache);
 	cache = NULL;
 }
