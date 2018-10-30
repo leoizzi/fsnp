@@ -1225,7 +1225,7 @@ slice_foreach_value(slice_t *slice, int (*item_handler)(void *item, size_t idx, 
     MUTEX_LOCK(list->lock);
     size_t idx = 0;
     list_entry_t *e = pick_entry(list, slice->offset);
-    while(e && idx < slice->length) {
+    while(e) { // FIXME: it was idx < slice->length
         int rc = item_handler(e->value, idx++, user);
         if (rc == 0) {
             break;
