@@ -29,38 +29,51 @@ FSNP_BEGIN_DECL
 /*
  * fsnp messages type.
  *
- * 1) QUERY: ask the server to send the superpeers he knows
+ * 1) QUERY: ask to the server to send the superpeers he knows
  *
  * 2) QUERY_RES: server's response to the QUERY message
  *
- * 3) ADD_PEER: tell the server to add a new superpeer to its list
+ * 3) ADD_PEER: tell to the server to add a new superpeer to its list
  *
  * 4) RM_SP: tell the server to remove a superpeer from its list
  *
- * 5) JOIN: a peer asks a superpeer to join him
+ * 5) JOIN: a peer asks to a superpeer to join him
  *
  * 6) ACK: an acknowledgment for some protocol's messages
  *
- * 7) LEAVE: tell to others peers (or superpeers) that the message sender is
- *           leaving the network
+ * 7) LEAVE: tell to the others peers (or superpeers) that the sender is leaving
  *
- * 8) FILE_REQ: ask a superpeer to find a file
+ * 8) FILE_REQ: ask to a superpeer to search for a file
  *
- * 9) FILE_RES: tell the peer the lists of peers who own the file he requested
+ * 9) FILE_RES: superpeer's response to FILE_REQ. It contains the list of peers
+ *              who are sharing the file requested.
  *
- * 10) UPDATE: communicate to the superpeer that the sender's file list is changed
+ * 10) UPDATE: communicate to the superpeer that the sender's file list has
+ *             changed
  *
- * 11) ALIVE: Check if a peer is still online
+ * 11) ALIVE: Check if a peer (or superpeer) is still online
  *
- * 12) GET_FILE: ask a peer to create a download session for a file he owns
+ * 12) GET_FILE: sent to a peer to ask him to initiate a download session for a
+ *               given file
  *
- * 13) ERROR: the file requested with GET_FILE isn't available
+ * 13) ERROR: an error messages for some protocol's messages. It's used for
+ *            communicating the inability to do an operation
  *
- * 14) DOWNLOAD: tell the peer that he can start the download
+ * 14) DOWNLOAD: sent to a peer who asked a file with GET_FILE. This communicate
+ *               to the peer that the download session can be started
  *
- * 15) WHOHAS: asks inside the superpeers overlay network who has a file
+ * 15) PROMOTE: promote a peer to be a superpeer
  *
- * 16) PROMOTE: promote a peer to be a superpeer
+ * 16) PROMOTED: sent by a newly promoted superpeer to its promoter. This
+ *               communicate to the promoter that everything went ok while
+ *               entering the superpeer_mode
+ *
+ * 17) NEXT: a superpeer sent this to another to communicate to him that he is
+ *           its new next
+ *
+ * 18) WHOSNEXT: a superpeer is asking to his next who's after him
+ *
+ * 19) WHOHAS: asks inside the superpeers overlay network who has a file
  */
 enum fsnp_type {
 	QUERY,
@@ -77,8 +90,11 @@ enum fsnp_type {
 	GET_FILE,
 	ERROR,
 	DOWNLOAD,
-	WHOHAS,
-	PROMOTE
+	PROMOTE,
+	PROMOTED,
+	NEXT,
+	WHOSNEXT,
+	WHOHAS
 };
 typedef enum fsnp_type fsnp_type_t;
 
@@ -246,6 +262,48 @@ struct packed fsnp_download {
 };
 
 /*
+ * Sent to a peer by a superpeer to inform him that he is now a superpeer.
+ * The promoter, if know another superpeer, will pass it to the promoted so that
+ * he can still communicate with the network if the promoter will leave.
+ */
+struct packed fsnp_promote {
+	struct fsnp_msg header;
+	in_port_t sp_port; // the superpeer UDP port of the promoter
+	struct fsnp_peer sp;
+};
+
+/*
+ * This message is sent to the superpeer who has promoted.
+ * This is used for letting him know that the procedure for becoming a superpeer
+ * has been successful
+ */
+struct packed fsnp_promoted {
+	struct fsnp_msg header;
+};
+
+/*
+ * This is sent to the superpeer who's going to be the next of the sender.
+ * If it contains the address of the previous next, the superpeer who receive
+ * this message can contact him for setting him as its next.
+ * Otherwise, if it's compose by all 0's the receiver will not modify its next
+ */
+struct packed fsnp_next {
+	struct fsnp_msg header;
+	struct fsnp_peer old_next;
+};
+
+/*
+ * A superpeer is asking to his next who's after him.
+ * The superpeer who has asked the question fills the 'next' field with all 0's,
+ * while the receiver will put the address of its next and will send the message
+ * back
+ */
+struct packed fsnp_whosnext {
+	struct fsnp_msg header;
+	struct fsnp_peer next;
+};
+
+/*
  * Sent by a superpeer searching a given file inside the overlay network.
  * There is a unique ID for the request so that it's impossible to create cycles
  * and a missing peers field, in order to propagate uselessly the message if
@@ -257,17 +315,6 @@ struct packed fsnp_whohas {
 	sha256_t file_hash;
 	uint8_t missing_peers;
 
-};
-
-/*
- * Sent to a peer by a superpeer to inform him that he is now a superpeer.
- * The promoter, if know another superpeer, will pass it to the promoted so that
- * he can still communicate with the network if the promoter will leave.
- */
-struct packed fsnp_promote {
-	struct fsnp_msg header;
-	in_port_t sp_port; // the superpeer UDP port of the promoter
-	struct fsnp_peer sp;
 };
 
 FSNP_END_DECL

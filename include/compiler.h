@@ -20,7 +20,7 @@
 
 #define packed __attribute__((packed))
 #define EXPORT __attribute__((visibility("default")))
-#define constructor __attribute__((constructor))
+#define always_inline inline __attribute__((always_inline))
 #define UNUSED(x) (void)x
 
 #ifdef __cplusplus

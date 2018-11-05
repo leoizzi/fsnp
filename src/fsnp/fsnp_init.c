@@ -21,7 +21,8 @@
 
 // TODO: add support for big endian
 
-void fsnp_init_msg(struct fsnp_msg *header, fsnp_type_t type, uint64_t size)
+static always_inline void fsnp_init_msg(struct fsnp_msg *header,
+										fsnp_type_t type, uint64_t size)
 {
 	memcpy(header->magic, FSNP_MAGIC, FSNP_MAGIC_SIZE);
 	header->msg_type = type;
@@ -34,8 +35,9 @@ void fsnp_init_query(struct fsnp_query *query, fsnp_peer_type_t type)
 	fsnp_init_msg(&query->header, QUERY, sizeof(*query));
 }
 
-struct fsnp_query_res *fsnp_create_query_res(in_addr_t peer_addr, uint8_t num_sp,
-                                             struct fsnp_peer *sp_list)
+struct fsnp_query_res *fsnp_create_query_res(in_addr_t peer_addr,
+                                             uint8_t num_sp,
+                                             const struct fsnp_peer *sp_list)
 {
 	struct fsnp_query_res *query_res = NULL;
 	uint64_t list_size = 0;
@@ -74,7 +76,7 @@ void fsnp_init_add_sp(struct fsnp_add_sp *sp, in_port_t p_port, in_port_t sp_por
 	fsnp_init_msg(&sp->header, ADD_SP, sizeof(*sp));
 }
 
-void fsnp_init_rm_sp(struct fsnp_rm_sp *rm_sp, struct fsnp_peer *addr,
+void fsnp_init_rm_sp(struct fsnp_rm_sp *rm_sp, const struct fsnp_peer *addr,
                      fsnp_peer_type_t type)
 {
 	rm_sp->peer_type = type;
@@ -132,7 +134,7 @@ void fsnp_init_file_req(struct fsnp_file_req *file_req, sha256_t hash)
 }
 
 struct fsnp_file_res *fsnp_create_file_res(uint8_t num_peers,
-                                           struct fsnp_peer *peers)
+                                           const struct fsnp_peer *peers)
 {
 	struct fsnp_file_res *file_res = NULL;
 	uint64_t peer_size = 0;
@@ -208,6 +210,42 @@ void fsnp_init_download(struct fsnp_download *download, uint64_t file_size)
 	fsnp_init_msg(&download->header, DOWNLOAD, sizeof(*download));
 }
 
+void fsnp_init_promote(struct fsnp_promote *promote, in_port_t sp_port,
+                       const struct fsnp_peer *sp)
+{
+	memcpy(&promote->sp, sp, sizeof(promote->sp));
+	promote->sp_port = sp_port;
+	fsnp_init_msg(&promote->header, PROMOTE, sizeof(*promote));
+}
+
+void fsnp_init_promoted(struct fsnp_promoted *promoted)
+{
+	fsnp_init_msg(&promoted->header, PROMOTED, sizeof(*promoted));
+}
+
+void fsnp_init_next(struct fsnp_next *next, const struct fsnp_peer *old_next)
+{
+	if (!old_next) {
+		memset(&next->old_next, 0, sizeof(next->old_next));
+	} else {
+		memcpy(&next->old_next, old_next, sizeof(next->old_next));
+	}
+
+	fsnp_init_msg(&next->header, NEXT, sizeof(*next));
+}
+
+void fsnp_init_whosnext(struct fsnp_whosnext *whosnext,
+                        const struct fsnp_peer *next)
+{
+	if (!next) {
+		memset(&whosnext->next, 0, sizeof(whosnext->next));
+	} else {
+		memcpy(&whosnext->next, next, sizeof(whosnext->next));
+	}
+
+	fsnp_init_msg(&whosnext->header, WHOSNEXT, sizeof(*whosnext));
+}
+
 void fsnp_init_whohas(struct fsnp_whohas *whohas, sha256_t req_id,
                       sha256_t file_hash, uint8_t missing_peers)
 {
@@ -215,12 +253,4 @@ void fsnp_init_whohas(struct fsnp_whohas *whohas, sha256_t req_id,
 	memcpy(whohas->file_hash, file_hash, sizeof(sha256_t));
 	whohas->missing_peers = missing_peers;
 	fsnp_init_msg(&whohas->header, WHOHAS, sizeof(*whohas));
-}
-
-void fsnp_init_promote(struct fsnp_promote *promote, in_port_t sp_port,
-					   struct fsnp_peer *sp)
-{
-	memcpy(&promote->sp, sp, sizeof(promote->sp));
-	promote->sp_port = sp_port;
-	fsnp_init_msg(&promote->header, PROMOTE, sizeof(*promote));
 }

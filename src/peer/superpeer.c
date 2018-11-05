@@ -133,7 +133,7 @@ static bool initialize_sp(struct fsnp_peer *sps, unsigned n)
 #ifdef FSNP_DEBUG
 bool print_peer = false;
 
-	if (tcp != SP_TCP_PORT) {
+	if (tcp_port != SP_TCP_PORT) {
 		slog_warn(STDOUT_LEVEL, "Unable to bind the superpeer TCP socket to the "
 						  "port %hu. The port %hu has been used instead",
 		                  (in_port_t)SP_TCP_PORT, tcp_port);
@@ -169,17 +169,6 @@ bool print_peer = false;
 		leave_sp();
 	}
 
-	ret = add_sp_to_server();
-	if (ret < 0) {
-		fprintf(stderr, "Unable to contact the server for add this superpeer to"
-				        " its list. Please join again a superpeer");
-		close(tcp);
-		close(udp);
-		set_udp_sp_port(0);
-		set_tcp_sp_port(0);
-		return false;
-	}
-
 	ret = enter_sp_network(udp, sps, n);
 	if (ret < 0) {
 		slog_error(FILE_LEVEL, "Unable to enter the superpeer network");
@@ -188,6 +177,18 @@ bool print_peer = false;
 		set_udp_sp_port(0);
 		set_tcp_sp_port(0);
 		PRINT_PEER;
+		return false;
+	}
+
+	ret = add_sp_to_server();
+	if (ret < 0) {
+		fprintf(stderr, "Unable to contact the server for add this superpeer to"
+		                " its list. Please join again a superpeer");
+		exit_sp_network();
+		close(tcp);
+		close(udp);
+		set_udp_sp_port(0);
+		set_tcp_sp_port(0);
 		return false;
 	}
 

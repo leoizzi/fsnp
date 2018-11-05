@@ -26,6 +26,11 @@ FSNP_BEGIN_DECL
 
 /*
  * Enter the superpeers' overlay network with the 'udp' socket.
+ * If n == 0 the superpeer will know to be the first one in the network
+ * If n == 1 in sps it will find the address of the peer who has promoted him
+ * If n == 2 in sps it will find:
+ *      - in the first position the address of the peer who has promoted him
+ *      - in the second position the address of who will be his next
  * Return 0 on success, -1 otherwise
  */
 int enter_sp_network(int udp, struct fsnp_peer *sps, unsigned n);
