@@ -36,8 +36,8 @@ FSNP_BEGIN_DECL
 int enter_sp_network(int udp, struct fsnp_peer *sps, unsigned n);
 
 /*
- * Exit the superpeer's overlay network. The socket passed when entered will be
- * closed.
+ * Exit the superpeer's overlay network. The socket passed when entered the
+ * network will be closed.
  */
 void exit_sp_network(void);
 

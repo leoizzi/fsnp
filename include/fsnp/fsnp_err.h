@@ -19,6 +19,7 @@
 #define FSNP_FSNP_ERR_H
 
 #include <limits.h>
+#include <stdbool.h>
 
 #include "compiler.h"
 
@@ -44,6 +45,7 @@ enum fsnp_err {
 	E_OUT_OF_MEM = -4,
 	E_PEER_DISCONNECTED = -5,
 	E_INVALID_PARAM = -6,
+	E_MSG_TOO_BIG = -7,
 	E_UNKNOWN = -INT_MAX
 };
 

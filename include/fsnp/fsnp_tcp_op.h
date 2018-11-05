@@ -68,8 +68,7 @@ EXPORT ssize_t fsnp_timed_read(int sock, void *buf, size_t bytes,
 							   uint16_t timeout, fsnp_err_t *err);
 
 /*
- * fsnp wrapper of write with a timer associated. If the timer fires
- * FSNP_TIMED_OUT is returned
+ * fsnp wrapper of write with a timer associated.
  */
 EXPORT ssize_t fsnp_timed_write(int sock, const void *buf, size_t bytes,
                                 uint16_t timeout, fsnp_err_t *err);
@@ -138,13 +137,13 @@ EXPORT fsnp_err_t fsnp_send_join(int sock, const struct fsnp_join *join);
  * Send an ack message.
  * Return an fsnp_err_t indicating the success or the failure
  */
-EXPORT fsnp_err_t fsnp_send_ack(int sock, const struct fsnp_ack *ack);
+EXPORT fsnp_err_t fsnp_send_tcp_ack(int sock, const struct fsnp_ack *ack);
 
 /*
  * Send a leave message.
  * Return an fsnp_err_t indicating the success or the failure
  */
-EXPORT fsnp_err_t fsnp_send_leave(int sock, const struct fsnp_leave *leave);
+EXPORT fsnp_err_t fsnp_send_tcp_leave(int sock, const struct fsnp_leave *leave);
 
 /*
  * Send a file_req message.
@@ -168,7 +167,7 @@ EXPORT fsnp_err_t fsnp_send_update(int sock, const struct fsnp_update *update);
  * Send an alive message.
  * Return an fsnp_err_t indicating the success or the failure
  */
-EXPORT fsnp_err_t fsnp_send_alive(int sock, const struct fsnp_alive *alive);
+EXPORT fsnp_err_t fsnp_send_tcp_alive(int sock, const struct fsnp_alive *alive);
 
 /*
  * Send a get_file message.

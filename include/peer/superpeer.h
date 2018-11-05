@@ -59,11 +59,6 @@ void exit_sp_mode(void);
 void sp_tcp_sock_event(short revents);
 
 /*
- * Respond to an event occurred on the UDP socket
- */
-void sp_udp_sock_event(short revents);
-
-/*
  * Tell the server lo remove us from its list and leave all the peers
  */
 void prepare_exit_sp_mode(void);

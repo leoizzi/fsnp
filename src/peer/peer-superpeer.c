@@ -385,7 +385,7 @@ static void is_alive(void)
 	}
 
 	fsnp_init_alive(&alive);
-	err = fsnp_send_alive(tcp_state.sock, &alive);
+	err = fsnp_send_tcp_alive(tcp_state.sock, &alive);
 	slog_info(FILE_LEVEL, "Sending an alive message to the superpeer from the"
 					   " is_alive function");
 	if (err == E_PEER_DISCONNECTED) {
@@ -425,7 +425,7 @@ static void read_sock_msg(void)
 			                       " message: %u", tcp_state.timeouts);
 			tcp_state.timeouts = 0;
 			fsnp_init_ack(&ack);
-			err = fsnp_send_ack(tcp_state.sock, &ack);
+			err = fsnp_send_tcp_ack(tcp_state.sock, &ack);
 			if (err == E_TIMEOUT) {
 				is_alive();
 			}
@@ -443,7 +443,7 @@ static void read_sock_msg(void)
 			slog_info(FILE_LEVEL, "Leave msg received");
 			tcp_state.timeouts = 0;
 			fsnp_init_ack(&ack);
-			fsnp_send_ack(tcp_state.sock, &ack);
+			fsnp_send_tcp_ack(tcp_state.sock, &ack);
 			slog_info(FILE_LEVEL, "Ack sent to the superpeer");
 			tcp_state.quit_loop = true;
 			break;
@@ -683,7 +683,7 @@ static void peer_tcp_thread(void *data)
 
 	if (tcp_state.send_leave_msg) {
 		fsnp_init_leave(&leave);
-		err = fsnp_send_leave(tcp_state.sock, &leave);
+		err = fsnp_send_tcp_leave(tcp_state.sock, &leave);
 		slog_info(FILE_LEVEL, "Sending an alive msg to the sp from the"
 						" peer_tcp_thread");
 		if (err != E_NOERR) {

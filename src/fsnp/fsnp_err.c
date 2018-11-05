@@ -67,6 +67,12 @@ static void log_e_invalid_param(int level)
 				 " parameter was passed to a function.\n");
 }
 
+static void log_e_msg_too_big(int level)
+{
+	slog_warn(level, "fsnp error type: E_MSG_TOO_BIG.\nExplanation: The message"
+				  "was too big to be sent by UDP.");
+}
+
 static void log_default(int level) {
 	slog_warn(level, "fsnp error type: unknown fsnp_err_t passed!\n");
 }
@@ -106,6 +112,9 @@ void fsnp_log_err_msg(fsnp_err_t err, bool to_print)
 		case E_INVALID_PARAM:
 			log_e_invalid_param(level);
 			break;
+
+		case E_MSG_TOO_BIG:
+			log_e_msg_too_big(level);
 
 		default:
 			log_default(level);

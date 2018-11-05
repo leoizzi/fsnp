@@ -261,12 +261,10 @@ struct fsnp_msg *fsnp_read_msg_tcp(int sock, uint16_t timeout, ssize_t *r,
 		return NULL;
 	}
 
-	// copy the header to the message
 	memcpy(msg, &header, header_size);
 
-	// DO NOT attempt a second read in these cases
-	if (msg->msg_type == ACK || msg->msg_type == LEAVE || msg->msg_type == ALIVE
-		|| msg->msg_type == ERROR) {
+	// DO NOT attempt a second read in this case
+	if (msg->msg_size == 0) {
 		if (r) {
 			*r = r1;
 		}
@@ -367,7 +365,7 @@ fsnp_err_t fsnp_send_join(int sock, const struct fsnp_join *join)
 	return err;
 }
 
-fsnp_err_t fsnp_send_ack(int sock, const struct fsnp_ack *ack)
+fsnp_err_t fsnp_send_tcp_ack(int sock, const struct fsnp_ack *ack)
 {
 	fsnp_err_t err;
 
@@ -377,7 +375,7 @@ fsnp_err_t fsnp_send_ack(int sock, const struct fsnp_ack *ack)
 	return err;
 }
 
-fsnp_err_t fsnp_send_leave(int sock, const struct fsnp_leave *leave)
+fsnp_err_t fsnp_send_tcp_leave(int sock, const struct fsnp_leave *leave)
 {
 	fsnp_err_t err;
 
@@ -414,7 +412,7 @@ fsnp_err_t fsnp_send_update(int sock, const struct fsnp_update *update)
 	return err;
 }
 
-fsnp_err_t fsnp_send_alive(int sock, const struct fsnp_alive *alive)
+fsnp_err_t fsnp_send_tcp_alive(int sock, const struct fsnp_alive *alive)
 {
 	fsnp_err_t err;
 	NULL_CHECK(alive);
@@ -460,3 +458,4 @@ fsnp_err_t fsnp_send_promote(int sock, const struct fsnp_promote *promote)
 }
 
 #undef NULL_CHECK
+#undef FSNP_MAGIC_SIZE

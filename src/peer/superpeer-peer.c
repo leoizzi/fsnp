@@ -92,7 +92,7 @@ static void join_rcvd(struct fsnp_join *join, struct peer_info *info,
 
 	fsnp_init_ack(&ack);
 	slog_info(FILE_LEVEL, "Sending an ACK msg to %s", info->pretty_addr);
-	err = fsnp_send_ack(info->sock, &ack);
+	err = fsnp_send_tcp_ack(info->sock, &ack);
 	if (err != E_NOERR && err != E_TIMEOUT) {
 		fsnp_log_err_msg(err, false);
 		slog_error(FILE_LEVEL, "Leaving the peer %s", info->pretty_addr);
@@ -118,7 +118,7 @@ static void update_rcvd(struct fsnp_update *update, struct peer_info *info)
 	fsnp_init_ack(&ack);
 	// don't really care about any error here, just log it
 	slog_info(FILE_LEVEL, "Sending an ACK msg to %s", info->pretty_addr);
-	err = fsnp_send_ack(info->sock, &ack);
+	err = fsnp_send_tcp_ack(info->sock, &ack);
 	if (err != E_NOERR) {
 		fsnp_log_err_msg(err, false);
 	}
@@ -188,7 +188,7 @@ static void read_sock_msg(struct peer_info *info, bool leaving,
 			                      "this: %u", info->pretty_addr, info->timeouts);
 			fsnp_init_ack(&ack);
 			slog_info(FILE_LEVEL, "Sending an ACK msg to %s", info->pretty_addr);
-			err = fsnp_send_ack(info->sock, &ack);
+			err = fsnp_send_tcp_ack(info->sock, &ack);
 			if (err != E_NOERR) {
 				fsnp_log_err_msg(err, false);
 			}
@@ -203,7 +203,7 @@ static void read_sock_msg(struct peer_info *info, bool leaving,
 			// don't care about the return... just quit
 			slog_info(FILE_LEVEL, "Sending the last ACK to %s. If an error"
 						 " occurred is not checked", info->pretty_addr);
-			fsnp_send_ack(info->sock, &ack);
+			fsnp_send_tcp_ack(info->sock, &ack);
 			*should_exit = true;
 			info->timeouts = 0;
 			break;
@@ -280,7 +280,7 @@ static void read_pipe_msg(const struct peer_info *info, bool *leaving,
 		slog_info(FILE_LEVEL, "Read from the pipe to leave %s", info->pretty_addr);
 		fsnp_init_leave(&leave);
 		slog_info(FILE_LEVEL, "Sending a LEAVE msg to %s", info->pretty_addr);
-		err = fsnp_send_leave(info->sock, &leave);
+		err = fsnp_send_tcp_leave(info->sock, &leave);
 		if (err != E_NOERR) {
 			fsnp_log_err_msg(err, false);
 		}
@@ -326,7 +326,7 @@ static void is_alive(struct peer_info *info, bool *should_exit)
 
 	fsnp_init_alive(&alive);
 	slog_info(FILE_LEVEL, "Sending an ALIVE msg to %s", info->pretty_addr);
-	err = fsnp_send_alive(info->sock, &alive);
+	err = fsnp_send_tcp_alive(info->sock, &alive);
 	if (err == E_PEER_DISCONNECTED) {
 		fsnp_log_err_msg(err, false);
 		*should_exit = true;

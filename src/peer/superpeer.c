@@ -316,29 +316,12 @@ static void accept_peer(void)
 	}
 }
 
-/*
- * Read a message on the UDP socket
- */
-static void read_udp_sock(void)
-{
-	// TODO: continue sp UDP comm
-}
-
 void sp_tcp_sock_event(short revents)
 {
 	if (revents & POLLIN || revents & POLLRDBAND || revents & POLLPRI) {
 		accept_peer();
 	} else {
 		slog_warn(FILE_LEVEL, "Unexpected revents %d [TCP sp socket]", revents);
-	}
-}
-
-void sp_udp_sock_event(short revents)
-{
-	if (revents & POLLIN || revents & POLLRDBAND || revents & POLLPRI) {
-		read_udp_sock();
-	} else {
-		slog_warn(FILE_LEVEL, "Unexpected revents %d [UDP sp socket]", revents);
 	}
 }
 
