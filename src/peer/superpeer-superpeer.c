@@ -196,7 +196,7 @@ static void sp_udp_thread(void *data)
 	}
 
 	while (!sus->should_exit) {
-		;
+		break;
 	}
 
 	close(sus->sock);

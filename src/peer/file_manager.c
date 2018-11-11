@@ -309,18 +309,18 @@ static int search_delete_file_iterator(void *item, size_t idx, void *user)
 	unsigned i = 0;
 
 	UNUSED(idx);
-
+	
 	if (entry->found) {
 		entry->found = false;
-		return GO_AHEAD;
 	} else {
 		sha256(entry->name, entry->name_len, key);
 		ht_delete(d->table, key, sizeof(key), NULL, NULL);
 		STRINGIFY_HASH(key_str, key, i);
 		slog_info(FILE_LEVEL, "Deleting file corresponding to key %s", key_str);
 		d->changes = NEW;
-		return REMOVE_AND_GO;
 	}
+
+	return GO_AHEAD;
 }
 
 /*
@@ -341,7 +341,7 @@ static bool update_file_manager(void)
 	if (changes == ERR) {
 		return false;
 	}
-
+	
 	l = ht_get_all_values(shared.hashtable);
 	if (!l) {
 		return false;
@@ -432,14 +432,19 @@ static void update_thread(void *data)
 /*
  * Routine for spawning the update thread
  */
-static void launch_update_thread(void)
+static void launch_update_thread(bool first_launch)
 {
 	const char update_err[] = "Unable to start the update thread. This means"
 	                          "that any file added after this point will not be"
 	                          "shared";
 	int ret = 0;
 
-	utd.changes = false;
+	if (first_launch) {
+		utd.changes = false;
+	} else {
+		utd.changes = true;
+	}
+
 	utd.run = false;
 	ret = pthread_mutex_init(&utd.mtx, NULL);
 	if (ret) {
@@ -484,6 +489,10 @@ bool check_for_updates(void)
 	int ret = 0;
 	bool changes = false;
 
+	if (!utd.run) {
+		return false;
+	}
+
 	ret = pthread_mutex_lock(&utd.mtx);
 	if (ret) {
 		slog_error(FILE_LEVEL, "pthread_mutex_lock error %d", ret);
@@ -505,6 +514,7 @@ bool check_for_updates(void)
 int set_shared_dir(const char *path)
 {
 	int ret = 0;
+	static bool first_launch = true;
 
 	if (!path) {
 		return -1;
@@ -531,7 +541,8 @@ int set_shared_dir(const char *path)
 	                        "files.", ht_count(shared.hashtable));
 	slog_info(STDOUT_LEVEL, "New shared directory: \"%s\"", shared.path);
 
-	launch_update_thread();
+	launch_update_thread(first_launch);
+	first_launch = false;
 	shared.is_set = true;
 
 	return 0;
