@@ -222,10 +222,13 @@ int cache_add_keys(uint32_t num_files, uint8_t *keys, struct fsnp_peer *owner)
 	uint32_t i = 0;
 	int ret = 0;
 
+	slog_info(FILE_LEVEL, "Adding %u files to the hashtable", num_files);
+
 	for (i = 0; i < num_files; i++) {
 		sha = keys + i * sizeof(sha256_t);
 		kc = ht_get(cache, sha, sizeof(sha256_t), NULL);
 		if (!kc) {
+			slog_debug(FILE_LEVEL, "Adding file %u", i + 1);
 			ret = add_new_key(sha, owner);
 		} else {
 			ret = add_to_key(kc, owner);
@@ -240,8 +243,8 @@ int cache_add_keys(uint32_t num_files, uint8_t *keys, struct fsnp_peer *owner)
 }
 
 /*
- * Go through every fsnp_peer in 'owners'. If one of them matches the one passed
- * to 'cache_rm_keys' remove it from the list
+ * Iterate through every fsnp_peer in 'owners'. If one of them matches the one
+ * passed to 'cache_rm_keys' remove it from the list
  */
 static int cache_list_rm_keys_callback(void *item, size_t idx, void *user)
 {
@@ -252,7 +255,6 @@ static int cache_list_rm_keys_callback(void *item, size_t idx, void *user)
 
 	if (owner->ip == o->ip) {
 		if (owner->port == o->port) {
-			slog_info(FILE_LEVEL, "Item found");
 			return REMOVE_AND_GO;
 		} else {
 			return GO_AHEAD;
@@ -263,36 +265,47 @@ static int cache_list_rm_keys_callback(void *item, size_t idx, void *user)
 }
 
 /*
- * Go over all the key_cached struct  stored in 'cache' and remove 'user' (which
- * is 'owner' in cache_rm_keys) from the 'owners' list.
- * If after this 'owners' is empty remove the key_cached from the hashtable.
+ * Iterate over all the keys of 'cache' and remove from it every entry that
+ * has 'user' as owner.
  */
-static ht_iterator_status_t cache_ht_rm_keys_callback(hashtable_t *table,
-                                                      void *value, size_t vlen,
-                                                      void *user)
+int rm_entries_by_peer(void *item, size_t idx, void *user)
 {
-	struct key_cached *kc = (struct key_cached *)value;
-	char key_str[SHA256_BYTES];
-	unsigned i = 0;
+	hashtable_key_t *hkt = (hashtable_key_t *)item;
+	uint8_t *key = hkt->data;
+	struct key_cached *kc = NULL;
 
-	UNUSED(table);
-	UNUSED(vlen);
+	UNUSED(idx);
 
-	STRINGIFY_HASH(key_str, kc->key, i);
-	slog_debug(FILE_LEVEL, "Removing item %s", key_str);
+	kc = ht_get(cache, key, sizeof(sha256_t), NULL);
+	if (!kc) {
+		return GO_AHEAD;
+	}
+
 	list_foreach_value(kc->owners, cache_list_rm_keys_callback, user);
 	if (list_count(kc->owners) == 0) {
 		list_destroy(kc->owners);
 		kc->owners = NULL;
-		return HT_ITERATOR_REMOVE;
-	} else {
-		return HT_ITERATOR_CONTINUE;
+		ht_delete(cache, kc->key, sizeof(sha256_t), NULL, NULL);
 	}
+
+	return GO_AHEAD;
 }
 
 void cache_rm_keys(struct fsnp_peer *owner)
 {
-	ht_foreach_value(cache, cache_ht_rm_keys_callback, owner);
+	linked_list_t *list = NULL;
+	struct in_addr addr;
+
+	addr.s_addr = htonl(owner->ip);
+	slog_debug(FILE_LEVEL, "Removing files for peer %s:%hu", inet_ntoa(addr), owner->port);
+	list = ht_get_all_keys(cache);
+	if (!list) {
+		slog_warn(FILE_LEVEL, "Unable to retrieve all the cache values");
+		return;
+	}
+
+	list_foreach_value(list, rm_entries_by_peer, owner);
+	list_destroy(list);
 }
 
 void close_keys_cache(void)

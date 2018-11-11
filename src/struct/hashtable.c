@@ -982,10 +982,12 @@ ht_foreach_pair(hashtable_t *table, ht_pair_iterator_callback_t cb, void *user)
 
     MUTEX_LOCK(table->iterator_lock);
     ht_items_list_t *list = NULL;
-    TAILQ_FOREACH(list, &table->iterator_list->head, iterator_next) {
+    ht_items_list_t *tmplist = NULL;
+    TAILQ_FOREACH_SAFE(list, &table->iterator_list->head, iterator_next, tmplist) {
         SPIN_LOCK(list->lock);
         ht_item_t *item = NULL;
-        TAILQ_FOREACH(item, &list->head, next) {
+        ht_item_t *tmp = NULL;
+        TAILQ_FOREACH_SAFE(item, &list->head, next, tmp) {
             rc = cb(table, item->key, item->klen, item->data, item->dlen, user);
             if (rc <= 0)
                 break;
@@ -996,14 +998,19 @@ ht_foreach_pair(hashtable_t *table, ht_pair_iterator_callback_t cb, void *user)
                 SPIN_UNLOCK(list->lock);
                 break;
             } else if (rc < 0) {
+            	/*
                 TAILQ_REMOVE(&list->head, item, next);
                 if (table->free_item_cb)
                     table->free_item_cb(item->data);
                 if (item->key != item->kbuf)
                     free(item->key);
                 free(item);
+                ATOMIC_DECREMENT(table->count);
+                */
+	            SPIN_UNLOCK(list->lock);
+            	ht_delete(table, item->key, item->klen, NULL, NULL);
                 if (rc == -2) {
-                    SPIN_UNLOCK(list->lock);
+                    // SPIN_UNLOCK(list->lock);
                     break;
                 }
             }

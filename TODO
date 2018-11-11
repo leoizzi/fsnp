@@ -1,2 +1,7 @@
 implementare lo swap per l'endianness
+
 Attenzione ad ask_file in peer_superpeer. Usa di default la pipe del thread peer, ma se la usa anche il superpeer che si fa???
+Se si cambia la shared_dir di un peer connesso ad un sp non viene mandato un messaggio di update
+
+Nella relazione scrivere che la hashtable presentava dei bug nelle funzioni che
+ne permettevano l'iterazione, per cui è stato preferito l'uso delle liste
