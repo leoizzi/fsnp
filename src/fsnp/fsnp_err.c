@@ -115,6 +115,7 @@ void fsnp_log_err_msg(fsnp_err_t err, bool to_print)
 
 		case E_MSG_TOO_BIG:
 			log_e_msg_too_big(level);
+			break;
 
 		default:
 			log_default(level);
