@@ -61,7 +61,7 @@ static void open_conn(void)
 static in_port_t p_port; // peer port
 static in_port_t sp_port; // sp_port
 
-static void inline gen_rand_sp(void)
+static inline void gen_rand_sp(void)
 {
 	p_port = (in_port_t)(rand() % UINT16_MAX);
 	sp_port = (in_port_t)(rand() % UINT16_MAX);
