@@ -59,6 +59,11 @@ void exit_sp_mode(void);
 void sp_tcp_sock_event(short revents);
 
 /*
+ * Quit every peer connected to the superpeer
+ */
+void quit_all_peers(void);
+
+/*
  * Tell the server lo remove us from its list and leave all the peers
  */
 void prepare_exit_sp_mode(void);

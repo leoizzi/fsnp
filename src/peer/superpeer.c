@@ -388,7 +388,7 @@ bool enter_sp_mode(struct fsnp_peer *sps, unsigned n)
 }
 
 /*
- * For each thread spawned for communicating with a peer tell it to quit
+ * For each thread spawned for a peer tell it to quit
  */
 static int quit_peer_threads_iterator(void *item, size_t idx, void *user)
 {
@@ -409,6 +409,12 @@ static int quit_peer_threads_iterator(void *item, size_t idx, void *user)
 	}
 
 	return GO_AHEAD;
+}
+
+void quit_all_peers(void)
+{
+	slog_info(FILE_LEVEL, "Leaving all the peers");
+	list_foreach_value(known_peers, quit_peer_threads_iterator, NULL);
 }
 
 /*
@@ -456,8 +462,7 @@ void prepare_exit_sp_mode(void)
 {
 	slog_info(FILE_LEVEL, "Removing the sp from the server");
 	rm_sp_from_server();
-	slog_info(FILE_LEVEL, "Leaving all the peers");
-	list_foreach_value(known_peers, quit_peer_threads_iterator, NULL);
+	quit_all_peers();
 }
 
 void exit_sp_mode(void)

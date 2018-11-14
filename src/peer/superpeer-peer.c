@@ -369,13 +369,6 @@ void sp_tcp_thread(void *data)
 	}
 
 	/*
-	 * Be careful while exiting if the peer was NOT joined
-	 *
-	 * Besides, if we need to tell the peer something but timeouts is >= 4 skip
-	 * that part
-	 */
-
-	/*
 	 * Do not free the peer_info struct, it will be done by the thread_manager.
 	 * That said, we need to tell the list to remove this peer.
 	 */

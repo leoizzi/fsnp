@@ -40,7 +40,7 @@ if (FSNP_MEM_DEBUG)
 endif ()
 
 set(COMMON_COMPILER_FLAGS -Wall -Wextra -Wundef -Wshadow -Wcast-align
-		-Wno-deprecated)
+		-Wno-deprecated -Winline)
 
 # -Wundef: warn if an uninitialized identifier is evaluated in an #if directive.
 
