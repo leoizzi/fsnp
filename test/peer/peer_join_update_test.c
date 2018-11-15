@@ -190,7 +190,7 @@ int main(int argc, char **argv)
 {
 	UNUSED(argc);
 	UNUSED(argv);
-	
+
 	connect_to_server();
 	wait_for_peer();
 	read_messages();
