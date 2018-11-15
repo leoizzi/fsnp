@@ -190,7 +190,7 @@ int main(int argc, char **argv)
 {
 	UNUSED(argc);
 	UNUSED(argv);
-	// TODO: implement test -> it should act as a basic superpeer. It has to connect with the server as first, then wait for a superpeer to join him, showing on stdout all the keys. Then it has to do the same with the update message
+	
 	connect_to_server();
 	wait_for_peer();
 	read_messages();

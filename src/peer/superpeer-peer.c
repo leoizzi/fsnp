@@ -168,6 +168,7 @@ static void read_sock_msg(struct peer_info *info, bool leaving,
 			info->timeouts = 0;
 			break;
 
+		/*
 		case FILE_RES: // FIXME: is this right?
 		// maybe it's better if the superpeer just know if he has done the request for itself and directly show the result
 			slog_info(FILE_LEVEL, "%s sent a FILE_RES msg. Timeouts before "
@@ -175,6 +176,7 @@ static void read_sock_msg(struct peer_info *info, bool leaving,
 			file_res_rcvd((struct fsnp_file_res *)msg);
 			info->timeouts = 0;
 			break;
+		 */
 
 		case UPDATE:
 			slog_info(FILE_LEVEL, "%s sent an UPDATE msg. Timeouts before "

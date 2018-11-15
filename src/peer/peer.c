@@ -318,7 +318,6 @@ int peer_main(bool localhost)
 	}
 
 	slog_info(STDOUT_LEVEL, "Quitting...");
-	// TODO: free all the resources of the struct library
 	if (is_superpeer()) {
 		slog_info(FILE_LEVEL, "Preparing the exit_sp_mode");
 		prepare_exit_sp_mode();
