@@ -29,7 +29,21 @@
 
 FSNP_BEGIN_DECL
 
-#define MAX_UDP_PKT_SIZE 512 // maximum size, in bytes, for a fsnp_msg
+/*
+ * Maximum size, in bytes, for a fsnp_msg going over UDP.
+ * The reason behind this number is that it's a must to avoid packet fragmentation,
+ * otherwise UDP would discard the packet, and in the protocol there isn't any
+ * mechanism of retransmission.
+ *
+ * So, in order to avoid fragmentation, a packet can have (at limit) a size of 508
+ * bytes (572 is the maximum packet size that can be atomically sent, -60 bytes
+ * used by a full-optional IP packet, -8 bytes used by UDP).
+ *
+ * Why the protocol doesn't limit the packet size to 508 bytes then?
+ * Because it's useless! The biggest packet that the protocol would send over
+ * UDP is a
+ */
+#define MAX_UDP_PKT_SIZE 256
 
 /*
  * Create a UDP socket
