@@ -21,6 +21,7 @@
 #include <memory.h>
 #include <errno.h>
 #include <arpa/inet.h>
+#include <poll.h>
 
 #include "peer/superpeer-superpeer.h"
 #include "peer/superpeer.h"
@@ -162,11 +163,8 @@ static inline void unset_snd_next(struct neighbors *nb)
  */
 static inline void set_next_as_snd_next(struct neighbors *nb)
 {
-	struct fsnp_peer p;
-
-	p.ip = nb->snd_next.ip;
-	p.port = nb->snd_next.port;
-	set_next(nb, &p);
+	unset_next(nb);
+	set_next(nb, &nb->snd_next);
 	unset_snd_next(nb);
 }
 
@@ -323,6 +321,10 @@ void ensure_next_conn(struct sp_udp_state *sus)
 		// do this until the msg on the socket is from our promoter
 	} while (!cmp_prev(sus->nb, &peer));
 
+	if (isset_snd_next(sus->nb)) { // clear the struct from the HACK
+		unset_snd_next(sus->nb);
+	}
+
 	if (msg->msg_type != NEXT) {
 		slog_warn(FILE_LEVEL, "Wrong msg type received from %s: expected %u, "
 						"got %u", sus->nb->prev_pretty, NEXT, msg->msg_type);
@@ -331,6 +333,7 @@ void ensure_next_conn(struct sp_udp_state *sus)
 		unset_all(sus->nb);
 		prepare_exit_sp_mode();
 		exit_sp_mode();
+		return;
 	}
 
 	slog_info(FILE_LEVEL, "NEXT msg received from prev %s", sus->nb->prev_pretty);
@@ -340,12 +343,43 @@ void ensure_next_conn(struct sp_udp_state *sus)
 	}
 }
 
+#define POLLFD_NUM 2
+#define PIPE 0
+#define SOCK 1
+
+/*
+ * Setup the pollfd structures
+ */
+static void setup_poll(struct pollfd *pollfd, struct sp_udp_state *sus)
+{
+	memset(pollfd, 0, sizeof(struct pollfd) * POLLFD_NUM);
+
+	pollfd[PIPE].fd = sus->pipe[READ_END];
+	pollfd[PIPE].events = POLLIN | POLLPRI;
+	pollfd[SOCK].fd = sus->sock;
+	pollfd[SOCK].events = POLLIN | POLLPRI;
+}
+
+static void pipe_event(struct sp_udp_state *sus)
+{
+	UNUSED(sus);
+}
+
+static void sock_event(struct sp_udp_state * sus)
+{
+	UNUSED(sus);
+}
+
+#define POLL_TIMEOUT 30000 // ms
+
 /*
  * Entry point for the superpeer's udp subsystem.
  */
 static void sp_udp_thread(void *data)
 {
 	struct sp_udp_state *sus = (struct sp_udp_state *)data;
+	struct pollfd pollfd[POLLFD_NUM];
+	int ret = 0;
 
 	if (isset_prev(sus->nb)) {
 		send_promoted(sus);
@@ -356,8 +390,27 @@ static void sp_udp_thread(void *data)
 		send_next(sus, NULL);
 	}
 
+	setup_poll(pollfd, sus);
 	while (!sus->should_exit) {
-		break;
+		ret = poll(pollfd, POLLFD_NUM, POLL_TIMEOUT);
+		if (ret > 0) {
+			if (pollfd[PIPE].revents) {
+				pipe_event(sus);
+				pollfd[PIPE].revents = 0;
+			}
+
+			if (pollfd[SOCK].revents) {
+				sock_event(sus);
+				pollfd[SOCK].revents = 0;
+			}
+		} else if (ret == 0) {
+			// TODO: add timeout counter to next, if it goes over 30 second try to contact him
+		} else {
+			slog_error(FILE_LEVEL, "poll error %d");
+			prepare_exit_sp_mode();
+			exit_sp_mode();
+			sus->should_exit = true;
+		}
 	}
 
 	free(sus->nb);
@@ -366,6 +419,11 @@ static void sp_udp_thread(void *data)
 	close(sus->pipe[WRITE_END]);
 	// Don't free sus, it will be freed by the thread_manager
 }
+
+#undef POLLFD_NUM
+#undef PIPE
+#undef SOCK
+#undef POLL_TIMEOUT
 
 #define NO_SP 0
 #define ONE_SP 1
@@ -382,6 +440,7 @@ int enter_sp_network(int udp, struct fsnp_peer *sps, unsigned n)
 
 	sus->nb = malloc(sizeof(struct neighbors));
 	if (!sus->nb) {
+		slog_error(FILE_LEVEL, "malloc error %d", errno);
 		free(sus);
 		return -1;
 	}
