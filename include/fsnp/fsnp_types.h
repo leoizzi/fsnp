@@ -304,10 +304,10 @@ struct packed fsnp_whosnext {
 };
 
 /*
- * Sent by a superpeer searching a given file inside the overlay network.
+ * Sent by a superpeer who's searching a file inside the overlay network.
  * There is a unique ID for the request so that it's impossible to create cycles
- * and a missing peers field, in order to propagate uselessly the message if
- * enough peers were collected before.
+ * and a missing peers field, in order to avoid to propagate uselessly the
+ * message if enough peers were collected before.
  */
 struct packed fsnp_whohas {
 	struct fsnp_msg header;
