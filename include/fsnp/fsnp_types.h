@@ -263,8 +263,8 @@ struct packed fsnp_download {
 
 /*
  * Sent to a peer by a superpeer to inform him that he is now a superpeer.
- * The promoter, if know another superpeer, will pass it to the promoted so that
- * he can still communicate with the network if the promoter will leave.
+ * The promoter, if has a prev, will pass it to the promoted so that
+ * he can still join the network if something happens to who sent this message
  */
 struct packed fsnp_promote {
 	struct fsnp_msg header;

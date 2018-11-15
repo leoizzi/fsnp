@@ -30,7 +30,7 @@ FSNP_BEGIN_DECL
  * If n == 1 in sps it will find the address of the peer who has promoted him
  * If n == 2 in sps it will find:
  *      - in the first position the address of the peer who has promoted him
- *      - in the second position the address of who will be his next
+ *      - in the second position the address of the prev of its promoter
  * Return 0 on success, -1 otherwise
  */
 int enter_sp_network(int udp, struct fsnp_peer *sps, unsigned n);

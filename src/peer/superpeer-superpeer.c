@@ -219,6 +219,24 @@ static inline void unset_prev(struct neighbors *nb)
     slog_info(FILE_LEVEL, "prev sp unset");
 }
 
+/*
+ * Clear every entry in the neighbors struct
+ */
+static void unset_all(struct neighbors *nb)
+{
+	if (isset_next(nb)) {
+		unset_next(nb);
+	}
+
+	if (isset_snd_next(nb)) {
+		unset_snd_next(nb);
+	}
+
+	if (isset_prev(nb)) {
+		unset_prev(nb);
+	}
+}
+
 #undef SET_NEXT
 #undef GET_NEXT
 #undef UNSET_NEXT
@@ -255,8 +273,31 @@ static void send_promoted(struct sp_udp_state *sus)
 	}
 }
 
+static void send_next(struct sp_udp_state *sus, const struct fsnp_peer *old)
+{
+	struct fsnp_next next;
+	fsnp_err_t err;
+	struct in_addr addr;
+
+	fsnp_init_next(&next, old);
+	if (old) {
+		addr.s_addr = htonl(old->ip);
+		slog_info(FILE_LEVEL, "Sending a NEXT msg to %s with old_peer %s:%hu",
+				sus->nb->next_pretty, inet_ntoa(addr), old->port);
+	} else {
+		slog_info(FILE_LEVEL, "Sending a NEXT msg to %s without old_peer",
+				sus->nb->next_pretty)
+	}
+
+	err = fsnp_send_next(sus->sock, 0, &next, &sus->nb->next);
+	if (err != E_NOERR) {
+		fsnp_log_err_msg(err, false);
+	}
+}
+
 /*
- * Make sure that the prev will send a NEXT msg. If the timer will fire
+ * Make sure that the prev will send a NEXT msg. If the timer will fire, send a
+ * NEXT msg to his prev, which is stored in the snd_next position
  */
 void ensure_next_conn(struct sp_udp_state *sus)
 {
@@ -271,7 +312,13 @@ void ensure_next_conn(struct sp_udp_state *sus)
 			slog_warn(FILE_LEVEL, "Unable to receive a next msg from the prev");
 			unset_prev(sus->nb);
 			fsnp_log_err_msg(err, false);
-			return;
+			if (isset_snd_next(sus->nb)) {
+				set_prev(sus->nb, &sus->nb->snd_next);
+				unset_snd_next(sus->nb);
+				continue;
+			} else {
+				return;
+			}
 		}
 		// do this until the msg on the socket is from our promoter
 	} while (!cmp_prev(sus->nb, &peer));
@@ -281,7 +328,7 @@ void ensure_next_conn(struct sp_udp_state *sus)
 						"got %u", sus->nb->prev_pretty, NEXT, msg->msg_type);
 		slog_warn(STDOUT_LEVEL, "Unable to join the sp network. Going back to "
 						  "be a normal peer");
-		sus->should_exit = true;
+		unset_all(sus->nb);
 		prepare_exit_sp_mode();
 		exit_sp_mode();
 	}
@@ -306,7 +353,7 @@ static void sp_udp_thread(void *data)
 	}
 
 	if (isset_next(sus->nb)) {
-		// TODO: send next without the old_next
+		send_next(sus, NULL);
 	}
 
 	while (!sus->should_exit) {
@@ -317,6 +364,7 @@ static void sp_udp_thread(void *data)
 	close(sus->sock);
 	close(sus->pipe[READ_END]);
 	close(sus->pipe[WRITE_END]);
+	// Don't free sus, it will be freed by the thread_manager
 }
 
 #define NO_SP 0
@@ -359,6 +407,12 @@ int enter_sp_network(int udp, struct fsnp_peer *sps, unsigned n)
 
 		case TWO_SPS:
 			set_prev(sus->nb, &sps[0]);
+			/* HACK:
+			 * at the beginning store the address of the second prev in
+			 * the snd_next, because this field will not be used at the
+			 * beginning and we need the address of the second_prev only at
+			 * startup
+			 */
 			set_snd_next(sus->nb, &sps[1]);
 			break;
 
