@@ -131,7 +131,7 @@ enum fsnp_peer_type {
 typedef enum fsnp_peer_type fsnp_peer_type_t;
 
 /*
- * Asks to the server a list of superpeers
+ * Ask to the server a list of superpeers
  */
 struct packed fsnp_query {
 		struct fsnp_msg header;
@@ -158,7 +158,7 @@ struct packed fsnp_query_res {
 };
 
 /*
- * Tell the server to add a new superpeer to its list.
+ * Tell to the server to add a new superpeer to its list.
  */
 struct packed fsnp_add_sp {
 		struct fsnp_msg header;
@@ -167,9 +167,9 @@ struct packed fsnp_add_sp {
 };
 
 /*
- * Tell the server to remove a superpeer. Based on 'peer_type' the 'port' field
- * inside addr is either the port number used by the peers or the port number
- * used by the superpeers
+ * Tell to the server to remove a superpeer. Based on 'peer_type' the 'port'
+ * field inside addr is either the port number used by the peers or the port
+ * number used by the superpeers
  */
 struct packed fsnp_rm_sp {
 		struct fsnp_msg header;
@@ -194,15 +194,15 @@ struct packed fsnp_ack {
 };
 
 /*
- * Sent by a peer/superpeer when it's leaving the network
+ * Sent by a peer/superpeer when it's leaving the superpeer/network
  */
 struct packed fsnp_leave {
 		struct fsnp_msg header;
 };
 
 /*
- * Ask the superpeer to find the peers who are sharing the file with the given
- * hash
+ * Ask to the superpeer to find the peers who are sharing the file with the
+ * given hash
  */
 struct packed fsnp_file_req {
 		struct fsnp_msg header;
@@ -215,6 +215,7 @@ struct packed fsnp_file_req {
  */
 struct packed fsnp_file_res {
 		struct fsnp_msg header;
+		sha256_t req_id;
 		uint8_t num_peers;
 		struct fsnp_peer peers[1];
 };
@@ -252,18 +253,15 @@ struct packed fsnp_error {
 
 /*
  * Sent as response to fsnp_get_file in case the file is available.
- * In dw_port is indicated the port where to contact the peer for downloading
- * the file requested.
  */
 struct packed fsnp_download {
 	struct fsnp_msg header;
 	uint64_t file_size;
-	uint16_t dw_port;
 };
 
 /*
- * Sent to a peer by a superpeer to inform him that he is now a superpeer.
- * The promoter, if has a prev, will pass it to the promoted so that
+ * Sent to a peer by its superpeer to inform him that he is now a superpeer.
+ * The promoter, if has a next, will pass it to the promoted so that
  * he can still join the network if something happens to who sent this message
  */
 struct packed fsnp_promote {
@@ -284,7 +282,7 @@ struct packed fsnp_promoted {
 /*
  * This is sent to the superpeer who's going to be the next of the sender.
  * If it contains the address of the previous next, the superpeer who receive
- * this message can contact him for setting him as its next.
+ * this message must contact him for setting old_next as its next.
  * Otherwise, if it's compose by all 0's the receiver will not modify its next
  */
 struct packed fsnp_next {
