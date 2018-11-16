@@ -231,6 +231,8 @@ static void promote_peer(void)
 	}
 }
 
+static bool accept_conn = true;
+
 /*
  * Accept a new peer, establishing a TCP connection with him.
  * If the number of peers is greater than MAX_KNOWN_PEER promote the peer at the
@@ -247,6 +249,11 @@ static void accept_peer(void)
 	size_t n = 0;
 	int ret = 0;
 	int added = 0;
+
+	if (!accept_conn) {
+		slog_info(FILE_LEVEL, "Refusing a new connection on the sp's TCP socket");
+		return;
+	}
 
 	s = get_tcp_sp_sock();
 	memset(&addr, 0, socklen);
@@ -375,6 +382,7 @@ bool enter_sp_mode(struct fsnp_peer *sps, unsigned n)
 		return false;
 	}
 
+	accept_conn = true;
 	ret = initialize_sp(sps, n);
 	if (!ret) {
 		close_keys_cache();
@@ -393,7 +401,6 @@ bool enter_sp_mode(struct fsnp_peer *sps, unsigned n)
 static int quit_peer_threads_iterator(void *item, size_t idx, void *user)
 {
 	struct peer_info *info = (struct peer_info *)item;
-	struct in_addr addr;
 	ssize_t w = 0;
 	int msg = PIPE_QUIT;
 
@@ -402,10 +409,8 @@ static int quit_peer_threads_iterator(void *item, size_t idx, void *user)
 
 	w = fsnp_write(info->pipefd[WRITE_END], &msg, sizeof(int));
 	if (w < 0) {
-		addr.s_addr = htonl(info->addr.ip);
 		slog_warn(FILE_LEVEL, "Unable to communicate to the 'sp_tcp_thread' of"
-						" peer %s:%hu to quit\n", inet_ntoa(addr),
-						htons(info->addr.port));
+						" peer %s to quit", info->pretty_addr);
 	}
 
 	return GO_AHEAD;
@@ -460,9 +465,10 @@ static void rm_sp_from_server(void)
 
 void prepare_exit_sp_mode(void)
 {
+	accept_conn = false;
+	quit_all_peers();
 	slog_info(FILE_LEVEL, "Removing the sp from the server");
 	rm_sp_from_server();
-	quit_all_peers();
 }
 
 void exit_sp_mode(void)
