@@ -297,15 +297,16 @@ static void send_next(struct sp_udp_state *sus, const struct fsnp_peer *old)
  * Make sure that the prev will send a NEXT msg. If the timer will fire, send a
  * NEXT msg to his prev, which is stored in the snd_next position
  */
-void ensure_next_conn(struct sp_udp_state *sus)
+static void ensure_prev_conn(struct sp_udp_state *sus)
 {
 	struct fsnp_msg *msg = NULL;
 	struct fsnp_next *next = NULL;
-	struct fsnp_peer peer;
+	struct fsnp_peer p;
 	fsnp_err_t err;
+	unsigned counter = 0;
 
-	do {
-		msg = fsnp_timed_recvfrom(sus->sock, 0, true, &peer, &err);
+	while (true) {
+		msg = fsnp_timed_recvfrom(sus->sock, 0, true, &p, &err);
 		if (!msg) {
 			slog_warn(FILE_LEVEL, "Unable to receive a next msg from the prev");
 			unset_prev(sus->nb);
@@ -315,21 +316,40 @@ void ensure_next_conn(struct sp_udp_state *sus)
 				unset_snd_next(sus->nb);
 				continue;
 			} else {
+				slog_warn(FILE_LEVEL, "Unable to ensure the prev's connection");
+				unset_all(sus->nb);
+				prepare_exit_sp_mode();
+				exit_sp_mode();
 				return;
 			}
 		}
-		// do this until the msg on the socket is from our promoter
-	} while (!cmp_prev(sus->nb, &peer));
 
-	if (isset_snd_next(sus->nb)) { // clear the struct from the HACK
+		if (!cmp_prev(sus->nb, &p)) {
+			free(msg);
+			counter++;
+			if (counter >= 4) {
+				slog_warn(FILE_LEVEL, "Too much time waiting for prev.");
+				unset_all(sus->nb);
+				prepare_exit_sp_mode();
+				exit_sp_mode();
+				return;
+			} else {
+				continue;
+			}
+		} else {
+			break;
+		}
+		// do this until the msg on the socket is from our promoter
+	}
+
+	if (isset_snd_next(sus->nb)) { // clear neighbors from the HACK
 		unset_snd_next(sus->nb);
 	}
 
 	if (msg->msg_type != NEXT) {
 		slog_warn(FILE_LEVEL, "Wrong msg type received from %s: expected %u, "
 						"got %u", sus->nb->prev_pretty, NEXT, msg->msg_type);
-		slog_warn(STDOUT_LEVEL, "Unable to join the sp network. Going back to "
-						  "be a normal peer");
+		free(msg);
 		unset_all(sus->nb);
 		prepare_exit_sp_mode();
 		exit_sp_mode();
@@ -340,6 +360,47 @@ void ensure_next_conn(struct sp_udp_state *sus)
 	next = (struct fsnp_next *)msg;
 	if (next->old_next.ip != 0 && next->old_next.port != 0) {
 		set_next(sus->nb, &next->old_next);
+	}
+
+	free(next);
+}
+
+static void ensure_next_conn(struct sp_udp_state *sus)
+{
+	struct fsnp_msg *msg = NULL;
+	struct fsnp_peer p;
+	fsnp_err_t err;
+	unsigned counter = 0;
+
+	while (true) {
+		msg = fsnp_timed_recvfrom(sus->sock, 0, true, &p, &err);
+		if (!msg) {
+			slog_warn(FILE_LEVEL, "Unable to ensure next's connection");
+			unset_all(sus->nb);
+			prepare_exit_sp_mode();
+			exit_sp_mode();
+			return;
+		}
+
+		if (!cmp_next(sus->nb, &p)) {
+			free(sus);
+			counter++;
+			if (counter >= 4) {
+				slog_warn(FILE_LEVEL, "Too much time waiting for next");
+				unset_all(sus->nb);
+				prepare_exit_sp_mode();
+				exit_sp_mode();
+				return;
+			}
+			continue;
+		} else {
+			break;
+		}
+	}
+
+	if (msg->msg_type != ACK) {
+		slog_warn(FILE_LEVEL, "Wrong msg type received from %s: expected %u, "
+		                      "got %u", sus->nb->next_pretty, NEXT, msg->msg_type);
 	}
 }
 
@@ -383,11 +444,12 @@ static void sp_udp_thread(void *data)
 
 	if (isset_prev(sus->nb)) {
 		send_promoted(sus);
-		ensure_next_conn(sus);
+		ensure_prev_conn(sus);
 	}
 
 	if (isset_next(sus->nb)) {
 		send_next(sus, NULL);
+		ensure_next_conn(sus);
 	}
 
 	setup_poll(pollfd, sus);
