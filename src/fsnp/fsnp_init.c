@@ -133,7 +133,7 @@ void fsnp_init_file_req(struct fsnp_file_req *file_req, sha256_t hash)
 	fsnp_init_msg(&file_req->header, FILE_REQ, sizeof(*file_req));
 }
 
-struct fsnp_file_res *fsnp_create_file_res(uint8_t num_peers,
+struct fsnp_file_res *fsnp_create_file_res(sha256_t req_id, uint8_t num_peers,
                                            const struct fsnp_peer *peers)
 {
 	struct fsnp_file_res *file_res = NULL;
@@ -147,6 +147,7 @@ struct fsnp_file_res *fsnp_create_file_res(uint8_t num_peers,
 		return NULL;
 	}
 
+	memcpy(file_res->req_id, req_id, sizeof(sha256_t));
 	file_res->num_peers = num_peers;
 	memcpy(file_res->peers, peers, peer_size);
 	fsnp_init_msg(&file_res->header, FILE_RES, size);

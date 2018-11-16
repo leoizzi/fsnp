@@ -62,7 +62,8 @@ EXPORT void fsnp_init_leave(struct fsnp_leave *leave);
 
 EXPORT void fsnp_init_file_req(struct fsnp_file_req *file_req, sha256_t hash);
 
-EXPORT struct fsnp_file_res *fsnp_create_file_res(uint8_t num_peers,
+EXPORT struct fsnp_file_res *fsnp_create_file_res(sha256_t req_id,
+												  uint8_t num_peers,
                                                   const struct fsnp_peer *peers);
 
 EXPORT struct fsnp_update *fsnp_create_update(uint32_t num_files,
