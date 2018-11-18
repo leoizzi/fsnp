@@ -30,6 +30,11 @@ FSNP_BEGIN_DECL
 
 EXPORT void sha256(const void *data, size_t len, sha256_t hash);
 
+#define STRINGIFY_HASH(key_str, key, i) \
+	for (i = 0; i < SHA256_BYTES; i++) { \
+		snprintf(&key_str[i], sizeof(uint8_t) + 1, "%hhx", key[i]); \
+	}
+
 FSNP_END_DECL
 
 #endif //SHA256_H_

@@ -35,11 +35,6 @@
 
 #define CACHE_MAX_SIZE 1UL << 22 // 4.194.304
 
-#define STRINGIFY_HASH(key_str, key, i) \
-	for (i = 0; i < SHA256_BYTES; i++) { \
-		snprintf(&key_str[i], sizeof(uint8_t) + 1, "%hhx", key[i]); \
-	}
-
 static hashtable_t *cache = NULL;
 
 struct key_cached {
@@ -316,5 +311,4 @@ void close_keys_cache(void)
 	cache = NULL;
 }
 
-#undef STRINGIFY_HASH
 #undef CACHE_MAX_SIZE

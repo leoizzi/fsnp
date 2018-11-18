@@ -509,11 +509,6 @@ static size_t read_filename_from_pipe(char *msg)
 	return size;
 }
 
-#define STRINGIFY_HASH(key_str, key, i) \
-	for (i = 0; i < SHA256_BYTES; i++) { \
-		snprintf(&key_str[i], sizeof(uint8_t) + 1, "%hhx", key[i]); \
-	}
-
 /*
  *  Send a who_has message to the superpeer
  */
@@ -556,8 +551,6 @@ static void send_file_req(void)
 
 	tcp_state.file_asked = true;
 }
-
-#undef STRINGIFY_HASH
 
 /*
  * Read a message from the pipe and call the right handler
