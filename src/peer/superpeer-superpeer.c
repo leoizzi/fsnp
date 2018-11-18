@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <arpa/inet.h>
 #include <poll.h>
+#include <time.h>
 
 #include "peer/superpeer-superpeer.h"
 #include "peer/superpeer.h"
@@ -30,6 +31,8 @@
 #include "fsnp/fsnp.h"
 
 #include "slog/slog.h"
+
+// TODO: what to do if the neighbors field are set to this peer?
 
 struct neighbors_flag {
 	uint8_t next_set : 1;
@@ -249,11 +252,68 @@ struct sp_udp_state {
 	int sock;
 	int pipe[2];
 	struct neighbors *nb;
+	struct timespec last;
 	bool should_exit;
 };
 
 #define READ_END 0
 #define WRITE_END 1
+
+#define NSEC_TO_SEC(ns) ((double)(ns) / 1000000000.)
+#define INVALIDATE_THRESHOLD 2. // minutes
+
+#define VALIDATED 0
+#define INVALIDATED_NO_SND 1
+#define INVALIDATED_YES_SND 2
+
+/*
+ * Copy the content of b in a
+ */
+static inline void swap_timespec(struct timespec *a, struct timespec *b)
+{
+	a->tv_sec = b->tv_sec;
+	a->tv_nsec = b->tv_nsec;
+}
+
+/*
+ * Invalidate the next field if needed. In case it's needed the swap with the
+ * snd_next (if present) will be done.
+ * On output in last will be found the values present in curr.
+ *
+ * - Return VALIDATED if the superpeer has listened the next in two minutes
+ * - Return INVALIDATED_NO_SND if the next was invalidated but no snd_next is
+ *      known
+ * - Return INVALIDATED_YES_SND if the next was invalidated and a swap with the
+ *      snd_next was accomplished
+ */
+static int invalidate_next_if_needed(struct neighbors *nb,
+                                     struct timespec *last,
+                                     struct timespec *curr)
+{
+	double l = 0;
+	double c = 0;
+
+	l = (double)last->tv_sec + NSEC_TO_SEC(last->tv_nsec);
+	c = (double)curr->tv_sec + NSEC_TO_SEC(curr->tv_nsec);
+	swap_timespec(last, curr);
+	if (c - l < INVALIDATE_THRESHOLD) {
+		return VALIDATED;
+	}
+
+	if (isset_snd_next(nb)) {
+		slog_info(FILE_LEVEL, "Next '%s' invalidated.", nb->next_pretty);
+		set_next_as_snd_next(nb);
+		return INVALIDATED_YES_SND;
+	} else {
+		slog_info(FILE_LEVEL, "Next '%s' invalidated. No snd_next to substitute"
+						" it.", nb->next_pretty);
+		unset_next(nb);
+		return INVALIDATED_NO_SND;
+	}
+}
+
+#undef NSEC_TO_SEC
+#undef INVALIDATE_THRESHOLD
 
 /*
  * Send a promoted msg to the next sp
@@ -271,6 +331,10 @@ static void send_promoted(struct sp_udp_state *sus)
 	}
 }
 
+/*
+ * Send a NEXT msg to the next sp. Pass NULL in 'old' if the next doesn't have
+ * to change its next.
+ */
 static void send_next(struct sp_udp_state *sus, const struct fsnp_peer *old)
 {
 	struct fsnp_next next;
@@ -426,9 +490,34 @@ static void pipe_event(struct sp_udp_state *sus)
 	UNUSED(sus);
 }
 
-static void sock_event(struct sp_udp_state * sus)
+static void sock_event(struct sp_udp_state *sus)
 {
 	UNUSED(sus);
+}
+
+static void timeout_event(struct sp_udp_state *sus)
+{
+	struct timespec curr;
+	int ret = 0;
+
+	clock_gettime(CLOCK_MONOTONIC, &curr);
+	ret = invalidate_next_if_needed(sus->nb, &sus->last, &curr);
+	switch (ret) {
+		case VALIDATED:
+			break;
+
+		case INVALIDATED_NO_SND:
+			// TODO: Continue from here
+			break;
+
+		case INVALIDATED_YES_SND:
+			send_next(sus, NULL);
+			break;
+
+		default:
+			slog_panic(FILE_LEVEL, "Unknown return from invalidat_next_if_needed");
+			break;
+	}
 }
 
 #define POLL_TIMEOUT 30000 // ms
@@ -453,6 +542,7 @@ static void sp_udp_thread(void *data)
 	}
 
 	setup_poll(pollfd, sus);
+	clock_gettime(CLOCK_MONOTONIC, &sus->last);
 	while (!sus->should_exit) {
 		ret = poll(pollfd, POLLFD_NUM, POLL_TIMEOUT);
 		if (ret > 0) {
@@ -466,7 +556,7 @@ static void sp_udp_thread(void *data)
 				pollfd[SOCK].revents = 0;
 			}
 		} else if (ret == 0) {
-			// TODO: add timeout counter to next, if it goes over 30 second try to contact him
+			timeout_event(sus);
 		} else {
 			slog_error(FILE_LEVEL, "poll error %d");
 			prepare_exit_sp_mode();
@@ -486,6 +576,9 @@ static void sp_udp_thread(void *data)
 #undef PIPE
 #undef SOCK
 #undef POLL_TIMEOUT
+#undef INVALIDATED_NO_SND
+#undef INVALIDATED_YES_SND
+#undef VALIDATED
 
 #define NO_SP 0
 #define ONE_SP 1
@@ -494,13 +587,13 @@ static void sp_udp_thread(void *data)
 int enter_sp_network(int udp, struct fsnp_peer *sps, unsigned n)
 {
 	int ret = 0;
-	struct sp_udp_state *sus = malloc(sizeof(struct sp_udp_state));
+	struct sp_udp_state *sus = calloc(1, sizeof(struct sp_udp_state));
 	if (!sus) {
 		slog_error(FILE_LEVEL, "malloc error %d", errno);
 		return -1;
 	}
 
-	sus->nb = malloc(sizeof(struct neighbors));
+	sus->nb = calloc(1, sizeof(struct neighbors));
 	if (!sus->nb) {
 		slog_error(FILE_LEVEL, "malloc error %d", errno);
 		free(sus);
@@ -515,7 +608,6 @@ int enter_sp_network(int udp, struct fsnp_peer *sps, unsigned n)
 		return -1;
 	}
 
-	memset(sus->nb, 0, sizeof(struct neighbors));
 	sus->sock = udp;
 	sus->should_exit = false;
 	switch (n) {
