@@ -36,8 +36,15 @@ endif()
 
 if (FSNP_MEM_DEBUG)
 	message(STATUS "Compiling for Valgrind")
-	set(FSNP_GLOBAL_DEF ${FSNP_GLOBAL_DEF} -DFSNP_MEM_DEBUG)
+	if(APPLE)
+		set(FSNP_GLOBAL_DEF ${FSNP_GLOBAL_DEF} -DFSNP_MEM_DEBUG)
+	endif()
 endif ()
+
+if (FSNP_GSAN)
+	message(STATUS "Compiling for Google Sanitizers")
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fno-omit-frame-pointer -g")
+endif()
 
 set(COMMON_COMPILER_FLAGS -Wall -Wextra -Wundef -Wshadow -Wcast-align
 		-Wno-deprecated -Winline)
