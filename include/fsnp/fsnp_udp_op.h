@@ -86,9 +86,8 @@ EXPORT fsnp_err_t fsnp_timed_sendto(int sock, uint16_t timeout,
  * case the timeout fires. The backoff will be performed for 4 times before
  * returning to the caller
  */
-EXPORT struct fsnp_msg *fsnp_timed_recvfrom(int sock, uint16_t timeout,
-									  bool backoff, struct fsnp_peer *peer,
-									  fsnp_err_t *err);
+EXPORT struct fsnp_msg *fsnp_timed_recvfrom(int sock, uint16_t timeout, struct fsnp_peer *peer,
+                                            fsnp_err_t *err);
 
 /*
  * Send an ACK msg to 'peer'

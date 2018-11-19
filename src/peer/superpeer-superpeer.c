@@ -81,7 +81,7 @@ static inline void set_next(struct neighbors *nb, struct fsnp_peer *addr)
 /*
  * Return true if the next sp is known, false otherwise
  */
-static always_inline bool isset_next(struct neighbors *nb)
+static always_inline bool isset_next(const struct neighbors *nb)
 {
 	return GET_NEXT(nb->flags) ? true : false;
 }
@@ -89,7 +89,7 @@ static always_inline bool isset_next(struct neighbors *nb)
 /*
  * Compare a fsnp_peer with the next. If they match return true, false otherwise
  */
-static inline bool cmp_next(struct neighbors *nb, struct fsnp_peer *p)
+static inline bool cmp_next(const struct neighbors *nb, const struct fsnp_peer *p)
 {
 	if (nb->next.ip == p->ip) {
 		if (nb->next.port == p->port) {
@@ -130,7 +130,7 @@ static inline void set_snd_next(struct neighbors *nb, struct fsnp_peer *addr)
 /*
  * Return true if the snd_next sp is known, false otherwise
  */
-static always_inline int isset_snd_next(struct neighbors *nb)
+static always_inline int isset_snd_next(const struct neighbors *nb)
 {
 	return GET_SND_NEXT(nb->flags) ? true : false;
 }
@@ -139,7 +139,8 @@ static always_inline int isset_snd_next(struct neighbors *nb)
  * Compare a fsnp_peer with the snd_next. If they match return true, false
  * otherwise
  */
-static inline bool cmp_snd_next(struct neighbors *nb, struct fsnp_peer *p)
+static inline bool cmp_snd_next(const struct neighbors *nb,
+		const struct fsnp_peer *p)
 {
 	if (nb->snd_next.ip == p->ip) {
 		if (nb->snd_next.port == p->port) {
@@ -190,7 +191,7 @@ static inline void set_prev(struct neighbors *nb, struct fsnp_peer *addr)
 /*
  * Return true if the prev sp is known, false otherwise
  */
-static always_inline int isset_prev(struct neighbors *nb)
+static always_inline int isset_prev(const struct neighbors *nb)
 {
 	return GET_PREV(nb->flags) ? true : false;
 }
@@ -198,7 +199,7 @@ static always_inline int isset_prev(struct neighbors *nb)
 /*
  * Compare a fsnp_peer with the prev. If they match return true, false otherwise
  */
-static inline bool cmp_prev(struct neighbors *nb, struct fsnp_peer *p)
+static inline bool cmp_prev(const struct neighbors *nb, const struct fsnp_peer *p)
 {
 	if (nb->prev.ip == p->ip) {
 		if (nb->prev.port == p->port) {
@@ -273,6 +274,14 @@ static inline void swap_timespec(struct timespec *a, struct timespec *b)
 {
 	a->tv_sec = b->tv_sec;
 	a->tv_nsec = b->tv_nsec;
+}
+
+/*
+ * Update 't' to the current time
+ */
+static inline void update_timespec(struct timespec *t)
+{
+	clock_gettime(CLOCK_MONOTONIC, t);
 }
 
 /*
@@ -370,12 +379,13 @@ static void ensure_prev_conn(struct sp_udp_state *sus)
 	unsigned counter = 0;
 
 	while (true) {
-		msg = fsnp_timed_recvfrom(sus->sock, 0, true, &p, &err);
-		if (!msg) {
+		msg = fsnp_timed_recvfrom(sus->sock, 0, &p, &err);
+		if (!msg && counter >= 4) {
 			slog_warn(FILE_LEVEL, "Unable to receive a next msg from the prev");
 			unset_prev(sus->nb);
 			fsnp_log_err_msg(err, false);
 			if (isset_snd_next(sus->nb)) {
+				counter = 0;
 				set_prev(sus->nb, &sus->nb->snd_next);
 				unset_snd_next(sus->nb);
 				continue;
@@ -386,20 +396,17 @@ static void ensure_prev_conn(struct sp_udp_state *sus)
 				exit_sp_mode();
 				return;
 			}
+		} else {
+			fsnp_log_err_msg(err, false);
+			counter++;
+			slog_info(FILE_LEVEL, "Trying to contact for the %d time the prev",
+			          counter);
+			send_promoted(sus);
 		}
 
 		if (!cmp_prev(sus->nb, &p)) {
 			free(msg);
-			counter++;
-			if (counter >= 4) {
-				slog_warn(FILE_LEVEL, "Too much time waiting for prev.");
-				unset_all(sus->nb);
-				prepare_exit_sp_mode();
-				exit_sp_mode();
-				return;
-			} else {
-				continue;
-			}
+			continue;
 		} else {
 			break;
 		}
@@ -429,6 +436,9 @@ static void ensure_prev_conn(struct sp_udp_state *sus)
 	free(next);
 }
 
+/*
+ * Make sure that the next will send
+ */
 static void ensure_next_conn(struct sp_udp_state *sus)
 {
 	struct fsnp_msg *msg = NULL;
@@ -437,25 +447,24 @@ static void ensure_next_conn(struct sp_udp_state *sus)
 	unsigned counter = 0;
 
 	while (true) {
-		msg = fsnp_timed_recvfrom(sus->sock, 0, true, &p, &err);
-		if (!msg) {
+		msg = fsnp_timed_recvfrom(sus->sock, 0, &p, &err);
+		if (!msg && counter >= 4) {
 			slog_warn(FILE_LEVEL, "Unable to ensure next's connection");
+			fsnp_log_err_msg(err, false);
 			unset_all(sus->nb);
 			prepare_exit_sp_mode();
 			exit_sp_mode();
 			return;
+		} else {
+			fsnp_log_err_msg(err, false);
+			counter++;
+			slog_info(FILE_LEVEL, "Trying to contact for the %d time the next",
+					counter);
+			send_next(sus, NULL);
 		}
 
 		if (!cmp_next(sus->nb, &p)) {
-			free(sus);
-			counter++;
-			if (counter >= 4) {
-				slog_warn(FILE_LEVEL, "Too much time waiting for next");
-				unset_all(sus->nb);
-				prepare_exit_sp_mode();
-				exit_sp_mode();
-				return;
-			}
+			free(msg);
 			continue;
 		} else {
 			break;
@@ -466,6 +475,8 @@ static void ensure_next_conn(struct sp_udp_state *sus)
 		slog_warn(FILE_LEVEL, "Wrong msg type received from %s: expected %u, "
 		                      "got %u", sus->nb->next_pretty, NEXT, msg->msg_type);
 	}
+
+	free(msg);
 }
 
 #define POLLFD_NUM 2
@@ -485,16 +496,122 @@ static void setup_poll(struct pollfd *pollfd, struct sp_udp_state *sus)
 	pollfd[SOCK].events = POLLIN | POLLPRI;
 }
 
-static void pipe_event(struct sp_udp_state *sus)
+/*
+ * Read a message received on the pipe
+ */
+static void read_pipe_msg(struct sp_udp_state *sus)
 {
+	// TODO: implement
 	UNUSED(sus);
 }
 
-static void sock_event(struct sp_udp_state *sus)
+/*
+ * Handle an event occurred on the pipe
+ */
+static void pipe_event(struct sp_udp_state *sus, short revents)
 {
-	UNUSED(sus);
+	if (revents & POLLIN || revents & POLLPRI || revents & POLLRDBAND) {
+		read_pipe_msg(sus);
+	} else {
+		slog_error(FILE_LEVEL, "pipe revents: %d", revents);
+		prepare_exit_sp_mode();
+		exit_sp_mode();
+		sus->should_exit = true;
+	}
 }
 
+/*
+ * Write into s the string representation of sender's address
+ */
+static void stringify_sender(char *s, const struct neighbors *nb,
+		const struct fsnp_peer *sender)
+{
+	struct in_addr a;
+
+	if (cmp_next(nb, sender)) {
+		strncpy(s, nb->next_pretty, sizeof(char) * 32);
+	} else if (cmp_prev(nb, sender)) {
+		strncpy(s, nb->prev_pretty, sizeof(char) * 32);
+	} else if (cmp_snd_next(nb, sender)) {
+		strncpy(s, nb->snd_next_pretty, sizeof(char) * 32);
+	} else {
+		memset(s, 0, sizeof(char) * 32);
+		a.s_addr = htonl(sender->ip);
+		snprintf(s, sizeof(char) * 32, "%s:%hu", inet_ntoa(a),
+		         sender->port);
+	}
+}
+
+/*
+ * Read a message sent on the socket
+ */
+static void read_sock_msg(struct sp_udp_state *sus)
+{
+	struct fsnp_msg *msg = NULL;
+	fsnp_err_t err;
+	struct fsnp_peer sender;
+	char sender_str[32];
+
+	msg = fsnp_timed_recvfrom(sus->sock, 0, &sender, &err);
+	if (!msg) {
+		fsnp_log_err_msg(err, false);
+		return;
+	}
+
+	if (cmp_next(sus->nb, &sender)) {
+		update_timespec(&sus->last);
+	}
+
+	stringify_sender(sender_str, sus->nb, &sender);
+	switch (msg->msg_type) {
+		case NEXT:
+			// TODO: continue from here
+			break;
+
+		case PROMOTED:
+			break;
+
+		case WHOSNEXT:
+			break;
+
+		case WHOHAS:
+			break;
+
+		case ACK:
+			slog_info(FILE_LEVEL, "ACK msg received from %s", sender_str);
+			break;
+
+		case LEAVE:
+			break;
+
+		default:
+			slog_warn(FILE_LEVEL, "Unexpected msg_type received on sp_udp_sock "
+						 "= %u", msg->msg_type);
+			break;
+	}
+
+	free(msg);
+}
+
+/*
+ * Handle an event occurred on the socket
+ */
+static void sock_event(struct sp_udp_state *sus, short revents)
+{
+	if (revents & POLLIN || revents & POLLPRI || revents & POLLRDBAND) {
+		read_sock_msg(sus);
+	} else {
+		slog_error(FILE_LEVEL, "sock revents: %d", revents);
+		prepare_exit_sp_mode();
+		exit_sp_mode();
+		sus->should_exit = true;
+	}
+}
+
+/*
+ * Called when the poll has timed out. This function checks if the next is still
+ * valid. If not it will substitute it with the snd_next.
+ */
 static void timeout_event(struct sp_udp_state *sus)
 {
 	struct timespec curr;
@@ -506,16 +623,16 @@ static void timeout_event(struct sp_udp_state *sus)
 		case VALIDATED:
 			break;
 
-		case INVALIDATED_NO_SND:
-			// TODO: Continue from here
+		case INVALIDATED_NO_SND: // FIXME: maybe this case is useless? Or here we can send a WHOSNEXT msg?
 			break;
 
 		case INVALIDATED_YES_SND:
 			send_next(sus, NULL);
+			ensure_next_conn(sus);
 			break;
 
 		default:
-			slog_panic(FILE_LEVEL, "Unknown return from invalidat_next_if_needed");
+			slog_panic(FILE_LEVEL, "Unknown return from invalidate_next_if_needed");
 			break;
 	}
 }
@@ -547,12 +664,12 @@ static void sp_udp_thread(void *data)
 		ret = poll(pollfd, POLLFD_NUM, POLL_TIMEOUT);
 		if (ret > 0) {
 			if (pollfd[PIPE].revents) {
-				pipe_event(sus);
+				pipe_event(sus, pollfd[PIPE].revents);
 				pollfd[PIPE].revents = 0;
 			}
 
 			if (pollfd[SOCK].revents) {
-				sock_event(sus);
+				sock_event(sus, pollfd[SOCK].revents);
 				pollfd[SOCK].revents = 0;
 			}
 		} else if (ret == 0) {

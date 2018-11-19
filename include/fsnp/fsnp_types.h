@@ -294,7 +294,9 @@ struct packed fsnp_next {
  * A superpeer is asking to his next who's after him.
  * The superpeer who has asked the question fills the 'next' field with all 0's,
  * while the receiver will put the address of its next and will send the message
- * back
+ * back.
+ * This message will be also sent, already filled, to the prev if the next of
+ * the next will change.
  */
 struct packed fsnp_whosnext {
 	struct fsnp_msg header;
@@ -303,16 +305,19 @@ struct packed fsnp_whosnext {
 
 /*
  * Sent by a superpeer who's searching a file inside the overlay network.
- * There is a unique ID for the request so that it's impossible to create cycles
- * and a missing peers field, in order to avoid to propagate uselessly the
- * message if enough peers were collected before.
+ * There is a unique ID for the request so that it's impossible to create
+ * cycles.
+ * The 'sp' field contains the address of the peer who has started the request,
+ * so that if num_peers become equals to 10 it can be directly contacted with
+ * the data requested.
  */
 struct packed fsnp_whohas {
 	struct fsnp_msg header;
+	struct fsnp_peer sp;
 	sha256_t req_id;
 	sha256_t file_hash;
-	uint8_t missing_peers;
-
+	uint8_t num_peers;
+	struct fsnp_peer owners[1];
 };
 
 FSNP_END_DECL

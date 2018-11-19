@@ -240,20 +240,28 @@ fsnp_err_t fsnp_timed_sendto(int sock, uint16_t timeout,
 	return err;
 }
 
-/*
- * Perform a fsnp_recvfrom with a timer of 'timeout' without a backoff
- */
-static struct fsnp_msg *nobackoff_recvfrom(struct pollfd *pollfd, int timeout,
-                                           struct fsnp_peer *peer, fsnp_err_t *err)
+struct fsnp_msg *fsnp_timed_recvfrom(int sock, uint16_t timeout,
+									 struct fsnp_peer *peer, fsnp_err_t *err)
 {
+	struct pollfd pollfd;
+	int t = 0;
 	int ret = 0;
 	short revents = 0;
 
-	ret = poll(pollfd, 1, timeout);
+	pollfd.fd = sock;
+	pollfd.events = POLLIN | POLLPRI;
+	pollfd.revents = 0;
+	if (timeout == 0) {
+		t = FSNP_TIMEOUT;
+	} else {
+		t = timeout;
+	}
+
+	ret = poll(&pollfd, 1, t);
 	if (ret > 0) {
-		revents = pollfd->revents;
+		revents = pollfd.revents;
 		if (revents & POLLIN || revents & POLLPRI || revents & POLLRDBAND) {
-			return fsnp_recvfrom(pollfd->fd, peer, err);
+			return fsnp_recvfrom(pollfd.fd, peer, err);
 		} else if (revents & POLLHUP) {
 			*err = E_PEER_DISCONNECTED;
 			return NULL;
@@ -267,50 +275,6 @@ static struct fsnp_msg *nobackoff_recvfrom(struct pollfd *pollfd, int timeout,
 	} else {
 		*err = E_ERRNO;
 		return NULL;
-	}
-}
-
-/*
- * Perform a fsnp_recvfrom with a timer of 'timeout' with a backoff
- */
-static struct fsnp_msg *backoff_recvfrom(struct pollfd *pollfd, int timeout,
-										 struct fsnp_peer *peer, fsnp_err_t *err)
-{
-	int b = 4;
-	struct fsnp_msg *msg = NULL;
-
-	while (b > 0) {
-		msg = nobackoff_recvfrom(pollfd, timeout, peer, err);
-		if (msg || *err != E_TIMEOUT) {
-			break;
-		}
-
-		timeout <<= 1;
-		b--;
-	}
-
-	return msg;
-}
-
-struct fsnp_msg *fsnp_timed_recvfrom(int sock, uint16_t timeout, bool backoff,
-									 struct fsnp_peer *peer, fsnp_err_t *err)
-{
-	struct pollfd pollfd;
-	int t = 0;
-
-	pollfd.fd = sock;
-	pollfd.events = POLLIN;
-	pollfd.revents = 0;
-	if (timeout == 0) {
-		t = FSNP_TIMEOUT;
-	} else {
-		t = timeout;
-	}
-
-	if (backoff) {
-		return backoff_recvfrom(&pollfd, t, peer, err);
-	} else {
-		return nobackoff_recvfrom(&pollfd, t, peer, err);
 	}
 }
 

@@ -247,11 +247,35 @@ void fsnp_init_whosnext(struct fsnp_whosnext *whosnext,
 	fsnp_init_msg(&whosnext->header, WHOSNEXT, sizeof(*whosnext));
 }
 
-void fsnp_init_whohas(struct fsnp_whohas *whohas, sha256_t req_id,
-                      sha256_t file_hash, uint8_t missing_peers)
+struct fsnp_whohas *fsnp_create_whohas(struct fsnp_peer *sp, sha256_t req_id,
+                                       sha256_t file_hash, uint8_t num_peers,
+                                       struct fsnp_peer *owners)
 {
+	struct fsnp_whohas *whohas = NULL;
+	uint64_t data_size = 0;
+	uint64_t size = 0;
+
+	if (num_peers > 0) {
+		data_size = sizeof(struct fsnp_peer) * num_peers;
+	} else {
+		data_size = sizeof(struct fsnp_peer);
+	}
+
+	size = data_size + sizeof(*whohas) - sizeof(whohas->owners);
+	whohas = malloc(size);
+	if (!whohas) {
+		return NULL;
+	}
+
+	memcpy(&whohas->sp, sp, sizeof(struct fsnp_peer));
 	memcpy(whohas->req_id, req_id, sizeof(sha256_t));
 	memcpy(whohas->file_hash, file_hash, sizeof(sha256_t));
-	whohas->missing_peers = missing_peers;
-	fsnp_init_msg(&whohas->header, WHOHAS, sizeof(*whohas));
+	if (num_peers > 0) {
+		memcpy(whohas->owners, owners, sizeof(struct fsnp_peer) * num_peers);
+	} else {
+		memset(whohas->owners, 0, sizeof(struct fsnp_peer));
+	}
+
+	fsnp_init_msg(&whohas->header, WHOHAS, size);
+	return whohas;
 }

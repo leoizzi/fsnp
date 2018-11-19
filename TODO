@@ -7,7 +7,7 @@ Nella relazione scrivere che la hashtable presentava dei bug nelle funzioni che
 ne permettevano l'iterazione, per cui è stato preferito l'uso delle liste
 
 Attenzione: bisogna rivedere bene il meccanismo di WHOHAS, visto che:
-    - la richiesta potrebbe fare il giro fino a ritornare al mandante: in questo caso che si fa? Come si fa a sapere che il mandante era lui?
+    - la richiesta potrebbe fare il giro fino a ritornare al mandante: in questo caso che si fa?
     - Non sarebbe meglio modificare WHOHAS in modo tale che quando si è concluso il giro (o si sono raccolti abbastanza peers) l'ultimo che ha riempito i campi non contatti direttamente il superpeer interessato?
 
 Cambiare l'implementazione per l'attesa di un file di un peer. È meglio permettere più riqchieste e salvarle. Ogni volta che si ritorna dalla poll si aggiunge il tempo passato e nel caso si invalida la richiesta.

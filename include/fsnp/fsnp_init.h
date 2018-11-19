@@ -95,8 +95,11 @@ EXPORT void fsnp_init_next(struct fsnp_next *next,
 EXPORT void fsnp_init_whosnext(struct fsnp_whosnext *whosnext,
                                const struct fsnp_peer *next);
 
-EXPORT void fsnp_init_whohas(struct fsnp_whohas *whohas, sha256_t req_id,
-                             sha256_t file_hash, uint8_t missing_peers);
+EXPORT struct fsnp_whohas *fsnp_create_whohas(struct fsnp_peer *sp,
+											  sha256_t req_id,
+											  sha256_t file_hash,
+											  uint8_t num_peers,
+											  struct fsnp_peer *owners);
 
 FSNP_END_DECL
 
