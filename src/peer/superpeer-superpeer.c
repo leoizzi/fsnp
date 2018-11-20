@@ -23,6 +23,7 @@
 #include <arpa/inet.h>
 #include <poll.h>
 #include <time.h>
+#include <struct/hashtable.h>
 
 #include "peer/superpeer-superpeer.h"
 #include "peer/superpeer.h"
@@ -293,11 +294,17 @@ static void unset_all(struct neighbors *nb)
 #undef GET_PREV
 #undef UNSET_PREV
 
+struct request {
+	struct fsnp_peer peer;
+	struct timespec creation_time;
+};
+
 struct sp_udp_state {
 	int sock;
 	int pipe[2];
 	struct neighbors *nb;
 	struct timespec last;
+	hashtable_t *reqs; // key: sha256_t     value: request
 	bool should_exit;
 };
 
@@ -491,6 +498,10 @@ static void ensure_prev_conn(const struct sp_udp_state *sus)
 	fsnp_err_t err;
 	unsigned counter = 0;
 
+	if (cmp_prev_against_self(sus->nb)) {
+		return;
+	}
+
 	while (true) {
 		msg = fsnp_timed_recvfrom(sus->sock, 0, &p, &err);
 		if (!msg && counter >= 4) {
@@ -554,12 +565,16 @@ static void ensure_prev_conn(const struct sp_udp_state *sus)
 /*
  * Make sure that the next will send
  */
-static void ensure_next_conn(const struct sp_udp_state *sus)
+static void ensure_next_conn(struct sp_udp_state *sus)
 {
 	struct fsnp_msg *msg = NULL;
 	struct fsnp_peer p;
 	fsnp_err_t err;
 	unsigned counter = 0;
+
+	if (cmp_next_against_self(sus->nb)) {
+		return;
+	}
 
 	while (true) {
 		msg = fsnp_timed_recvfrom(sus->sock, 0, &p, &err);
@@ -567,9 +582,9 @@ static void ensure_next_conn(const struct sp_udp_state *sus)
 			slog_warn(FILE_LEVEL, "Unable to ensure next's connection");
 			fsnp_log_err_msg(err, false);
 			slog_warn(STDOUT_LEVEL, "Please join the network again");
-			unset_all(sus->nb);
 			prepare_exit_sp_mode();
 			exit_sp_mode();
+			sus->should_exit = true;
 			return;
 		} else {
 			fsnp_log_err_msg(err, false);
@@ -693,10 +708,18 @@ static void whosnext_msg_rcvd(struct sp_udp_state *sus,
 {
 	slog_info(FILE_LEVEL, "WHOSNEXT msg received from %s", sender->pretty_addr);
 	if (whosnext->next.ip == 0 && whosnext->next.port == 0) {
-		memcpy(&whosnext->next, &sus->nb->snd_next, sizeof(struct fsnp_peer));
+		memcpy(&whosnext->next, &sus->nb->next, sizeof(struct fsnp_peer));
 		send_whosnext(sus, whosnext, sender);
 	} else {
+		if (cmp_snd_next(sus->nb, &whosnext->next)) {
+			return;
+		}
 
+		if (isset_snd_next(sus->nb)) {
+			unset_snd_next(sus->nb);
+		}
+
+		set_snd_next(sus->nb, &whosnext->next);
 	}
 }
 
@@ -779,6 +802,8 @@ static void sock_event(struct sp_udp_state *sus, short revents)
 {
 	if (revents & POLLIN || revents & POLLPRI || revents & POLLRDBAND) {
 		read_sock_msg(sus);
+	} else if (revents & POLLHUP) { // ???
+		return;
 	} else {
 		slog_error(FILE_LEVEL, "sock revents: %d", revents);
 		prepare_exit_sp_mode();
@@ -788,10 +813,10 @@ static void sock_event(struct sp_udp_state *sus, short revents)
 }
 
 /*
- * Called when the poll has timed out. This function checks if the next is still
- * valid. If not it will substitute it with the snd_next.
+ * Called to check the next's aliveness. If the next is considered dead it will
+ * contact the snd_next to set it as next
  */
-static void timeout_event(struct sp_udp_state *sus)
+static void check_next_aliveness(struct sp_udp_state *sus)
 {
 	struct timespec curr;
 	int ret = 0;
@@ -816,6 +841,18 @@ static void timeout_event(struct sp_udp_state *sus)
 	}
 }
 
+/*
+ * Invalidate any request that has expired
+ */
+static void invalidate_requests(struct sp_udp_state *sus)
+{
+	if (ht_count(sus->reqs) == 0) {
+		return;
+	}
+
+	// TODO: implement
+}
+
 #define POLL_TIMEOUT 30000 // ms
 
 /*
@@ -827,20 +864,16 @@ static void sp_udp_thread(void *data)
 	struct pollfd pollfd[POLLFD_NUM];
 	int ret = 0;
 
-	if (isset_prev(sus->nb)) {
-		send_promoted(sus);
-		ensure_prev_conn(sus);
-	}
-
-	if (isset_next(sus->nb)) {
-		send_next(sus, NULL);
-		ensure_next_conn(sus);
-	}
+	send_promoted(sus);
+	ensure_prev_conn(sus);
+	send_next(sus, NULL);
+	ensure_next_conn(sus);
+	clock_gettime(CLOCK_MONOTONIC, &sus->last);
 
 	setup_poll(pollfd, sus);
-	clock_gettime(CLOCK_MONOTONIC, &sus->last);
 	while (!sus->should_exit) {
 		ret = poll(pollfd, POLLFD_NUM, POLL_TIMEOUT);
+		invalidate_requests(sus);
 		if (ret > 0) {
 			if (pollfd[PIPE].revents) {
 				pipe_event(sus, pollfd[PIPE].revents);
@@ -851,8 +884,10 @@ static void sp_udp_thread(void *data)
 				sock_event(sus, pollfd[SOCK].revents);
 				pollfd[SOCK].revents = 0;
 			}
+
+			check_next_aliveness(sus);
 		} else if (ret == 0) {
-			timeout_event(sus);
+			check_next_aliveness(sus);
 		} else {
 			slog_error(FILE_LEVEL, "poll error %d");
 			prepare_exit_sp_mode();
@@ -861,6 +896,7 @@ static void sp_udp_thread(void *data)
 		}
 	}
 
+	ht_destroy(sus->reqs);
 	free(sus->nb);
 	close(sus->sock);
 	close(sus->pipe[READ_END]);
@@ -876,14 +912,28 @@ static void sp_udp_thread(void *data)
 #undef INVALIDATED_YES_SND
 #undef VALIDATED
 
+/*
+ * Free callback for the reqs hashtable
+ */
+static void reqs_free_callback(void *data)
+{
+	struct request *r = (struct request *)data;
+	free(r);
+}
+
 #define NO_SP 0
 #define ONE_SP 1
 #define TWO_SPS 2
 
+#define REQS_SIZE_MAX 1UL << 16UL
+
 int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n)
 {
 	int ret = 0;
-	struct sp_udp_state *sus = calloc(1, sizeof(struct sp_udp_state));
+	struct sp_udp_state *sus = NULL;
+	struct fsnp_peer self;
+
+	sus = calloc(1, sizeof(struct sp_udp_state));
 	if (!sus) {
 		slog_error(FILE_LEVEL, "malloc error %d", errno);
 		return -1;
@@ -896,9 +946,18 @@ int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n)
 		return -1;
 	}
 
+	sus->reqs = ht_create(HT_SIZE_MIN, REQS_SIZE_MAX, reqs_free_callback);
+	if (!sus->reqs) {
+		slog_error(FILE_LEVEL, "Unable to create reqs hashtable");
+		free(sus->nb);
+		free(sus);
+		return -1;
+	}
+
 	ret = pipe(sus->pipe);
 	if (ret < 0) {
 		slog_error(FILE_LEVEL, "Pipe error %d", errno);
+		ht_destroy(sus->reqs);
 		free(sus->nb);
 		free(sus);
 		return -1;
@@ -906,16 +965,24 @@ int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n)
 
 	sus->sock = udp;
 	sus->should_exit = false;
+	self.ip = get_peer_ip();
+	self.port = get_udp_sp_port();
 	switch (n) {
 		case NO_SP:
+			set_prev(sus->nb, &self);
+			set_next(sus->nb, &self);
+			set_snd_next(sus->nb, &self);
 			break;
 
 		case ONE_SP:
 			set_prev(sus->nb, sps);
+			set_next(sus->nb, &self);
+			set_snd_next(sus->nb, &self);
 			break;
 
 		case TWO_SPS:
 			set_prev(sus->nb, &sps[0]);
+			set_next(sus->nb, &self);
 			/* HACK:
 			 * at the beginning store the address of the second prev in
 			 * the snd_next, because this field will not be used at the
@@ -927,6 +994,7 @@ int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n)
 
 		default:
 			slog_error(FILE_LEVEL, "Wrong parameter: n can't be %u", n);
+			ht_destroy(sus->reqs);
 			free(sus->nb);
 			free(sus);
 			return -1;
@@ -935,6 +1003,7 @@ int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n)
 	ret = start_new_thread(sp_udp_thread, sus, "sp-udp-thread");
 	if (ret < 0) {
 		sus->sock = 0;
+		ht_destroy(sus->reqs);
 		free(sus->nb);
 		free(sus);
 		return -1;
