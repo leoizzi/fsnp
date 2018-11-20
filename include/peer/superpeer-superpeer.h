@@ -33,7 +33,7 @@ FSNP_BEGIN_DECL
  *      - in the second position the address of the prev of its promoter
  * Return 0 on success, -1 otherwise
  */
-int enter_sp_network(int udp, struct fsnp_peer *sps, unsigned n);
+int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n);
 
 /*
  * Exit the superpeer's overlay network. The socket passed when entered the

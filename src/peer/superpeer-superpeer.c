@@ -27,6 +27,7 @@
 #include "peer/superpeer-superpeer.h"
 #include "peer/superpeer.h"
 #include "peer/thread_manager.h"
+#include "peer/peer.h"
 
 #include "fsnp/fsnp.h"
 
@@ -65,7 +66,7 @@ struct neighbors {
 /*
  * Set the next sp as 'addr'
  */
-static inline void set_next(struct neighbors *nb, struct fsnp_peer *addr)
+static inline void set_next(struct neighbors *nb, const struct fsnp_peer *addr)
 {
 	struct in_addr a;
 
@@ -101,6 +102,20 @@ static inline bool cmp_next(const struct neighbors *nb, const struct fsnp_peer *
 }
 
 /*
+ * Compare the address stored as next against the address of this superpeer.
+ * If they match return true, false otherwise
+ */
+static inline bool cmp_next_against_self(const struct neighbors *nb)
+{
+	struct fsnp_peer self;
+
+	self.ip = get_peer_ip();
+	self.port = get_udp_sp_port();
+
+	return cmp_next(nb, &self);
+}
+
+/*
  * Remove the next sp
  */
 static inline void unset_next(struct neighbors *nb)
@@ -114,7 +129,8 @@ static inline void unset_next(struct neighbors *nb)
 /*
  * Set the snd_next sp as 'addr'
  */
-static inline void set_snd_next(struct neighbors *nb, struct fsnp_peer *addr)
+static inline void set_snd_next(struct neighbors *nb,
+		const struct fsnp_peer *addr)
 {
 	struct in_addr a;
 
@@ -152,6 +168,20 @@ static inline bool cmp_snd_next(const struct neighbors *nb,
 }
 
 /*
+ * Compare the address stored as snd_next against the address of this superpeer.
+ * If they match return true, false otherwise
+ */
+static inline bool cmp_snd_next_against_self(const struct neighbors *nb)
+{
+	struct fsnp_peer self;
+
+	self.ip = get_peer_ip();
+	self.port = get_udp_sp_port();
+
+	return cmp_snd_next(nb, &self);
+}
+
+/*
  * Remove the snd_next sp
  */
 static inline void unset_snd_next(struct neighbors *nb)
@@ -175,7 +205,7 @@ static inline void set_next_as_snd_next(struct neighbors *nb)
 /*
  * Set the prev sp as 'addr'
  */
-static inline void set_prev(struct neighbors *nb, struct fsnp_peer *addr)
+static inline void set_prev(struct neighbors *nb, const struct fsnp_peer *addr)
 {
 	struct in_addr a;
 
@@ -208,6 +238,20 @@ static inline bool cmp_prev(const struct neighbors *nb, const struct fsnp_peer *
 	}
 
 	return false;
+}
+
+/*
+ * Compare the address stored as prev against the address of this superpeer.
+ * If they match return true, false otherwise
+ */
+static inline bool cmp_prev_against_self(const struct neighbors *nb)
+{
+	struct fsnp_peer self;
+
+	self.ip = get_peer_ip();
+	self.port = get_udp_sp_port();
+
+	return cmp_prev(nb, &self);
 }
 
 /*
@@ -270,7 +314,7 @@ struct sp_udp_state {
 /*
  * Copy the content of b in a
  */
-static inline void swap_timespec(struct timespec *a, struct timespec *b)
+static inline void swap_timespec(struct timespec *a, const struct timespec *b)
 {
 	a->tv_sec = b->tv_sec;
 	a->tv_nsec = b->tv_nsec;
@@ -297,7 +341,7 @@ static inline void update_timespec(struct timespec *t)
  */
 static int invalidate_next_if_needed(struct neighbors *nb,
                                      struct timespec *last,
-                                     struct timespec *curr)
+                                     const struct timespec *curr)
 {
 	double l = 0;
 	double c = 0;
@@ -327,10 +371,14 @@ static int invalidate_next_if_needed(struct neighbors *nb,
 /*
  * Send a promoted msg to the next sp
  */
-static void send_promoted(struct sp_udp_state *sus)
+static void send_promoted(const struct sp_udp_state *sus)
 {
 	struct fsnp_promoted promoted;
 	fsnp_err_t err;
+
+	if (cmp_prev_against_self(sus->nb)) {
+		return;
+	}
 
 	fsnp_init_promoted(&promoted);
 	slog_info(FILE_LEVEL, "Sending an updated msg to %s", sus->nb->prev_pretty);
@@ -344,11 +392,16 @@ static void send_promoted(struct sp_udp_state *sus)
  * Send a NEXT msg to the next sp. Pass NULL in 'old' if the next doesn't have
  * to change its next.
  */
-static void send_next(struct sp_udp_state *sus, const struct fsnp_peer *old)
+static void send_next(const struct sp_udp_state *sus,
+		const struct fsnp_peer *old)
 {
 	struct fsnp_next next;
 	fsnp_err_t err;
 	struct in_addr addr;
+
+	if (cmp_next_against_self(sus->nb)) {
+		return;
+	}
 
 	fsnp_init_next(&next, old);
 	if (old) {
@@ -366,11 +419,71 @@ static void send_next(struct sp_udp_state *sus, const struct fsnp_peer *old)
 	}
 }
 
+struct sender {
+	struct fsnp_peer addr;
+	char pretty_addr[32];
+};
+
+/*
+ * Compare sender against this superpeer address. If they match return true,
+ * false otherwise
+ */
+static bool cmp_sender_against_self(const struct sender *sender)
+{
+	struct fsnp_peer self;
+
+	self.ip = get_peer_ip();
+	self.port = get_udp_sp_port();
+	if (self.ip == sender->addr.ip && self.port == sender->addr.port) {
+		return true;
+	} else {
+		return false;
+	}
+}
+
+/*
+ * Send an ACK msg to s
+ */
+static void send_ack(const struct sp_udp_state *sus, const struct sender *s)
+{
+	struct fsnp_ack ack;
+	fsnp_err_t err;
+
+	if (cmp_sender_against_self(s)) {
+		return;
+	}
+
+	slog_info(FILE_LEVEL, "Sending an ACK msg to %s", s->pretty_addr);
+	err = fsnp_send_udp_ack(sus->sock, 0, &ack, &s->addr);
+	if (err != E_NOERR) {
+		fsnp_log_err_msg(err, false);
+	}
+}
+
+/*
+ * Send a WHOSNEXT msg to s
+ */
+static void send_whosnext(const struct sp_udp_state *sus,
+		const struct fsnp_whosnext *whosnext, const struct sender *s)
+{
+	fsnp_err_t err;
+
+	if (cmp_sender_against_self(s)) {
+		return;
+	}
+
+	slog_info(FILE_LEVEL, "Sending a WHOSNEXT msg to %s", s->pretty_addr);
+	err = fsnp_send_whosnext(sus->sock, 0, whosnext, &s->addr);
+	if (err != E_NOERR) {
+		fsnp_log_err_msg(err, false);
+	}
+}
+
 /*
  * Make sure that the prev will send a NEXT msg. If the timer will fire, send a
  * NEXT msg to his prev, which is stored in the snd_next position
  */
-static void ensure_prev_conn(struct sp_udp_state *sus)
+static void ensure_prev_conn(const struct sp_udp_state *sus)
 {
 	struct fsnp_msg *msg = NULL;
 	struct fsnp_next *next = NULL;
@@ -391,6 +504,7 @@ static void ensure_prev_conn(struct sp_udp_state *sus)
 				continue;
 			} else {
 				slog_warn(FILE_LEVEL, "Unable to ensure the prev's connection");
+				slog_warn(STDOUT_LEVEL, "Please join the network again");
 				unset_all(sus->nb);
 				prepare_exit_sp_mode();
 				exit_sp_mode();
@@ -421,6 +535,7 @@ static void ensure_prev_conn(struct sp_udp_state *sus)
 		slog_warn(FILE_LEVEL, "Wrong msg type received from %s: expected %u, "
 						"got %u", sus->nb->prev_pretty, NEXT, msg->msg_type);
 		free(msg);
+		slog_warn(STDOUT_LEVEL, "Please join the network again");
 		unset_all(sus->nb);
 		prepare_exit_sp_mode();
 		exit_sp_mode();
@@ -439,7 +554,7 @@ static void ensure_prev_conn(struct sp_udp_state *sus)
 /*
  * Make sure that the next will send
  */
-static void ensure_next_conn(struct sp_udp_state *sus)
+static void ensure_next_conn(const struct sp_udp_state *sus)
 {
 	struct fsnp_msg *msg = NULL;
 	struct fsnp_peer p;
@@ -451,6 +566,7 @@ static void ensure_next_conn(struct sp_udp_state *sus)
 		if (!msg && counter >= 4) {
 			slog_warn(FILE_LEVEL, "Unable to ensure next's connection");
 			fsnp_log_err_msg(err, false);
+			slog_warn(STDOUT_LEVEL, "Please join the network again");
 			unset_all(sus->nb);
 			prepare_exit_sp_mode();
 			exit_sp_mode();
@@ -486,7 +602,7 @@ static void ensure_next_conn(struct sp_udp_state *sus)
 /*
  * Setup the pollfd structures
  */
-static void setup_poll(struct pollfd *pollfd, struct sp_udp_state *sus)
+static void setup_poll(struct pollfd *pollfd, const struct sp_udp_state *sus)
 {
 	memset(pollfd, 0, sizeof(struct pollfd) * POLLFD_NUM);
 
@@ -521,25 +637,85 @@ static void pipe_event(struct sp_udp_state *sus, short revents)
 }
 
 /*
- * Write into s the string representation of sender's address
+ * Write into sender.pretty_addr the string representation of sender's addr
  */
-static void stringify_sender(char *s, const struct neighbors *nb,
-		const struct fsnp_peer *sender)
+static void stringify_sender(const struct neighbors *nb, struct sender *sender)
 {
 	struct in_addr a;
 
-	if (cmp_next(nb, sender)) {
-		strncpy(s, nb->next_pretty, sizeof(char) * 32);
-	} else if (cmp_prev(nb, sender)) {
-		strncpy(s, nb->prev_pretty, sizeof(char) * 32);
-	} else if (cmp_snd_next(nb, sender)) {
-		strncpy(s, nb->snd_next_pretty, sizeof(char) * 32);
+	if (cmp_next(nb, &sender->addr)) {
+		strncpy(sender->pretty_addr, nb->next_pretty, sizeof(char) * 32);
+	} else if (cmp_prev(nb, &sender->addr)) {
+		strncpy(sender->pretty_addr, nb->prev_pretty, sizeof(char) * 32);
+	} else if (cmp_snd_next(nb, &sender->addr)) {
+		strncpy(sender->pretty_addr, nb->snd_next_pretty, sizeof(char) * 32);
 	} else {
-		memset(s, 0, sizeof(char) * 32);
-		a.s_addr = htonl(sender->ip);
-		snprintf(s, sizeof(char) * 32, "%s:%hu", inet_ntoa(a),
-		         sender->port);
+		memset(sender->pretty_addr, 0, sizeof(char) * 32);
+		a.s_addr = htonl(sender->addr.ip);
+		snprintf(sender->pretty_addr, sizeof(char) * 32, "%s:%hu", inet_ntoa(a),
+		         sender->addr.port);
 	}
+}
+
+/*
+ * Handler called when a NEXT msg is received
+ */
+static void next_msg_rcvd(struct sp_udp_state *sus, const struct fsnp_next *next,
+		const struct sender *sender)
+{
+	slog_info(FILE_LEVEL, "NEXT msg received from %s", sender->pretty_addr);
+	if (next->old_next.ip != 0 && next->old_next.port) {
+		set_next(sus->nb, &next->old_next);
+		send_next(sus, NULL);
+	}
+
+	send_ack(sus, sender);
+}
+
+/*
+ * Handler called when a PROMOTED msg is received
+ */
+static void promoted_msg_rcvd(struct sp_udp_state *sus,
+		const struct fsnp_promoted *promoted, const struct sender *sender)
+{
+	UNUSED(promoted);
+
+	slog_info(FILE_LEVEL, "PROMOTED msg received from %s", sender->pretty_addr);
+	set_prev(sus->nb, &sender->addr);
+	send_ack(sus, sender);
+}
+
+/*
+ * Handler called when a WHOSNEXT msg is received
+ */
+static void whosnext_msg_rcvd(struct sp_udp_state *sus,
+		struct fsnp_whosnext *whosnext, const struct sender *sender)
+{
+	slog_info(FILE_LEVEL, "WHOSNEXT msg received from %s", sender->pretty_addr);
+	if (whosnext->next.ip == 0 && whosnext->next.port == 0) {
+		memcpy(&whosnext->next, &sus->nb->snd_next, sizeof(struct fsnp_peer));
+		send_whosnext(sus, whosnext, sender);
+	} else {
+
+	}
+}
+
+/*
+ * Handler called when a WHOHAS msg is received
+ */
+static void whohas_msg_rcvd(struct sp_udp_state *sus,
+		const struct fsnp_whohas *whohas, const struct sender *sender)
+{
+	// TODO: continue from here
+}
+
+/*
+ * Handler called when a LEAVE msg is received
+ */
+static void leave_msg_rcvd(struct sp_udp_state *sus,
+		const struct fsnp_leave *leave, const struct sender *sender)
+{
+
 }
 
 /*
@@ -549,39 +725,42 @@ static void read_sock_msg(struct sp_udp_state *sus)
 {
 	struct fsnp_msg *msg = NULL;
 	fsnp_err_t err;
-	struct fsnp_peer sender;
-	char sender_str[32];
+	struct sender sender;
 
-	msg = fsnp_timed_recvfrom(sus->sock, 0, &sender, &err);
+	msg = fsnp_timed_recvfrom(sus->sock, 0, &sender.addr, &err);
 	if (!msg) {
 		fsnp_log_err_msg(err, false);
 		return;
 	}
 
-	if (cmp_next(sus->nb, &sender)) {
+	if (cmp_next(sus->nb, &sender.addr)) {
 		update_timespec(&sus->last);
 	}
 
-	stringify_sender(sender_str, sus->nb, &sender);
+	stringify_sender(sus->nb, &sender);
 	switch (msg->msg_type) {
 		case NEXT:
-			// TODO: continue from here
+			next_msg_rcvd(sus, (const struct fsnp_next *)msg, &sender);
 			break;
 
 		case PROMOTED:
+			promoted_msg_rcvd(sus, (const struct fsnp_promoted *)msg, &sender);
 			break;
 
 		case WHOSNEXT:
+			whosnext_msg_rcvd(sus, (struct fsnp_whosnext *)msg, &sender);
 			break;
 
 		case WHOHAS:
+			whohas_msg_rcvd(sus, (const struct fsnp_whohas *)msg, &sender);
 			break;
 
 		case ACK:
-			slog_info(FILE_LEVEL, "ACK msg received from %s", sender_str);
+			slog_info(FILE_LEVEL, "ACK msg received from %s", sender.pretty_addr);
 			break;
 
 		case LEAVE:
+			leave_msg_rcvd(sus, (const struct fsnp_leave *)msg, &sender);
 			break;
 
 		default:
@@ -701,7 +880,7 @@ static void sp_udp_thread(void *data)
 #define ONE_SP 1
 #define TWO_SPS 2
 
-int enter_sp_network(int udp, struct fsnp_peer *sps, unsigned n)
+int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n)
 {
 	int ret = 0;
 	struct sp_udp_state *sus = calloc(1, sizeof(struct sp_udp_state));
