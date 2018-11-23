@@ -29,6 +29,7 @@
 #include "peer/superpeer.h"
 #include "peer/thread_manager.h"
 #include "peer/peer.h"
+#include "peer/keys_cache.h"
 
 #include "fsnp/fsnp.h"
 
@@ -295,9 +296,17 @@ static void unset_all(struct neighbors *nb)
 #undef UNSET_PREV
 
 struct request {
-	struct fsnp_peer peer;
 	struct timespec creation_time;
 };
+
+/*
+ * Free callback for the reqs hashtable
+ */
+static void reqs_free_callback(void *data)
+{
+	struct request *r = (struct request *)data;
+	free(r);
+}
 
 struct sp_udp_state {
 	int sock;
@@ -481,6 +490,47 @@ static void send_whosnext(const struct sp_udp_state *sus,
 
 	slog_info(FILE_LEVEL, "Sending a WHOSNEXT msg to %s", s->pretty_addr);
 	err = fsnp_send_whosnext(sus->sock, 0, whosnext, &s->addr);
+	if (err != E_NOERR) {
+		fsnp_log_err_msg(err, false);
+	}
+}
+
+/*
+ * Send a WHOHAS msg.
+ * If next is true this message will be sent to the next, otherwise will be sent
+ * to the peer who has started the request.
+ */
+static void send_whohas(const struct sp_udp_state *sus,
+		const struct fsnp_whohas *whohas, bool next)
+{
+	struct fsnp_peer self;
+	struct in_addr a;
+	char pretty_addr[32];
+	fsnp_err_t err;
+	const struct fsnp_peer *p = NULL;
+
+	if (next) {
+		if (cmp_next_against_self(sus->nb)) {
+			return;
+		}
+
+		p = &sus->nb->next;
+		strncpy(pretty_addr, sus->nb->next_pretty, sizeof(char) * 32);
+	} else {
+		self.ip = get_peer_ip();
+		self.port = get_udp_sp_port();
+		if (whohas->sp.ip == self.ip && whohas->sp.port == self.port) {
+			return;
+		}
+
+		p = &whohas->sp;
+		a.s_addr = htonl(self.ip);
+		snprintf(pretty_addr, sizeof(char) * 32, "%s:%hu", inet_ntoa(a),
+		         self.port);
+	}
+
+	slog_info(FILE_LEVEL, "Sending a WHOHAS msg to %s", pretty_addr);
+	err = fsnp_send_whohas(sus->sock, 0, whohas, p);
 	if (err != E_NOERR) {
 		fsnp_log_err_msg(err, false);
 	}
@@ -723,13 +773,62 @@ static void whosnext_msg_rcvd(struct sp_udp_state *sus,
 	}
 }
 
+// TODO: se ha fatto tutto il giro bisogna non fare tutto questo xD
 /*
  * Handler called when a WHOHAS msg is received
  */
 static void whohas_msg_rcvd(struct sp_udp_state *sus,
-		const struct fsnp_whohas *whohas, const struct sender *sender)
+		struct fsnp_whohas *whohas, const struct sender *sender)
 {
-	// TODO: continue from here
+	struct request *req = NULL;
+	char key_str[SHA256_BYTES];
+	unsigned i = 0;
+	struct fsnp_peer peers[MAX_KNOWN_PEER];
+	struct fsnp_peer *p = NULL;
+	uint8_t n = 0;
+	uint8_t j = 0;
+	bool send_to_next = true;
+
+	STRINGIFY_HASH(key_str, whohas->req_id, i);
+	slog_info(FILE_LEVEL, "WHOHAS msg received from %s. req_id = %s",
+			sender->pretty_addr, key_str);
+	req = ht_get(sus->reqs, whohas->req_id, sizeof(sha256_t), NULL);
+	if (req) { // we've already answered to this, just send an ACK
+		slog_info(FILE_LEVEL, "Request %s is already in cache", key_str);
+		send_ack(sus, sender);
+		return;
+	} else {
+		slog_info(FILE_LEVEL, "Adding request %s to the cache", key_str);
+		req = malloc(sizeof(struct request));
+		if (!req) {
+			slog_error(FILE_LEVEL, "malloc error %d", errno);
+		} else {
+			update_timespec(&req->creation_time);
+			ht_set(sus->reqs, whohas->req_id, sizeof(sha256_t), req,
+					sizeof(struct request));
+		}
+	}
+
+	get_peers_for_key(whohas->file_hash, peers, &n);
+	if (n == 0) { // just send the message to the next
+		send_whohas(sus, whohas, send_to_next);
+		return;
+	}
+
+	p = peers + whohas->num_peers;
+	if (whohas->num_peers + n > 10) {
+		n = ((uint8_t)10) - whohas->num_peers;
+		whohas->num_peers = (uint8_t)10;
+		send_to_next = false;
+	} else {
+		whohas->num_peers += n;
+	}
+
+	for (j = 0; j < n; j++) {
+		memcpy(&p[j], &peers[j], sizeof(struct fsnp_peer));
+	}
+
+	send_whohas(sus, whohas, send_to_next);
 }
 
 /*
@@ -775,7 +874,7 @@ static void read_sock_msg(struct sp_udp_state *sus)
 			break;
 
 		case WHOHAS:
-			whohas_msg_rcvd(sus, (const struct fsnp_whohas *)msg, &sender);
+			whohas_msg_rcvd(sus, (struct fsnp_whohas *)msg, &sender);
 			break;
 
 		case ACK:
@@ -911,15 +1010,6 @@ static void sp_udp_thread(void *data)
 #undef INVALIDATED_NO_SND
 #undef INVALIDATED_YES_SND
 #undef VALIDATED
-
-/*
- * Free callback for the reqs hashtable
- */
-static void reqs_free_callback(void *data)
-{
-	struct request *r = (struct request *)data;
-	free(r);
-}
 
 #define NO_SP 0
 #define ONE_SP 1

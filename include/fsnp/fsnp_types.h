@@ -215,7 +215,6 @@ struct packed fsnp_file_req {
  */
 struct packed fsnp_file_res {
 		struct fsnp_msg header;
-		sha256_t req_id;
 		uint8_t num_peers;
 		struct fsnp_peer peers[1];
 };
@@ -317,7 +316,7 @@ struct packed fsnp_whohas {
 	sha256_t req_id;
 	sha256_t file_hash;
 	uint8_t num_peers;
-	struct fsnp_peer owners[1];
+	struct fsnp_peer owners[10];
 };
 
 FSNP_END_DECL

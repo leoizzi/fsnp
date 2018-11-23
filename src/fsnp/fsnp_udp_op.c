@@ -313,4 +313,11 @@ fsnp_err_t fsnp_send_whosnext(int sock, uint16_t timeout,
 	return fsnp_timed_sendto(sock, timeout, (const struct fsnp_msg *)whosnext, peer);
 }
 
+fsnp_err_t fsnp_send_whohas(int sock, uint16_t timeout,
+                            const struct fsnp_whohas *whohas,
+                            const struct fsnp_peer *peer)
+{
+	return fsnp_timed_sendto(sock, timeout, (const struct fsnp_msg *)whohas, peer);
+}
+
 #undef FSNP_MAGIC_SIZE

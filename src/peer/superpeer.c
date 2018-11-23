@@ -41,7 +41,6 @@
 #include "slog/slog.h"
 
 #define SP_BACKLOG 128
-#define MAX_KNOWN_PEER 8
 
 #define READ_END 0
 #define WRITE_END 1

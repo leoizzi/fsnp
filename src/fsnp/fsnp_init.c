@@ -133,12 +133,13 @@ void fsnp_init_file_req(struct fsnp_file_req *file_req, sha256_t hash)
 	fsnp_init_msg(&file_req->header, FILE_REQ, sizeof(*file_req));
 }
 
-struct fsnp_file_res *fsnp_create_file_res(sha256_t req_id, uint8_t num_peers,
-                                           const struct fsnp_peer *peers)
+struct fsnp_file_res *fsnp_create_file_res(uint8_t num_peers,
+										   const struct fsnp_peer *peers)
 {
 	struct fsnp_file_res *file_res = NULL;
 	uint64_t peer_size = 0;
 	uint64_t size = 0;
+
 
 	peer_size = num_peers * sizeof(struct fsnp_peer);
 	size = peer_size + sizeof(*file_res) - sizeof(file_res->peers);
@@ -147,7 +148,6 @@ struct fsnp_file_res *fsnp_create_file_res(sha256_t req_id, uint8_t num_peers,
 		return NULL;
 	}
 
-	memcpy(file_res->req_id, req_id, sizeof(sha256_t));
 	file_res->num_peers = num_peers;
 	memcpy(file_res->peers, peers, peer_size);
 	fsnp_init_msg(&file_res->header, FILE_RES, size);
@@ -247,35 +247,20 @@ void fsnp_init_whosnext(struct fsnp_whosnext *whosnext,
 	fsnp_init_msg(&whosnext->header, WHOSNEXT, sizeof(*whosnext));
 }
 
-struct fsnp_whohas *fsnp_create_whohas(struct fsnp_peer *sp, sha256_t req_id,
-                                       sha256_t file_hash, uint8_t num_peers,
-                                       struct fsnp_peer *owners)
+struct fsnp_whohas *fsnp_init_whohas(struct fsnp_whohas *whohas,
+									 struct fsnp_peer *sp, sha256_t req_id,
+									 sha256_t file_hash, uint8_t num_peers,
+                                     struct fsnp_peer *owners)
 {
-	struct fsnp_whohas *whohas = NULL;
-	uint64_t data_size = 0;
-	uint64_t size = 0;
-
-	if (num_peers > 0) {
-		data_size = sizeof(struct fsnp_peer) * num_peers;
-	} else {
-		data_size = sizeof(struct fsnp_peer);
-	}
-
-	size = data_size + sizeof(*whohas) - sizeof(whohas->owners);
-	whohas = malloc(size);
-	if (!whohas) {
-		return NULL;
-	}
-
 	memcpy(&whohas->sp, sp, sizeof(struct fsnp_peer));
 	memcpy(whohas->req_id, req_id, sizeof(sha256_t));
 	memcpy(whohas->file_hash, file_hash, sizeof(sha256_t));
 	if (num_peers > 0) {
 		memcpy(whohas->owners, owners, sizeof(struct fsnp_peer) * num_peers);
 	} else {
-		memset(whohas->owners, 0, sizeof(struct fsnp_peer));
+		memset(whohas->owners, 0, sizeof(struct fsnp_peer) * 10);
 	}
 
-	fsnp_init_msg(&whohas->header, WHOHAS, size);
+	fsnp_init_msg(&whohas->header, WHOHAS, sizeof(*whohas));
 	return whohas;
 }

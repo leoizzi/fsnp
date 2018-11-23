@@ -122,6 +122,10 @@ EXPORT fsnp_err_t fsnp_send_next(int sock, uint16_t timeout,
 EXPORT fsnp_err_t fsnp_send_whosnext(int sock, uint16_t timeout,
                                      const struct fsnp_whosnext *whosnext,
                                      const struct fsnp_peer *peer);
+
+EXPORT fsnp_err_t fsnp_send_whohas(int sock, uint16_t timeout,
+								   const struct fsnp_whohas *whohas,
+								   const struct fsnp_peer *peer);
 FSNP_END_DECL
 
 #endif //FSNP_FSNP_UDP_OP_H

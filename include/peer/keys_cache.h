@@ -46,6 +46,14 @@ int cache_add_keys(uint32_t num_files, uint8_t *keys,
 void cache_rm_keys(struct fsnp_peer *owner);
 
 /*
+ * Retrieve all the peers who has a file registered with the key 'key'.
+ * The result will be stored in 'peers'.
+ * 'peers' must be an array of MAX_KNOWN_PEER fsnp_peer structures.
+ * On output in n will be stored the numbers of peers found
+ */
+void get_peers_for_key(sha256_t key, struct fsnp_peer *peers, uint8_t *n);
+
+/*
  * Close the file cache, releasing all the resources allocated
  */
 void close_keys_cache(void);
