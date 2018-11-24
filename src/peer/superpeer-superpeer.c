@@ -122,8 +122,13 @@ static inline bool cmp_next_against_self(const struct neighbors *nb)
  */
 static inline void unset_next(struct neighbors *nb)
 {
+	struct fsnp_peer self;
+
 	memset(&nb->next, 0, sizeof(struct fsnp_peer));
     memset(nb->next_pretty, 0, sizeof(char) * 32);
+    self.ip = get_peer_ip();
+    self.port = get_udp_sp_port();
+    memcpy(&nb->next, &self, sizeof(struct fsnp_peer));
     UNSET_NEXT(nb->flags);
     slog_info(FILE_LEVEL, "next sp unset");
 }
@@ -188,8 +193,13 @@ static inline bool cmp_snd_next_against_self(const struct neighbors *nb)
  */
 static inline void unset_snd_next(struct neighbors *nb)
 {
+	struct fsnp_peer self;
+
 	memset(&nb->snd_next, 0, sizeof(struct fsnp_peer));
     memset(nb->snd_next_pretty, 0, sizeof(char) * 32);
+	self.ip = get_peer_ip();
+	self.port = get_udp_sp_port();
+	memcpy(&nb->next, &self, sizeof(struct fsnp_peer));
     UNSET_SND_NEXT(nb->flags);
     slog_info(FILE_LEVEL, "snd_next sp unset");
 }
@@ -261,8 +271,13 @@ static inline bool cmp_prev_against_self(const struct neighbors *nb)
  */
 static inline void unset_prev(struct neighbors *nb)
 {
+	struct fsnp_peer self;
+	
 	memset(&nb->prev, 0, sizeof(struct fsnp_peer));
     memset(nb->prev_pretty, 0, sizeof(char) * 32);
+	self.ip = get_peer_ip();
+	self.port = get_udp_sp_port();
+	memcpy(&nb->next, &self, sizeof(struct fsnp_peer));
     UNSET_PREV(nb->flags);
     slog_info(FILE_LEVEL, "prev sp unset");
 }
