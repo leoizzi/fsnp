@@ -19,8 +19,6 @@
 
 #include "fsnp/fsnp_init.h"
 
-// TODO: add support for big endian
-
 static always_inline void fsnp_init_msg(struct fsnp_msg *header,
 										fsnp_type_t type, uint64_t size)
 {
