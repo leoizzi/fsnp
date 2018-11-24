@@ -303,9 +303,50 @@ void cache_rm_keys(struct fsnp_peer *owner)
 	list_destroy(list);
 }
 
+static int copy_peers_iterator(void *item, size_t idx, void *user)
+{
+	struct fsnp_peer *to_copy = (struct fsnp_peer *)item;
+	struct fsnp_peer *peers = (struct fsnp_peer *)user;
+
+	if (idx >= MAX_KNOWN_PEER) { // avoid segfault
+		return STOP;
+	}
+
+	memcpy(&peers[idx], to_copy, sizeof(struct fsnp_peer));
+	return GO_AHEAD;
+}
+
 void get_peers_for_key(sha256_t key, struct fsnp_peer *peers, uint8_t *n)
 {
-	// TODO: implement. Continue from here.
+	struct key_cached *kc = NULL;
+	uint64_t nk = 0;
+#ifdef FSNP_DEBUG
+	char key_str[32];
+	unsigned i = 0;
+
+	STRINGIFY_HASH(key_str, key, i);
+#endif
+
+	kc = ht_get(cache, key, sizeof(sha256_t), NULL);
+	if (!kc) {
+#ifdef FSNP_DEBUG
+		slog_debug(FILE_LEVEL, "No peers known for key %s", key_str);
+#endif
+		return;
+	}
+
+#ifdef FSNP_DEBUG
+	slog_debug(FILE_LEVEL, "%u peers known for key %s", list_count(kc->owners),
+			key_str);
+#endif
+	nk = list_count(kc->owners);
+	if (nk == 0) {
+		*n = 0;
+		return;
+	}
+
+	*n = (uint8_t)nk;
+	list_foreach_value(kc->owners, copy_peers_iterator, peers);
 }
 
 void close_keys_cache(void)
