@@ -303,6 +303,11 @@ void cache_rm_keys(struct fsnp_peer *owner)
 	list_destroy(list);
 }
 
+void get_peers_for_key(sha256_t key, struct fsnp_peer *peers, uint8_t *n)
+{
+	// TODO: implement. Continue from here.
+}
+
 void close_keys_cache(void)
 {
 	slog_debug(FILE_LEVEL, "Destroying cache hashtable");

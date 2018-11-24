@@ -297,6 +297,7 @@ static void unset_all(struct neighbors *nb)
 
 struct request {
 	struct timespec creation_time;
+	bool sent_by_me;
 };
 
 /*
@@ -345,6 +346,20 @@ static inline void update_timespec(struct timespec *t)
 }
 
 /*
+ * Calculate the delta of two timespecs (b - a)
+ */
+static inline double calculate_timespec_delta(const struct timespec *a,
+											  const struct timespec *b)
+{
+	double aa = 0;
+	double bb = 0;
+
+	aa = (double)a->tv_sec + NSEC_TO_SEC(a->tv_nsec);
+	bb = (double)b->tv_sec + NSEC_TO_SEC(b->tv_nsec);
+	return bb - aa;
+}
+
+/*
  * Invalidate the next field if needed. In case it's needed the swap with the
  * snd_next (if present) will be done.
  * On output in last will be found the values present in curr.
@@ -359,13 +374,11 @@ static int invalidate_next_if_needed(struct neighbors *nb,
                                      struct timespec *last,
                                      const struct timespec *curr)
 {
-	double l = 0;
-	double c = 0;
+	double delta = 0;
 
-	l = (double)last->tv_sec + NSEC_TO_SEC(last->tv_nsec);
-	c = (double)curr->tv_sec + NSEC_TO_SEC(curr->tv_nsec);
+	delta = calculate_timespec_delta(last, curr);
 	swap_timespec(last, curr);
-	if (c - l < INVALIDATE_THRESHOLD) {
+	if (delta < INVALIDATE_THRESHOLD) {
 		return VALIDATED;
 	}
 
@@ -392,6 +405,10 @@ static void send_promoted(const struct sp_udp_state *sus)
 	struct fsnp_promoted promoted;
 	fsnp_err_t err;
 
+	if (!isset_prev(sus->nb)) {
+		return;
+	}
+
 	if (cmp_prev_against_self(sus->nb)) {
 		return;
 	}
@@ -414,6 +431,10 @@ static void send_next(const struct sp_udp_state *sus,
 	struct fsnp_next next;
 	fsnp_err_t err;
 	struct in_addr addr;
+
+	if (!isset_next(sus->nb)) {
+		return;
+	}
 
 	if (cmp_next_against_self(sus->nb)) {
 		return;
@@ -510,6 +531,10 @@ static void send_whohas(const struct sp_udp_state *sus,
 	const struct fsnp_peer *p = NULL;
 
 	if (next) {
+		if (!isset_next(sus->nb)) {
+			return;
+		}
+
 		if (cmp_next_against_self(sus->nb)) {
 			return;
 		}
@@ -547,6 +572,10 @@ static void ensure_prev_conn(const struct sp_udp_state *sus)
 	struct fsnp_peer p;
 	fsnp_err_t err;
 	unsigned counter = 0;
+
+	if (!isset_prev(sus->nb)) {
+		return;
+	}
 
 	if (cmp_prev_against_self(sus->nb)) {
 		return;
@@ -621,6 +650,10 @@ static void ensure_next_conn(struct sp_udp_state *sus)
 	struct fsnp_peer p;
 	fsnp_err_t err;
 	unsigned counter = 0;
+
+	if (!isset_next(sus->nb)) {
+		return;
+	}
 
 	if (cmp_next_against_self(sus->nb)) {
 		return;
@@ -773,16 +806,15 @@ static void whosnext_msg_rcvd(struct sp_udp_state *sus,
 	}
 }
 
-// TODO: se ha fatto tutto il giro bisogna non fare tutto questo xD
 /*
  * Handler called when a WHOHAS msg is received
  */
 static void whohas_msg_rcvd(struct sp_udp_state *sus,
 		struct fsnp_whohas *whohas, const struct sender *sender)
 {
-	struct request *req = NULL;
 	char key_str[SHA256_BYTES];
 	unsigned i = 0;
+	struct request *req = NULL;
 	struct fsnp_peer peers[MAX_KNOWN_PEER];
 	struct fsnp_peer *p = NULL;
 	uint8_t n = 0;
@@ -791,22 +823,27 @@ static void whohas_msg_rcvd(struct sp_udp_state *sus,
 
 	STRINGIFY_HASH(key_str, whohas->req_id, i);
 	slog_info(FILE_LEVEL, "WHOHAS msg received from %s. req_id = %s",
-			sender->pretty_addr, key_str);
+	          sender->pretty_addr, key_str);
 	req = ht_get(sus->reqs, whohas->req_id, sizeof(sha256_t), NULL);
-	if (req) { // we've already answered to this, just send an ACK
+	if (req) {
+		if (req->sent_by_me) {
+			// TODO: communicate to the peers the result
+		}
+
 		slog_info(FILE_LEVEL, "Request %s is already in cache", key_str);
 		send_ack(sus, sender);
 		return;
+	}
+
+	slog_info(FILE_LEVEL, "Adding request %s to the cache", key_str);
+	req = malloc(sizeof(struct request));
+	if (!req) {
+		slog_error(FILE_LEVEL, "malloc error %d", errno);
 	} else {
-		slog_info(FILE_LEVEL, "Adding request %s to the cache", key_str);
-		req = malloc(sizeof(struct request));
-		if (!req) {
-			slog_error(FILE_LEVEL, "malloc error %d", errno);
-		} else {
-			update_timespec(&req->creation_time);
-			ht_set(sus->reqs, whohas->req_id, sizeof(sha256_t), req,
-					sizeof(struct request));
-		}
+		update_timespec(&req->creation_time);
+		req->sent_by_me = false;
+		ht_set(sus->reqs, whohas->req_id, sizeof(sha256_t), req,
+				sizeof(struct request));
 	}
 
 	get_peers_for_key(whohas->file_hash, peers, &n);
@@ -837,7 +874,7 @@ static void whohas_msg_rcvd(struct sp_udp_state *sus,
 static void leave_msg_rcvd(struct sp_udp_state *sus,
 		const struct fsnp_leave *leave, const struct sender *sender)
 {
-
+	// TODO: implement
 }
 
 /*
@@ -940,16 +977,69 @@ static void check_next_aliveness(struct sp_udp_state *sus)
 	}
 }
 
+struct invalidate_req_data {
+	hashtable_t *t;
+	struct timespec curr;
+};
+
+#define INVALIDATE_REQ_THRESHOLD 300.0f // 5 minutes
+
+/*
+ * Iterate over all the keys, removing that ones that are expired
+ */
+static int invalidate_requests_iterator(void *item, size_t idx, void *user)
+{
+	hashtable_key_t *key = (hashtable_key_t *)item;
+	struct invalidate_req_data *data = (struct invalidate_req_data *)user;
+	struct request *req = NULL;
+	double delta = 0;
+	char key_str[SHA256_BYTES];
+	unsigned i = 0;
+	uint8_t *p = NULL;
+
+	UNUSED(idx);
+
+	req = ht_get(data->t, key->data, key->len, NULL);
+	if (!req) {
+		slog_warn(FILE_LEVEL, "Request iterator key not present in the hashtable");
+		return GO_AHEAD;
+	}
+
+	delta = calculate_timespec_delta(&req->creation_time, &data->curr);
+	if (delta > INVALIDATE_REQ_THRESHOLD) {
+		p = key->data;
+		STRINGIFY_HASH(key_str, p, i);
+		slog_info(FILE_LEVEL, "Invalidating request %s", key_str);
+		ht_delete(data->t, key->data, key->len, NULL, NULL);
+	}
+
+	return GO_AHEAD;
+}
+
+#undef INVALIDATE_REQ_THRESHOLD
+
 /*
  * Invalidate any request that has expired
  */
 static void invalidate_requests(struct sp_udp_state *sus)
 {
+	linked_list_t *l = NULL;
+	struct invalidate_req_data data;
+
 	if (ht_count(sus->reqs) == 0) {
 		return;
 	}
 
-	// TODO: implement
+	l = ht_get_all_keys(sus->reqs);
+	if (!l) {
+		slog_error(FILE_LEVEL, "Unable to get all the reqs keys");
+		return;
+	}
+
+	update_timespec(&data.curr);
+	data.t = sus->reqs;
+	list_foreach_value(l, invalidate_requests_iterator, &data);
+	list_destroy(l);
 }
 
 #define POLL_TIMEOUT 30000 // ms
@@ -1105,6 +1195,8 @@ int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n)
 #undef NO_SP
 #undef ONE_SP
 #undef TWO_SPS
+
+#undef REQS_SIZE_MAX
 
 void exit_sp_network(void)
 {
