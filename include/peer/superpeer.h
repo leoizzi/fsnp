@@ -39,8 +39,10 @@ struct peer_info {
 	char pretty_addr[32]; // for printing and logging purposes
 };
 
+#define PIPE_WHOHAS 0
 #define PIPE_QUIT 1
 #define PIPE_PROMOTE 2
+#define PIPE_FILE_RES 3
 
 /*
  * Enter the superpeer mode.
