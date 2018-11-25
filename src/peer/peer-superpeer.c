@@ -533,6 +533,8 @@ static void send_file_req(void)
 		// If the user was quick enough to ask two times for a file stop him here
 		slog_info(FILE_LEVEL, "The user tried to download a file while another"
 						" request is pending");
+		slog_warn(STDOUT_LEVEL, "You're already searching for a file. Wait for"
+						  " its response before searching for another one");
 		return;
 	}
 
@@ -545,6 +547,7 @@ static void send_file_req(void)
 	err = fsnp_send_file_req(tcp_state.sock, &file_req);
 	slog_info(FILE_LEVEL, "Sending a file_req to the superpeer");
 	if (err != E_NOERR) {
+		slog_warn(STDOUT_LEVEL, "Unable to send the file request");
 		fsnp_log_err_msg(err, false);
 		return;
 	}
