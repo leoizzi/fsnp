@@ -24,6 +24,7 @@
 
 #include "peer/superpeer-peer.h"
 #include "peer/superpeer.h"
+#include "peer/superpeer-superpeer.h"
 #include "peer/peer.h"
 #include "peer/keys_cache.h"
 
@@ -55,6 +56,42 @@ static void setup_poll(struct pollfd *pollfd, int p, int s)
 }
 
 /*
+ * Send an ACK msg to the peer
+ */
+static int send_ack(const struct peer_info *info)
+{
+	struct fsnp_ack ack;
+	fsnp_err_t err;
+
+	fsnp_init_ack(&ack);
+	// don't really care about any error here, just log it
+	slog_info(FILE_LEVEL, "Sending an ACK msg to %s", info->pretty_addr);
+	err = fsnp_send_tcp_ack(info->sock, &ack);
+	if (err != E_NOERR) {
+		fsnp_log_err_msg(err, false);
+		return -1;
+	}
+
+	return 0;
+}
+
+/*
+ * Send an error msg to the peer
+ */
+static void send_error(const struct peer_info *info)
+{
+	struct fsnp_error error;
+	fsnp_err_t err;
+
+	fsnp_init_error(&error);
+	slog_info(FILE_LEVEL, "Sending an error msg to %s", info->pretty_addr);
+	err = fsnp_send_error(info->sock, &error);
+	if (err != E_NOERR) {
+		fsnp_log_err_msg(err, false);
+	}
+}
+
+/*
  * Join a peer, adding all of its files to the file cache and sending an ACK to
  * him
  */
@@ -62,20 +99,13 @@ static void join_rcvd(struct fsnp_join *join, struct peer_info *info,
 					  bool *should_exit)
 {
 	int ret = 0;
-	fsnp_err_t err;
-	struct fsnp_ack ack;
-	struct fsnp_error error;
 
 	if (info->joined) {
-		slog_warn(FILE_LEVEL, "Peer %s has asked to join again", info->pretty_addr);
-		fsnp_init_error(&error);
-		slog_info(FILE_LEVEL, "Sending an error msg to %s", info->pretty_addr);
-		err = fsnp_send_error(info->sock, &error);
-		if (err != E_NOERR) {
-			fsnp_log_err_msg(err, false);
-			*should_exit = true;
-			return;
-		}
+		slog_warn(FILE_LEVEL, "Peer %s has asked to join again",
+		          info->pretty_addr);
+		send_error(info);
+		*should_exit = true;
+		return;
 	}
 
 	slog_debug(FILE_LEVEL, "Joining peer %s", info->pretty_addr);
@@ -90,11 +120,8 @@ static void join_rcvd(struct fsnp_join *join, struct peer_info *info,
 		}
 	}
 
-	fsnp_init_ack(&ack);
-	slog_info(FILE_LEVEL, "Sending an ACK msg to %s", info->pretty_addr);
-	err = fsnp_send_tcp_ack(info->sock, &ack);
-	if (err != E_NOERR && err != E_TIMEOUT) {
-		fsnp_log_err_msg(err, false);
+	ret = send_ack(info);
+	if (ret < 0) {
 		slog_error(FILE_LEVEL, "Leaving the peer %s", info->pretty_addr);
 		cache_rm_keys(&info->addr);
 		info->joined = false;
@@ -105,8 +132,6 @@ static void join_rcvd(struct fsnp_join *join, struct peer_info *info,
 static void update_rcvd(struct fsnp_update *update, struct peer_info *info)
 {
 	int ret = 0;
-	struct fsnp_ack ack;
-	fsnp_err_t err;
 
 	cache_rm_keys(&info->addr);
 	ret = cache_add_keys(update->num_files, update->files_hash, &info->addr);
@@ -115,13 +140,23 @@ static void update_rcvd(struct fsnp_update *update, struct peer_info *info)
 		                " cache after update", info->pretty_addr);
 	}
 
-	fsnp_init_ack(&ack);
-	// don't really care about any error here, just log it
-	slog_info(FILE_LEVEL, "Sending an ACK msg to %s", info->pretty_addr);
-	err = fsnp_send_tcp_ack(info->sock, &ack);
-	if (err != E_NOERR) {
-		fsnp_log_err_msg(err, false);
+	send_ack(info); // don't care about errors here
+}
+
+static void file_req_rcvd(const struct fsnp_file_req *file_req,
+						  const struct peer_info *info)
+{
+	int ret = 0;
+
+	ret = ask_whohas(file_req->hash, &info->addr);
+	if (ret < 0) {
+		slog_error(FILE_LEVEL, "Unable to ask in the overlay network a file for"
+						 " %s", info->pretty_addr);
+		send_error(info);
+		return;
 	}
+
+	send_ack(info); // don't care about errors here
 }
 
 /*
@@ -162,9 +197,9 @@ static void read_sock_msg(struct peer_info *info, bool leaving,
 			break;
 
 		case FILE_REQ:
-			// TODO: before going on with FILE_REQ a working implementation of the superpeers' network is needed
 			slog_info(FILE_LEVEL, "%s sent a FILE_REQ msg. Timeouts before "
 						 "this: %u", info->pretty_addr, info->timeouts);
+			file_req_rcvd((const struct fsnp_file_req *)msg, info);
 			info->timeouts = 0;
 			break;
 

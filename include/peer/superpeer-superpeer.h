@@ -21,6 +21,7 @@
 #include "compiler.h"
 
 #include "fsnp/fsnp_types.h"
+#include "fsnp/sha-256.h"
 
 FSNP_BEGIN_DECL
 
@@ -34,6 +35,11 @@ FSNP_BEGIN_DECL
  * Return 0 on success, -1 otherwise
  */
 int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n);
+
+/*
+ * Ask in the overlay network who has a file
+ */
+int ask_whohas(const sha256_t key, const struct fsnp_peer *requester);
 
 /*
  * Exit the superpeer's overlay network. The socket passed when entered the

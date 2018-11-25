@@ -23,15 +23,17 @@
 #include <arpa/inet.h>
 #include <poll.h>
 #include <time.h>
-#include <struct/hashtable.h>
 
 #include "peer/superpeer-superpeer.h"
 #include "peer/superpeer.h"
 #include "peer/thread_manager.h"
 #include "peer/peer.h"
 #include "peer/keys_cache.h"
+#include "peer/peer-server.h"
 
 #include "fsnp/fsnp.h"
+
+#include "struct/hashtable.h"
 
 #include "slog/slog.h"
 
@@ -205,7 +207,7 @@ static inline void unset_snd_next(struct neighbors *nb)
 }
 
 /*
- * Set the next as snd_next, unsetting the snd_next
+ * Set the snd_next as next, then unset the snd_next
  */
 static inline void set_next_as_snd_next(struct neighbors *nb)
 {
@@ -313,6 +315,7 @@ static void unset_all(struct neighbors *nb)
 struct request {
 	struct timespec creation_time;
 	bool sent_by_me;
+	struct fsnp_peer requester; // this field has a mean only if sent_by_me is true
 };
 
 /*
@@ -387,7 +390,8 @@ static inline double calculate_timespec_delta(const struct timespec *a,
  */
 static int invalidate_next_if_needed(struct neighbors *nb,
                                      struct timespec *last,
-                                     const struct timespec *curr)
+                                     const struct timespec *curr,
+                                     struct fsnp_peer *old_next)
 {
 	double delta = 0;
 
@@ -397,9 +401,10 @@ static int invalidate_next_if_needed(struct neighbors *nb,
 		return VALIDATED;
 	}
 
-	if (isset_snd_next(nb)) {
+    memcpy(old_next, &nb->next, sizeof(struct fsnp_peer));
+	if (isset_snd_next(nb) && !cmp_snd_next_against_self(nb)) {
 		slog_info(FILE_LEVEL, "Next '%s' invalidated.", nb->next_pretty);
-		set_next_as_snd_next(nb);
+        set_next_as_snd_next(nb);
 		return INVALIDATED_YES_SND;
 	} else {
 		slog_info(FILE_LEVEL, "Next '%s' invalidated. No snd_next to substitute"
@@ -725,13 +730,45 @@ static void setup_poll(struct pollfd *pollfd, const struct sp_udp_state *sus)
 	pollfd[SOCK].events = POLLIN | POLLPRI;
 }
 
+// TODO: continue from here: create a struct for the pipe, so that it send everything we need for a whohas request in one shot
+/*
+ * Read from the pipe what's searching a peer and progagate it through the sp
+ * network
+ */
+static void pipe_whohas_rcvd(struct sp_udp_state *sus)
+{
+
+}
+
 /*
  * Read a message received on the pipe
  */
 static void read_pipe_msg(struct sp_udp_state *sus)
 {
-	// TODO: implement
-	UNUSED(sus);
+    ssize_t r = 0;
+    int msg = 0;
+
+    r = fsnp_read(sus->pipe[READ_END], &msg, sizeof(int));
+    if (r < 0) {
+        slog_fatal(FILE_LEVEL, "Unable to read a message from the pipe");
+        sus->should_exit = true;
+        prepare_exit_sp_mode();
+        exit_sp_mode();
+    }
+
+    switch (msg) {
+        case PIPE_WHOHAS:
+        	pipe_whohas_rcvd(sus);
+            break;
+
+        case PIPE_QUIT:
+            sus->should_exit = true;
+            break;
+
+        default:
+            slog_error(FILE_LEVEL, "Unexpected pipe message: %d", msg);
+            break;
+    }
 }
 
 /*
@@ -889,7 +926,15 @@ static void whohas_msg_rcvd(struct sp_udp_state *sus,
 static void leave_msg_rcvd(struct sp_udp_state *sus,
 		const struct fsnp_leave *leave, const struct sender *sender)
 {
-	// TODO: implement
+    UNUSED(leave);
+
+	if (cmp_next(sus->nb, &sender->addr)) {
+        set_next_as_snd_next(sus->nb);
+	} else if (cmp_prev(sus->nb, &sender->addr)) {
+	    unset_prev(sus->nb);
+	}
+
+	send_ack(sus, sender);
 }
 
 /*
@@ -971,17 +1016,20 @@ static void check_next_aliveness(struct sp_udp_state *sus)
 {
 	struct timespec curr;
 	int ret = 0;
+	struct fsnp_peer old_next;
 
 	clock_gettime(CLOCK_MONOTONIC, &curr);
-	ret = invalidate_next_if_needed(sus->nb, &sus->last, &curr);
+	ret = invalidate_next_if_needed(sus->nb, &sus->last, &curr, &old_next);
 	switch (ret) {
 		case VALIDATED:
 			break;
 
-		case INVALIDATED_NO_SND: // FIXME: maybe this case is useless? Or here we can send a WHOSNEXT msg?
+		case INVALIDATED_NO_SND:
+			rm_dead_sp_from_server(&old_next);
 			break;
 
 		case INVALIDATED_YES_SND:
+			rm_dead_sp_from_server(&old_next);
 			send_next(sus, NULL);
 			ensure_next_conn(sus);
 			break;
@@ -1006,7 +1054,7 @@ static int invalidate_requests_iterator(void *item, size_t idx, void *user)
 {
 	hashtable_key_t *key = (hashtable_key_t *)item;
 	struct invalidate_req_data *data = (struct invalidate_req_data *)user;
-	struct request *req = NULL;
+	struct request *req = NULL; // TODO: if the request was sent by this superpeer communicate the error to the per who has requested it
 	double delta = 0;
 	char key_str[SHA256_BYTES];
 	unsigned i = 0;
@@ -1059,6 +1107,13 @@ static void invalidate_requests(struct sp_udp_state *sus)
 
 #define POLL_TIMEOUT 30000 // ms
 
+struct sp_thread_pipe {
+	int pipe_fd[2];
+	pthread_mutex_t mtx;
+};
+
+static struct sp_thread_pipe stp;
+
 /*
  * Entry point for the superpeer's udp subsystem.
  */
@@ -1103,8 +1158,12 @@ static void sp_udp_thread(void *data)
 	ht_destroy(sus->reqs);
 	free(sus->nb);
 	close(sus->sock);
+	pthread_mutex_lock(&stp.mtx);
 	close(sus->pipe[READ_END]);
 	close(sus->pipe[WRITE_END]);
+	memset(stp.pipe_fd, 0, sizeof(int) * 2);
+	pthread_mutex_unlock(&stp.mtx);
+	pthread_mutex_destroy(&stp.mtx);
 	// Don't free sus, it will be freed by the thread_manager
 }
 
@@ -1158,6 +1217,17 @@ int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n)
 		return -1;
 	}
 
+	ret = pthread_mutex_init(&stp.mtx, NULL);
+	if (ret < 0) {
+		slog_error(FILE_LEVEL, "pthread_mutex_init error %d", ret);
+		ht_destroy(sus->reqs);
+		close(sus->pipe[READ_END]);
+		close(sus->pipe[WRITE_END]);
+		free(sus->nb);
+		free(sus);
+		return -1;
+	}
+
 	sus->sock = udp;
 	sus->should_exit = false;
 	self.ip = get_peer_ip();
@@ -1190,21 +1260,55 @@ int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n)
 		default:
 			slog_error(FILE_LEVEL, "Wrong parameter: n can't be %u", n);
 			ht_destroy(sus->reqs);
+			close(sus->pipe[READ_END]);
+			close(sus->pipe[WRITE_END]);
+			pthread_mutex_destroy(&stp.mtx);
 			free(sus->nb);
 			free(sus);
 			return -1;
 	}
 
+	memcpy(stp.pipe_fd, sus->pipe, sizeof(int) * 2);
 	ret = start_new_thread(sp_udp_thread, sus, "sp-udp-thread");
 	if (ret < 0) {
 		sus->sock = 0;
 		ht_destroy(sus->reqs);
+		close(sus->pipe[READ_END]);
+		close(sus->pipe[WRITE_END]);
+		pthread_mutex_destroy(&stp.mtx);
 		free(sus->nb);
 		free(sus);
+		memset(stp.pipe_fd, 0, sizeof(int) * 2);
 		return -1;
 	}
 
 	return 0;
+}
+
+static int get_pipe_write_end(void)
+{
+	int we = 0;
+
+	pthread_mutex_lock(&stp.mtx);
+	we = stp.pipe_fd[WRITE_END];
+	pthread_mutex_unlock(&stp.mtx);
+	return we;
+}
+
+int ask_whohas(const sha256_t key, const struct fsnp_peer *requester)
+{
+	ssize_t w = 0;
+	int we = 0;
+	int msg = PIPE_WHOHAS;
+
+	we = get_pipe_write_end();
+	w = fsnp_write(we, &msg, sizeof(int));
+	if (w < 0) {
+		slog_error(FILE_LEVEL, "Unable to write the message in the pipe");
+		return -1;
+	}
+
+
 }
 
 #undef NO_SP
