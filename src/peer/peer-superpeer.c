@@ -552,6 +552,8 @@ static void send_file_req(void)
 		return;
 	}
 
+	// TODO: wait for an ACK or an ERROR
+
 	tcp_state.file_asked = true;
 }
 
