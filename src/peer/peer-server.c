@@ -188,6 +188,33 @@ static void query_server(void *data)
 	free(query_res);
 }
 
+void rm_dead_sp_from_server(struct fsnp_peer *dead_sp)
+{
+	int sock = 0;
+	struct fsnp_peer serv;
+	struct in_addr addr;
+	struct fsnp_rm_sp rm_sp;
+	fsnp_err_t err;
+
+	get_server_addr(&serv);
+	addr.s_addr = htonl(serv.ip);
+	sock = fsnp_create_connect_tcp_sock(addr, serv.port);
+	if (sock < 0) {
+		slog_error(FILE_LEVEL, "Unable to establish a connection with the server");
+		return;
+	}
+
+	fsnp_init_rm_sp(&rm_sp, dead_sp, SUPERPEER);
+	err = fsnp_send_rm_sp(sock, &rm_sp);
+	if (err != E_NOERR) {
+		close(sock);
+		fsnp_log_err_msg(err, false);
+		return;
+	}
+
+	close(sock);
+}
+
 void launch_query_server_sp(const struct sockaddr_in *addr)
 {
 	struct sockaddr_in *addr_cp = NULL;

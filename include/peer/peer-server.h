@@ -31,6 +31,11 @@ FSNP_BEGIN_DECL
  */
 void launch_query_server_sp(const struct sockaddr_in *addr);
 
+/*
+ * Establish a connection with the boot_server to remove a dead superpeer
+ */
+void rm_dead_sp_from_server(struct fsnp_peer *dead_sp);
+
 FSNP_END_DECL
 
 #endif //FSNP_PEER_SERVER_H
