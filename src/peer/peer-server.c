@@ -188,6 +188,86 @@ static void query_server(void *data)
 	free(query_res);
 }
 
+int add_sp_to_server(void)
+{
+	int sock;
+	struct fsnp_peer server_addr;
+	struct in_addr ip;
+	struct fsnp_add_sp add_sp;
+	fsnp_err_t err;
+	in_port_t sp_port;
+	in_port_t p_port;
+
+	get_server_addr(&server_addr);
+	if (server_addr.ip == 0 && server_addr.port == 0) {
+		// if the peer doesn't know any server how is possible that we are here?
+		slog_panic(FILE_LEVEL, "The peer doesn't know a server, yet it's "
+		                       "becoming an sp");
+		return -1;
+	}
+
+	ip.s_addr = server_addr.ip;
+	slog_info(FILE_LEVEL, "Connecting with the server");
+	sock = fsnp_create_connect_tcp_sock(ip, server_addr.port);
+	if (sock < 0) {
+		slog_error(FILE_LEVEL, "Unable to contact the server");
+		return -1;
+	}
+
+	sp_port = get_udp_sp_port();
+	p_port = get_tcp_sp_port();
+	fsnp_init_add_sp(&add_sp, p_port, sp_port);
+	slog_info(FILE_LEVEL, "Sending an add_sp msg with 'sp port: %hu', 'peer "
+	                      "port: %hu'", sp_port, p_port);
+	err = fsnp_send_add_sp(sock, &add_sp);
+	if (err != E_NOERR) {
+		fsnp_log_err_msg(err, false);
+		close(sock);
+		return -1;
+	}
+
+	close(sock);
+	return 0;
+}
+
+void rm_sp_from_server(void)
+{
+	int sock;
+	struct fsnp_peer server_addr;
+	struct fsnp_peer sp_addr;
+	struct in_addr ip;
+	struct fsnp_rm_sp rm_sp;
+	fsnp_err_t err;
+
+	get_server_addr(&server_addr);
+	if (server_addr.ip == 0 && server_addr.port == 0) {
+		// if the peer doesn't know any server how is possible that we are here?
+		slog_panic(FILE_LEVEL, "The peer doesn't know a peer, yet it's becoming"
+		                       " an sp");
+		return;
+	}
+
+	ip.s_addr = server_addr.ip;
+	slog_info(FILE_LEVEL, "Connecting with the server");
+	sock = fsnp_create_connect_tcp_sock(ip, server_addr.port);
+	if (sock < 0) {
+		return;
+	}
+
+	sp_addr.ip = get_peer_ip();
+	sp_addr.port = get_udp_sp_port();
+	slog_info(FILE_LEVEL, "Sending a rm_sp msg to the server");
+	fsnp_init_rm_sp(&rm_sp, &sp_addr, SUPERPEER);
+	err = fsnp_send_rm_sp(sock, &rm_sp);
+	if (err != E_NOERR) {
+		fsnp_log_err_msg(err, false);
+		close(sock);
+		return;
+	}
+
+	close(sock);
+}
+
 void rm_dead_sp_from_server(struct fsnp_peer *dead_sp)
 {
 	int sock = 0;

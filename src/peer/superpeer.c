@@ -25,6 +25,7 @@
 #include <errno.h>
 
 #include "peer/peer.h"
+#include "peer/peer-server.h"
 #include "peer/superpeer.h"
 #include "peer/port.h"
 #include "peer/keys_cache.h"
@@ -54,53 +55,6 @@
  * a 'sp_tcp_thread'. The thread will free the memory when it's about to close
  */
 static linked_list_t *known_peers = NULL;
-
-/*
- * Contact the server used by the peer to join the P2P network for ask to add
- * this superpeer to its list.
- * Return 0 on success, -1 otherwise
- */
-static int add_sp_to_server(void)
-{
-	int sock;
-	struct fsnp_peer server_addr;
-	struct in_addr ip;
-	struct fsnp_add_sp add_sp;
-	fsnp_err_t err;
-	in_port_t sp_port;
-	in_port_t p_port;
-
-	get_server_addr(&server_addr);
-	if (server_addr.ip == 0 && server_addr.port == 0) {
-		// if the peer doesn't know any server how is possible that we are here?
-		slog_panic(FILE_LEVEL, "The peer doesn't know a server, yet it's "
-						 "becoming an sp");
-		return -1;
-	}
-
-	ip.s_addr = server_addr.ip;
-	slog_info(FILE_LEVEL, "Connecting with the server");
-	sock = fsnp_create_connect_tcp_sock(ip, server_addr.port);
-	if (sock < 0) {
-		slog_error(FILE_LEVEL, "Unable to contact the server");
-		return -1;
-	}
-
-	sp_port = get_udp_sp_port();
-	p_port = get_tcp_sp_port();
-	fsnp_init_add_sp(&add_sp, p_port, sp_port);
-	slog_info(FILE_LEVEL, "Sending an add_sp msg with 'sp port: %hu', 'peer "
-					   "port: %hu'", sp_port, p_port);
-	err = fsnp_send_add_sp(sock, &add_sp);
-	if (err != E_NOERR) {
-		fsnp_log_err_msg(err, false);
-		close(sock);
-		return -1;
-	}
-
-	close(sock);
-	return 0;
-}
 
 /*
  * Create the superpeer's sockets and enter the overlay network
@@ -331,10 +285,66 @@ void sp_tcp_sock_event(short revents)
 	}
 }
 
-void communicate_whohas_result_for_peer(const struct fsnp_whohas *whohas,
-                                        const struct fsnp_peer *requester)
+struct communicate_whohas_data {
+	struct fsnp_whohas whohas;
+	struct fsnp_peer requester;
+};
+
+/*
+ * Write into the pipe the result of whohas
+ */
+static void pipe_write_file_res(const struct peer_info *info,
+								const struct communicate_whohas_data *data)
 {
-	// TODO: implement. Continue from here
+	int msg = PIPE_FILE_RES;
+	ssize_t w = 0;
+	fsnp_err_t err;
+
+	w = fsnp_timed_write(info->pipefd[WRITE_END], &msg, sizeof(int), 0,
+	                     &err);
+	if (w < 0) {
+		slog_error(FILE_LEVEL, "Unable to write PIPE_FILE_RES in the pipe");
+		fsnp_log_err_msg(err, false);
+	}
+
+	w = fsnp_timed_write(info->pipefd[WRITE_END], &data->whohas,
+	                     sizeof(struct fsnp_whohas), 0, &err);
+	if (w < 0) {
+		slog_error(FILE_LEVEL, "Unable to communicate to peer %s about the"
+		                       " search results", info->pretty_addr);
+		fsnp_log_err_msg(err, false);
+	}
+}
+
+/*
+ * Iterate over the peer_info struct contained in known_peers for writing into
+ * a peer's thread pipe the result of the whohas search
+ */
+static int communicate_whohas_iterator(void *item, size_t idx, void *user)
+{
+	struct peer_info *info = (struct peer_info *)item;
+	struct communicate_whohas_data *data = (struct communicate_whohas_data *)user;
+
+	UNUSED(idx);
+
+	if (!memcmp(&info->addr, &data->requester, sizeof(struct fsnp_peer))) {
+		slog_info(FILE_LEVEL, "Communicating to %s about the search results",
+				info->pretty_addr);
+		pipe_write_file_res(info, data);
+		return STOP;
+	} else {
+		return GO_AHEAD;
+	}
+}
+
+void communicate_whohas_result_to_peer(const struct fsnp_whohas *whohas,
+                                       const struct fsnp_peer *requester)
+{
+	struct communicate_whohas_data data;
+	// TODO: if the peer who asked the data is this what do we do? BIG QUESTION: how the superpeer ask anything in the network???
+	memcpy(&data.whohas, whohas, sizeof(struct fsnp_whohas));
+	memcpy(&data.requester, requester, sizeof(struct fsnp_peer));
+	list_foreach_value(known_peers, communicate_whohas_iterator, &data);
 }
 
 /*
@@ -427,47 +437,6 @@ void quit_all_peers(void)
 	list_foreach_value(known_peers, quit_peer_threads_iterator, NULL);
 }
 
-/*
- * Remove this superpeer from the server's list
- */
-static void rm_sp_from_server(void)
-{
-	int sock;
-	struct fsnp_peer server_addr;
-	struct fsnp_peer sp_addr;
-	struct in_addr ip;
-	struct fsnp_rm_sp rm_sp;
-	fsnp_err_t err;
-
-	get_server_addr(&server_addr);
-	if (server_addr.ip == 0 && server_addr.port == 0) {
-		// if the peer doesn't know any server how is possible that we are here?
-		slog_panic(FILE_LEVEL, "The peer doesn't know a peer, yet it's becoming"
-		                       " an sp");
-		return;
-	}
-
-	ip.s_addr = server_addr.ip;
-	slog_info(FILE_LEVEL, "Connecting with the server");
-	sock = fsnp_create_connect_tcp_sock(ip, server_addr.port);
-	if (sock < 0) {
-		return;
-	}
-
-	sp_addr.ip = get_peer_ip();
-	sp_addr.port = get_udp_sp_port();
-	slog_info(FILE_LEVEL, "Sending a rm_sp msg to the server");
-	fsnp_init_rm_sp(&rm_sp, &sp_addr, SUPERPEER);
-	err = fsnp_send_rm_sp(sock, &rm_sp);
-	if (err != E_NOERR) {
-		fsnp_log_err_msg(err, false);
-		close(sock);
-		return;
-	}
-
-	close(sock);
-}
-
 void prepare_exit_sp_mode(void)
 {
 	accept_conn = false;
@@ -494,4 +463,3 @@ void exit_sp_mode(void)
 #undef READ_END
 #undef WRITE_END
 #undef SP_BACKLOG
-#undef MAX_KNOWN_PEER

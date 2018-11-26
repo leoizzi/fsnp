@@ -823,7 +823,7 @@ static void whohas_msg_rcvd(struct sp_udp_state *sus,
 	req = ht_get(sus->reqs, whohas->req_id, sizeof(sha256_t), NULL);
 	if (req) {
 		if (req->sent_by_me) {
-			communicate_whohas_result_for_peer(whohas, &req->requester);
+			communicate_whohas_result_to_peer(whohas, &req->requester);
 			ht_delete(sus->reqs, whohas->req_id, sizeof(sha256_t), NULL, NULL);
 		} else {
 			slog_info(FILE_LEVEL, "Request %s is already in cache", key_str);
@@ -1034,10 +1034,30 @@ static void pipe_whohas_rcvd(struct sp_udp_state *sus)
 	}
 
 	if (n >= 16) {
-		communicate_whohas_result_for_peer(&whohas, &whohas_msg.requester);
+		communicate_whohas_result_to_peer(&whohas, &whohas_msg.requester);
 		ht_delete(sus->reqs, req_id, sizeof(sha256_t), NULL, NULL);
 	} else {
 		send_whohas(sus, &whohas, true);
+	}
+}
+
+static void write_prev_to_pipe(struct sp_udp_state *sus)
+{
+	struct fsnp_peer prev;
+	ssize_t w = 0;
+	fsnp_err_t err;
+
+	if (cmp_prev_against_self(sus->nb)) {
+		memset(&prev, 0, sizeof(struct fsnp_peer));
+	} else {
+		memcpy(&prev, &sus->nb->prev, sizeof(struct fsnp_peer));
+	}
+	
+	w = fsnp_timed_write(sus->pipe[WRITE_END], &prev, sizeof(struct fsnp_peer),
+			0, &err);
+	if (w < 0) {
+		slog_error(FILE_LEVEL, "Unable to write prev's address in the pipe");
+		fsnp_log_err_msg(err, false);
 	}
 }
 
@@ -1061,10 +1081,17 @@ static void read_pipe_msg(struct sp_udp_state *sus)
 
 	switch (msg) {
 		case PIPE_WHOHAS:
+			slog_info(FILE_LEVEL, "PIPE_WHOHAS read from pipe");
 			pipe_whohas_rcvd(sus);
 			break;
 
+		case PIPE_GET_PREV:
+			slog_info(FILE_LEVEL, "PIPE_GET_PREV read from pipe");
+			write_prev_to_pipe(sus);
+			break;
+
 		case PIPE_QUIT:
+			slog_info(FILE_LEVEL, "PIPE_QUIT read from pipe");
 			sus->should_exit = true;
 			break;
 
@@ -1211,6 +1238,7 @@ static void sp_udp_thread(void *data)
 	clock_gettime(CLOCK_MONOTONIC, &sus->last);
 
 	setup_poll(pollfd, sus);
+	slog_info(FILE_LEVEL, "Superpeers' overlay network successfully joined");
 	while (!sus->should_exit) {
 		ret = poll(pollfd, POLLFD_NUM, POLL_TIMEOUT);
 		invalidate_requests(sus);
@@ -1268,12 +1296,14 @@ int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n)
 	struct sp_udp_state *sus = NULL;
 	struct fsnp_peer self;
 
+	slog_info(FILE_LEVEL, "Creating struct sp_udp_state");
 	sus = calloc(1, sizeof(struct sp_udp_state));
 	if (!sus) {
 		slog_error(FILE_LEVEL, "malloc error %d", errno);
 		return -1;
 	}
 
+	slog_info(FILE_LEVEL, "Creating struct neighbors");
 	sus->nb = calloc(1, sizeof(struct neighbors));
 	if (!sus->nb) {
 		slog_error(FILE_LEVEL, "malloc error %d", errno);
@@ -1281,6 +1311,7 @@ int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n)
 		return -1;
 	}
 
+	slog_info(FILE_LEVEL, "Initializing reqs hashtable");
 	sus->reqs = ht_create(HT_SIZE_MIN, REQS_SIZE_MAX, reqs_free_callback);
 	if (!sus->reqs) {
 		slog_error(FILE_LEVEL, "Unable to create reqs hashtable");
@@ -1289,6 +1320,7 @@ int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n)
 		return -1;
 	}
 
+	slog_info(FILE_LEVEL, "Creating superpeer's pipe");
 	ret = pipe(sus->pipe);
 	if (ret < 0) {
 		slog_error(FILE_LEVEL, "Pipe error %d", errno);
@@ -1298,6 +1330,7 @@ int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n)
 		return -1;
 	}
 
+	slog_info(FILE_LEVEL, "Initializing struct sp_thread_pipe's mutex");
 	ret = pthread_mutex_init(&stp.mtx, NULL);
 	if (ret < 0) {
 		slog_error(FILE_LEVEL, "pthread_mutex_init error %d", ret);
@@ -1315,18 +1348,21 @@ int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n)
 	self.port = get_udp_sp_port();
 	switch (n) {
 		case NO_SP:
+			slog_info(FILE_LEVEL, "Case NO_SP");
 			set_prev(sus->nb, &self);
 			set_next(sus->nb, &self);
 			set_snd_next(sus->nb, &self);
 			break;
 
 		case ONE_SP:
+			slog_info(FILE_LEVEL, "Case ONE_SP");
 			set_prev(sus->nb, sps);
 			set_next(sus->nb, &self);
 			set_snd_next(sus->nb, &self);
 			break;
 
 		case TWO_SPS:
+			slog_info(FILE_LEVEL, "Case TWO_SPS");
 			set_prev(sus->nb, &sps[0]);
 			set_next(sus->nb, &self);
 			/* HACK:
@@ -1366,6 +1402,9 @@ int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n)
 	return 0;
 }
 
+/*
+ * Return the write side of the pipe
+ */
 static int get_pipe_write_end(void)
 {
 	int we = 0;
@@ -1374,6 +1413,19 @@ static int get_pipe_write_end(void)
 	we = stp.pipe_fd[WRITE_END];
 	pthread_mutex_unlock(&stp.mtx);
 	return we;
+}
+
+/*
+ * Return the read end of the pipe
+ */
+static int get_pipe_read_end(void)
+{
+	int re = 0;
+
+	pthread_mutex_lock(&stp.mtx);
+	re = stp.pipe_fd[READ_END];
+	pthread_mutex_unlock(&stp.mtx);
+	return re;
 }
 
 int ask_whohas(const sha256_t file_hash, const struct fsnp_peer *requester)
@@ -1417,6 +1469,45 @@ int ask_whohas(const sha256_t file_hash, const struct fsnp_peer *requester)
 
 #undef REQS_SIZE_MAX
 
+bool get_prev_addr(struct fsnp_peer *prev)
+{
+	int re = 0;
+	int we = 0;
+	int msg = PIPE_GET_PREV;
+	fsnp_err_t err;
+	ssize_t rw = 0;
+
+	we = get_pipe_write_end();
+	if (we == 0) {
+		return false;
+	}
+
+	rw = fsnp_timed_write(we, &msg, sizeof(int), 0, &err);
+	if (rw < 0) {
+		slog_error(FILE_LEVEL, "Unable to write PIPE_GET_PREV in the pipe");
+		fsnp_log_err_msg(err, false);
+		return false;
+	}
+
+	re = get_pipe_read_end();
+	if (re == 0) {
+		return false;
+	}
+
+	rw = fsnp_timed_read(re, prev, sizeof(struct fsnp_peer), 0, &err);
+	if (rw < 0) {
+		slog_error(FILE_LEVEL, "Unable to read prev address from the pipe");
+		fsnp_log_err_msg(err, false);
+		return false;
+	}
+
+	if (prev->ip == 0 && prev->port == 0) {
+		return false;
+	} else {
+		return true;
+	}
+}
+
 void exit_sp_network(void)
 {
 	int we =0;
@@ -1425,6 +1516,10 @@ void exit_sp_network(void)
 	fsnp_err_t err;
 
 	we = get_pipe_write_end();
+	if (we == 0) {
+		return;
+	}
+
 	w = fsnp_timed_write(we, &msg, sizeof(int), 0, &err);
 	if (w < 0) {
 		slog_error(FILE_LEVEL, "Unable to write PIPE_QUIT in the pipe");

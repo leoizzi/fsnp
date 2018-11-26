@@ -43,6 +43,7 @@ struct peer_info {
 #define PIPE_QUIT 1
 #define PIPE_PROMOTE 2
 #define PIPE_FILE_RES 3
+#define PIPE_GET_PREV 4
 
 /*
  * Enter the superpeer mode.
@@ -60,8 +61,12 @@ void exit_sp_mode(void);
  */
 void sp_tcp_sock_event(short revents);
 
-void communicate_whohas_result_for_peer(const struct fsnp_whohas *whohas,
-		const struct fsnp_peer *requester);
+/*
+ * Communicate the whohas result contained in 'whohas' to the peer contained
+ * in 'requester'
+ */
+void communicate_whohas_result_to_peer(const struct fsnp_whohas *whohas,
+                                       const struct fsnp_peer *requester);
 
 /*
  * Quit every peer connected to the superpeer

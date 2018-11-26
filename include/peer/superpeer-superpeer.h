@@ -18,6 +18,8 @@
 #ifndef FSNP_SUPERPEER_SUPERPEER_H
 #define FSNP_SUPERPEER_SUPERPEER_H
 
+#include <stdbool.h>
+
 #include "compiler.h"
 
 #include "fsnp/fsnp_types.h"
@@ -40,6 +42,14 @@ int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n);
  * Ask in the overlay network who has a file
  */
 int ask_whohas(const sha256_t file_hash, const struct fsnp_peer *requester);
+
+/*
+ * Get a copy of the prev's address. The address is to be considered valid
+ * only if the function has returned true.
+ * This is done so that we don't get a copy of this superpeer's address in case
+ * it doesn't have a prev.
+ */
+bool get_prev_addr(struct fsnp_peer *prev);
 
 /*
  * Exit the superpeer's overlay network. The socket passed when entered the

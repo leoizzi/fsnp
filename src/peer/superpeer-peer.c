@@ -76,6 +76,21 @@ static int send_ack(const struct peer_info *info)
 }
 
 /*
+ * Senf a FILE_RES msg to the peer
+ */
+static void send_file_res(const struct peer_info *info,
+						  const struct fsnp_file_res *file_res)
+{
+	fsnp_err_t err;
+
+	slog_info(FILE_LEVEL, "Sending a FILE_RES msg to %s", info->pretty_addr);
+	err = fsnp_send_file_res(info->sock, file_res);
+	if (err != E_NOERR) {
+		fsnp_log_err_msg(err, false);
+	}
+}
+
+/*
  * Send an error msg to the peer
  */
 static void send_error(const struct peer_info *info)
@@ -285,16 +300,51 @@ static void sock_event(short revents, struct peer_info *info, bool leaving,
 }
 
 /*
+ * Handler called when a PIPE_FILE_RES msg type is read from the pipe
+ */
+static void pipe_file_res_rvcd(const struct peer_info *info)
+{
+	ssize_t r = 0;
+	fsnp_err_t err;
+	struct fsnp_whohas whohas;
+	struct fsnp_file_res *file_res = NULL;
+
+	r = fsnp_timed_read(info->pipefd[READ_END], &whohas,
+			sizeof(struct fsnp_whohas), 0, &err);
+	if (r < 0) {
+		slog_error(FILE_LEVEL, "Unable to read whohas msg from the pipe of %s",
+				info->pretty_addr);
+		fsnp_log_err_msg(err, false);
+		return;
+	}
+
+	file_res = fsnp_create_file_res(whohas.num_peers, whohas.owners);
+	if (!file_res) {
+		slog_error(FILE_LEVEL, "Unable to create fsnp_file_res");
+		return;
+	}
+
+	send_file_res(info, file_res);
+	free(file_res);
+}
+
+/*
+ * Handler called when a PIPE_PROMOTE msg type is read from the pipe
+ */
+static void pipe_promote_rcvd(struct peer_info *info)
+{
+	// TODO: call get_prev_addr(struct fsnp_peer *prev) for getting the prev address
+	// TODO: continue from here
+/*
  * Read a message on the pipe and:
  * - if is a PIPE_PROMOTE message promote the peer
  * - if is a PIPE_QUIT message tell the peer we're leaving
  */
-static void read_pipe_msg(const struct peer_info *info, bool *leaving,
+static void read_pipe_msg(struct peer_info *info, bool *leaving,
 						  bool *should_exit)
 {
 	ssize_t r = 0;
 	int msg = 0;
-	struct fsnp_promote promote;
 	struct fsnp_leave leave;
 	fsnp_err_t err;
 
@@ -311,8 +361,13 @@ static void read_pipe_msg(const struct peer_info *info, bool *leaving,
 	}
 
 	if (msg == PIPE_PROMOTE) {
-		slog_info(FILE_LEVEL, "Read from the pipe to promote %s", info->pretty_addr);
-		// TODO: promote the peer. Before going on here the superpeer-superpeer file has to be completed, since we need to communicate to the peer who's being promoted the other sps' addresses
+		slog_info(FILE_LEVEL, "Read from the pipe to promote %s",
+		          info->pretty_addr);
+		pipe_promote_rcvd(info);
+	} else if (msg == PIPE_FILE_RES) {
+		slog_info(FILE_LEVEL, "Read from the pipe to send file_res to %s",
+				info->pretty_addr);
+		pipe_file_res_rvcd(info);
 	} else { // msg = PIPE_QUIT
 		slog_info(FILE_LEVEL, "Read from the pipe to leave %s", info->pretty_addr);
 		fsnp_init_leave(&leave);
@@ -329,8 +384,8 @@ static void read_pipe_msg(const struct peer_info *info, bool *leaving,
 /*
  * Handle an event on the pipe
  */
-static void pipe_event(short revents, const struct peer_info *info,
-                       bool *leaving, bool *should_exit)
+static void pipe_event(short revents, struct peer_info *info, bool *leaving,
+					   bool *should_exit)
 {
 	if (revents & POLLIN || revents & POLLPRI || revents & POLLRDBAND) {
 		read_pipe_msg(info, leaving, should_exit);
@@ -405,16 +460,15 @@ void sp_tcp_thread(void *data)
 		cache_rm_keys(&info->addr);
 	}
 
-	/*
-	 * Do not free the peer_info struct, it will be done by the thread_manager.
-	 * That said, we need to tell the list to remove this peer.
-	 */
-	close(info->sock);
-	close(info->pipefd[READ_END]);
-	close(info->pipefd[WRITE_END]);
 	slog_info(FILE_LEVEL, "Removing %s from the known_peer list", info->pretty_addr);
 	rm_peer_from_list(&info->addr);
 	slog_info(FILE_LEVEL, "Leaving procedure for %s completed", info->pretty_addr);
+	close(info->sock);
+	close(info->pipefd[READ_END]);
+	close(info->pipefd[WRITE_END]);
+	/*
+	 * Do not free the peer_info struct, it will be done by the thread_manager.
+    */
 }
 
 #undef POLL_ALIVE_TIMEOUT

@@ -32,6 +32,18 @@ FSNP_BEGIN_DECL
 void launch_query_server_sp(const struct sockaddr_in *addr);
 
 /*
+ * Contact the server used by the peer to join the P2P network for ask to add
+ * this superpeer to its list.
+ * Return 0 on success, -1 otherwise
+ */
+int add_sp_to_server(void);
+
+/*
+ * Remove this superpeer from the server's list
+ */
+void rm_sp_from_server(void);
+
+/*
  * Establish a connection with the boot_server to remove a dead superpeer
  */
 void rm_dead_sp_from_server(struct fsnp_peer *dead_sp);
