@@ -331,10 +331,10 @@ static void pipe_file_res_rvcd(const struct peer_info *info)
 /*
  * Handler called when a PIPE_PROMOTE msg type is read from the pipe
  */
-static void pipe_promote_rcvd(struct peer_info *info)
-{
+static void pipe_promote_rcvd(struct peer_info *info) {
 	// TODO: call get_prev_addr(struct fsnp_peer *prev) for getting the prev address
 	// TODO: continue from here
+}
 /*
  * Read a message on the pipe and:
  * - if is a PIPE_PROMOTE message promote the peer
