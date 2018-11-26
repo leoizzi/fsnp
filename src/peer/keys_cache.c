@@ -327,6 +327,7 @@ void get_peers_for_key(sha256_t key, struct fsnp_peer *peers, uint8_t *n)
 	STRINGIFY_HASH(key_str, key, i);
 #endif
 
+	memset(peers, 0, sizeof(struct fsnp_peer) * MAX_KNOWN_PEER);
 	kc = ht_get(cache, key, sizeof(sha256_t), NULL);
 	if (!kc) {
 #ifdef FSNP_DEBUG

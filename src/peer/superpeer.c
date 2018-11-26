@@ -331,6 +331,12 @@ void sp_tcp_sock_event(short revents)
 	}
 }
 
+void communicate_whohas_result_for_peer(const struct fsnp_whohas *whohas,
+                                        const struct fsnp_peer *requester)
+{
+	// TODO: implement. Continue from here
+}
+
 /*
  * Iterate over "known_peers" in order to remove from the list the peer that
  * matches the one passed in "user".

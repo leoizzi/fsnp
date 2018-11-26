@@ -39,7 +39,7 @@ int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n);
 /*
  * Ask in the overlay network who has a file
  */
-int ask_whohas(const sha256_t key, const struct fsnp_peer *requester);
+int ask_whohas(const sha256_t file_hash, const struct fsnp_peer *requester);
 
 /*
  * Exit the superpeer's overlay network. The socket passed when entered the

@@ -60,6 +60,9 @@ void exit_sp_mode(void);
  */
 void sp_tcp_sock_event(short revents);
 
+void communicate_whohas_result_for_peer(const struct fsnp_whohas *whohas,
+		const struct fsnp_peer *requester);
+
 /*
  * Quit every peer connected to the superpeer
  */

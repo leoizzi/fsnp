@@ -662,7 +662,7 @@ static void ensure_prev_conn(const struct sp_udp_state *sus)
 }
 
 /*
- * Make sure that the next will send
+ * Make sure that the next will send an ACK after a NEXT msg
  */
 static void ensure_next_conn(struct sp_udp_state *sus)
 {
@@ -728,62 +728,6 @@ static void setup_poll(struct pollfd *pollfd, const struct sp_udp_state *sus)
 	pollfd[PIPE].events = POLLIN | POLLPRI;
 	pollfd[SOCK].fd = sus->sock;
 	pollfd[SOCK].events = POLLIN | POLLPRI;
-}
-
-// TODO: continue from here: create a struct for the pipe, so that it send everything we need for a whohas request in one shot
-/*
- * Read from the pipe what's searching a peer and progagate it through the sp
- * network
- */
-static void pipe_whohas_rcvd(struct sp_udp_state *sus)
-{
-
-}
-
-/*
- * Read a message received on the pipe
- */
-static void read_pipe_msg(struct sp_udp_state *sus)
-{
-    ssize_t r = 0;
-    int msg = 0;
-
-    r = fsnp_read(sus->pipe[READ_END], &msg, sizeof(int));
-    if (r < 0) {
-        slog_fatal(FILE_LEVEL, "Unable to read a message from the pipe");
-        sus->should_exit = true;
-        prepare_exit_sp_mode();
-        exit_sp_mode();
-    }
-
-    switch (msg) {
-        case PIPE_WHOHAS:
-        	pipe_whohas_rcvd(sus);
-            break;
-
-        case PIPE_QUIT:
-            sus->should_exit = true;
-            break;
-
-        default:
-            slog_error(FILE_LEVEL, "Unexpected pipe message: %d", msg);
-            break;
-    }
-}
-
-/*
- * Handle an event occurred on the pipe
- */
-static void pipe_event(struct sp_udp_state *sus, short revents)
-{
-	if (revents & POLLIN || revents & POLLPRI || revents & POLLRDBAND) {
-		read_pipe_msg(sus);
-	} else {
-		slog_error(FILE_LEVEL, "pipe revents: %d", revents);
-		prepare_exit_sp_mode();
-		exit_sp_mode();
-		sus->should_exit = true;
-	}
 }
 
 /*
@@ -879,10 +823,12 @@ static void whohas_msg_rcvd(struct sp_udp_state *sus,
 	req = ht_get(sus->reqs, whohas->req_id, sizeof(sha256_t), NULL);
 	if (req) {
 		if (req->sent_by_me) {
-			// TODO: communicate to the peers the result
+			communicate_whohas_result_for_peer(whohas, &req->requester);
+			ht_delete(sus->reqs, whohas->req_id, sizeof(sha256_t), NULL, NULL);
+		} else {
+			slog_info(FILE_LEVEL, "Request %s is already in cache", key_str);
 		}
-
-		slog_info(FILE_LEVEL, "Request %s is already in cache", key_str);
+		
 		send_ack(sus, sender);
 		return;
 	}
@@ -1008,11 +954,146 @@ static void sock_event(struct sp_udp_state *sus, short revents)
 	}
 }
 
+struct pipe_whohas_msg {
+	sha256_t file_hash;
+	struct fsnp_peer requester;
+};
+
+/*
+ * Generate a req_id from the requester's address and the file_hash.
+ * Store the result in req_id
+ */
+static void generate_req_id(const struct fsnp_peer *requester,
+                            const sha256_t file_hash, sha256_t req_id)
+{
+	char key_str[SHA256_BYTES];
+	unsigned i = 0;
+	char req_id_str[SHA256_BYTES + sizeof(struct fsnp_peer) + 1];
+	size_t req_id_size = SHA256_BYTES + sizeof(struct fsnp_peer) + 1;
+	struct in_addr a;
+
+	STRINGIFY_HASH(key_str, file_hash, i);
+	a.s_addr = htonl(requester->ip);
+	snprintf("%s:%hu:%s", req_id_size + 1, inet_ntoa(a), requester->port, key_str);
+	sha256(req_id_str, req_id_size, req_id);
+	STRINGIFY_HASH(key_str, req_id, i);
+	slog_info(FILE_LEVEL, "req_id %s generated from %s", key_str, req_id_str);
+}
+/*
+ * Read from the pipe what's searching a peer and progagate it through the sp
+ * network
+ */
+static void pipe_whohas_rcvd(struct sp_udp_state *sus)
+{
+	ssize_t r = 0;
+	struct pipe_whohas_msg whohas_msg;
+	fsnp_err_t err;
+	struct fsnp_whohas whohas;
+	sha256_t req_id;
+	struct request *req = NULL;
+	struct fsnp_peer peers[MAX_KNOWN_PEER];
+	uint8_t n = 0;
+	int ret = 0;
+
+	r = fsnp_timed_read(sus->pipe[READ_END], &whohas_msg,
+	                    sizeof(struct pipe_whohas_msg), 0, &err);
+	if (r < 0) {
+		slog_error(FILE_LEVEL, "Unable to read pipe_whohas_msg from the pipe");
+		fsnp_log_err_msg(err, false);
+		return;
+	}
+
+	req = malloc(sizeof(struct request));
+	if (!req) {
+		slog_error(FILE_LEVEL, "malloc error %d", errno);
+		return;
+	}
+
+	generate_req_id(&whohas_msg.requester, whohas_msg.file_hash, req_id);
+	memcpy(&req->requester, &whohas_msg.requester, sizeof(struct fsnp_peer));
+	update_timespec(&req->creation_time);
+	req->sent_by_me = true;
+	ret = ht_set_if_not_exists(sus->reqs, req_id, sizeof(sha256_t), req,
+			sizeof(struct request));
+	if (ret == 1) {
+		slog_warn(FILE_LEVEL, "This request is already set");
+		free(req);
+		return;
+	} else if (ret == -1) {
+		slog_error(FILE_LEVEL, "Unable to set the request");
+		return;
+	}
+
+	get_peers_for_key(whohas_msg.file_hash, peers, &n);
+	if (n == 0) {
+		fsnp_init_whohas(&whohas, &whohas_msg.requester, req_id,
+		                 whohas_msg.file_hash, 0, NULL);
+	} else {
+		fsnp_init_whohas(&whohas, &whohas_msg.requester, req_id,
+		                 whohas_msg.file_hash, n, peers);
+	}
+
+	if (n >= 16) {
+		communicate_whohas_result_for_peer(&whohas, &whohas_msg.requester);
+		ht_delete(sus->reqs, req_id, sizeof(sha256_t), NULL, NULL);
+	} else {
+		send_whohas(sus, &whohas, true);
+	}
+}
+
+/*
+ * Read a message received on the pipe
+ */
+static void read_pipe_msg(struct sp_udp_state *sus)
+{
+	ssize_t r = 0;
+	int msg = 0;
+	fsnp_err_t err;
+
+	r = fsnp_timed_read(sus->pipe[READ_END], &msg, sizeof(int), 0, &err);
+	if (r < 0) {
+		slog_fatal(FILE_LEVEL, "Unable to read a message from the pipe");
+		fsnp_log_err_msg(err, false);
+		sus->should_exit = true;
+		prepare_exit_sp_mode();
+		exit_sp_mode();
+	}
+
+	switch (msg) {
+		case PIPE_WHOHAS:
+			pipe_whohas_rcvd(sus);
+			break;
+
+		case PIPE_QUIT:
+			sus->should_exit = true;
+			break;
+
+		default:
+			slog_error(FILE_LEVEL, "Unexpected pipe message: %d", msg);
+			break;
+	}
+}
+
+/*
+ * Handle an event occurred on the pipe
+ */
+static void pipe_event(struct sp_udp_state *sus, short revents)
+{
+	if (revents & POLLIN || revents & POLLPRI || revents & POLLRDBAND) {
+		read_pipe_msg(sus);
+	} else {
+		slog_error(FILE_LEVEL, "pipe revents: %d", revents);
+		prepare_exit_sp_mode();
+		exit_sp_mode();
+		sus->should_exit = true;
+	}
+}
+
 /*
  * Called to check the next's aliveness. If the next is considered dead it will
  * contact the snd_next to set it as next
  */
-static void check_next_aliveness(struct sp_udp_state *sus)
+static void check_if_next_alive(struct sp_udp_state *sus)
 {
 	struct timespec curr;
 	int ret = 0;
@@ -1144,9 +1225,9 @@ static void sp_udp_thread(void *data)
 				pollfd[SOCK].revents = 0;
 			}
 
-			check_next_aliveness(sus);
+			check_if_next_alive(sus);
 		} else if (ret == 0) {
-			check_next_aliveness(sus);
+			check_if_next_alive(sus);
 		} else {
 			slog_error(FILE_LEVEL, "poll error %d");
 			prepare_exit_sp_mode();
@@ -1295,20 +1376,39 @@ static int get_pipe_write_end(void)
 	return we;
 }
 
-int ask_whohas(const sha256_t key, const struct fsnp_peer *requester)
+int ask_whohas(const sha256_t file_hash, const struct fsnp_peer *requester)
 {
 	ssize_t w = 0;
 	int we = 0;
 	int msg = PIPE_WHOHAS;
+	struct pipe_whohas_msg whohas_msg;
+	fsnp_err_t err;
 
 	we = get_pipe_write_end();
-	w = fsnp_write(we, &msg, sizeof(int));
-	if (w < 0) {
-		slog_error(FILE_LEVEL, "Unable to write the message in the pipe");
+	if (we == 0) {
+		slog_warn(FILE_LEVEL, "ask whohas attempted when the pipe doesn't exists");
 		return -1;
 	}
 
+	slog_debug(FILE_LEVEL, "Writing PIPE_WHOHAS in the pipe");
+	w = fsnp_timed_write(we, &msg, sizeof(int), 0, &err);
+	if (w < 0) {
+		slog_error(FILE_LEVEL, "Unable to write the message in the pipe");
+		fsnp_log_err_msg(err, false);
+		return -1;
+	}
 
+	memcpy(&whohas_msg.file_hash, file_hash, sizeof(sha256_t));
+	memcpy(&whohas_msg.requester, requester, sizeof(struct fsnp_peer));
+	slog_debug(FILE_LEVEL, "Writing pipe_whohas_msg in the pipe");
+	w = fsnp_timed_write(we, &whohas_msg, sizeof(struct pipe_whohas_msg), 0, &err);
+	if (w < 0) {
+		slog_error(FILE_LEVEL, "Unable to write pipe_whohas_msg in the pipe");
+		fsnp_log_err_msg(err, false);
+		return -1;
+	}
+
+	return 0;
 }
 
 #undef NO_SP
@@ -1319,7 +1419,17 @@ int ask_whohas(const sha256_t key, const struct fsnp_peer *requester)
 
 void exit_sp_network(void)
 {
-	// TODO: implement. write into the pipe to close
+	int we =0;
+	int msg = PIPE_QUIT;
+	ssize_t w = 0;
+	fsnp_err_t err;
+
+	we = get_pipe_write_end();
+	w = fsnp_timed_write(we, &msg, sizeof(int), 0, &err);
+	if (w < 0) {
+		slog_error(FILE_LEVEL, "Unable to write PIPE_QUIT in the pipe");
+		fsnp_log_err_msg(err, false);
+	}
 }
 
 #undef READ_END
