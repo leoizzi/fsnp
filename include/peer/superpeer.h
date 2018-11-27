@@ -39,6 +39,8 @@ struct peer_info {
 	char pretty_addr[32]; // for printing and logging purposes
 };
 
+#define FAKE_PEER_INFO -1
+
 #define PIPE_WHOHAS 0
 #define PIPE_QUIT 1
 #define PIPE_PROMOTE 2
@@ -60,6 +62,12 @@ void exit_sp_mode(void);
  * Respond to an event occurred on the TCP socket
  */
 void sp_tcp_sock_event(short revents);
+
+/*
+ * Send a message to the thread who's in charge
+ * In filename put the name of the file, in size the size of filename
+ */
+void sp_ask_file(const char *filename, size_t size);
 
 /*
  * Communicate the whohas result contained in 'whohas' to the peer contained

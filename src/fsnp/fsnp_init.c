@@ -212,7 +212,12 @@ void fsnp_init_download(struct fsnp_download *download, uint64_t file_size)
 void fsnp_init_promote(struct fsnp_promote *promote, in_port_t sp_port,
                        const struct fsnp_peer *sp)
 {
-	memcpy(&promote->sp, sp, sizeof(promote->sp));
+	if (sp) {
+		memcpy(&promote->sp, sp, sizeof(promote->sp));
+	} else {
+		memset(&promote->sp, 0, sizeof(promote->sp));
+	}
+
 	promote->sp_port = sp_port;
 	fsnp_init_msg(&promote->header, PROMOTE, sizeof(*promote));
 }

@@ -33,7 +33,7 @@ void join_sp(const struct fsnp_query_res *query_res);
  * a file.
  * In filename put the name of the file, in size the size of filename
  */
-void ask_file(const char *filename, size_t size);
+void peer_ask_file(const char *filename, size_t size);
 
 /*
  * Handler called when a FILE_RES msg is received.

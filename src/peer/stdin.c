@@ -27,6 +27,7 @@
 
 #include "peer/stdin.h"
 #include "peer/peer.h"
+#include "peer/superpeer.h"
 #include "peer/peer-server.h"
 #include "peer/peer-superpeer.h"
 #include "peer/file_manager.h"
@@ -307,7 +308,7 @@ static void who_has_handler(void)
 		return;
 	}
 
-	if (file_already_asked()) {
+	if (file_already_asked() && !is_superpeer()) {
 		slog_info(STDOUT_LEVEL, "You've already asked a file. Wait until a "
 						  "response for it arrive before asking for another one");
 		return;
@@ -327,7 +328,11 @@ static void who_has_handler(void)
 		s--;
 	}
 
-	ask_file(filename, s);
+	if (is_superpeer()) {
+		sp_ask_file(filename, s);
+	} else {
+		peer_ask_file(filename, s);
+	}
 }
 
 /*

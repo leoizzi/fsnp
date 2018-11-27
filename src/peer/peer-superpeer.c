@@ -801,7 +801,7 @@ void join_sp(const struct fsnp_query_res *query_res)
 	launch_peer_thread(sock);
 }
 
-void ask_file(const char *filename, size_t size)
+void peer_ask_file(const char *filename, size_t size)
 {
 	ssize_t ret = 0;
 	int to_write = PIPE_WHO_HAS;

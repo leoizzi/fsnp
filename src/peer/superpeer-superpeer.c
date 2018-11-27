@@ -1232,8 +1232,10 @@ static void sp_udp_thread(void *data)
 	int ret = 0;
 
 	send_promoted(sus);
+	slog_info(FILE_LEVEL, "Ensuring prev connection...");
 	ensure_prev_conn(sus);
 	send_next(sus, NULL);
+	slog_info(FILE_LEVEL, "Ensuring next connection...");
 	ensure_next_conn(sus);
 	clock_gettime(CLOCK_MONOTONIC, &sus->last);
 
@@ -1264,6 +1266,7 @@ static void sp_udp_thread(void *data)
 		}
 	}
 
+	slog_info(FILE_LEVEL, "sp-udp-thread is leaving...");
 	ht_destroy(sus->reqs);
 	free(sus->nb);
 	close(sus->sock);

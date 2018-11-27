@@ -57,6 +57,105 @@
 static linked_list_t *known_peers = NULL;
 
 /*
+ * Used by the superpeer to be able to ask files for himself inside the overlay
+ * network
+ */
+static struct peer_info *fake_peer = NULL;
+
+/*
+ *
+ */
+static void fake_peer_pipe_msg(bool *should_exit)
+{
+	// TODO: continue from here. Parse only msg_quit, whohas and file_res.
+}
+
+/*
+ * handler called when an event on the pipe occurs
+ */
+static void fake_peer_pipe_event(short revents, bool *should_exit)
+{
+	if (revents & POLLIN || revents & POLLPRI || revents & POLLRDBAND) {
+
+	} else {
+		slog_error(FILE_LEVEL, "pipe revents: %d", revents);
+		*should_exit = true;
+	}
+}
+
+/*
+ * Entry point for the fake peer_info thread
+ */
+static void fake_peer_info_thread(void *data)
+{
+	bool should_exit = false;
+	struct pollfd fd;
+	int ret = 0;
+
+	UNUSED(data);
+
+	fd.fd = fake_peer->pipefd[READ_END];
+	fd.events = POLLIN | POLLPRI;
+	fd.revents = 0;
+
+	while (!should_exit) {
+		ret = poll(&fd, 1, -1);
+		if (ret > 0) {
+			if (fd.revents) {
+				fake_peer_pipe_event(fd.revents, &should_exit);
+			}
+		} else {
+			should_exit = true;
+		}
+	}
+
+	close(fake_peer->pipefd[READ_END]);
+	close(fake_peer->pipefd[WRITE_END]);
+	free(fake_peer);
+	fake_peer = NULL;
+}
+
+/*
+ * Create a fake peer_info
+ */
+static void create_fake_peer_info(void)
+{
+	int ret = 0;
+	struct in_addr a;
+
+	fake_peer = malloc(sizeof(struct peer_info));
+	if (!fake_peer) {
+		slog_error(FILE_LEVEL, "malloc error %d", errno);
+		return;
+	}
+
+	fake_peer->sock = -1;
+	fake_peer->addr.ip = get_peer_ip();
+	fake_peer->addr.port = get_tcp_sp_port();
+	fake_peer->joined = fake_peer;
+	fake_peer->timeouts = 0;
+	ret = pipe(fake_peer->pipefd);
+	if (ret < 0) {
+		slog_error(FILE_LEVEL, "Unable to create a pipe for the fake thread");
+		free(fake_peer);
+		fake_peer = NULL;
+		return;
+	}
+
+	a.s_addr = htonl(fake_peer->addr.ip);
+	snprintf(fake_peer->pretty_addr, sizeof(char) * 32, "%s:%hu", inet_ntoa(a),
+			fake_peer->addr.port);
+	ret = start_new_thread(fake_peer_info_thread, NULL, "fake-peer-info-thread");
+	if (ret < 0) {
+		slog_error(FILE_LEVEL, "Unable to start fake-peer-info thread");
+		close(fake_peer->pipefd[WRITE_END]);
+		close(fake_peer->pipefd[READ_END]);
+		free(fake_peer);
+		fake_peer = NULL;
+	}
+}
+
+/*
  * Create the superpeer's sockets and enter the overlay network
  */
 static bool initialize_sp(struct fsnp_peer *sps, unsigned n)
@@ -145,29 +244,15 @@ bool print_peer = false;
 		return false;
 	}
 
+	create_fake_peer_info();
 	add_poll_sp_sock(tcp);
 	return true;
 }
 
 /*
- * Check if a peer is already known
+ * Write into the pipe of a thread who's communicating with a peer to promote
+ * him
  */
-static int peer_already_known(void *item, size_t idx, void *user)
-{
-	struct peer_info *peer = (struct peer_info *)item;
-	struct sockaddr_in *addr = (struct sockaddr_in *)user;
-
-	UNUSED(idx);
-
-	if (peer->addr.ip == addr->sin_addr.s_addr) {
-		if (peer->addr.port == addr->sin_port) {
-			return STOP;
-		}
-	}
-
-	return GO_AHEAD;
-}
-
 static void promote_peer(void)
 {
 	int msg = PIPE_PROMOTE;
@@ -199,7 +284,7 @@ static void accept_peer(void)
 	socklen_t socklen = sizeof(struct sockaddr_in);
 	struct peer_info *peer_info = NULL;
 	size_t num_peers = 0;
-	size_t n = 0;
+	size_t max_known_peers = MAX_KNOWN_PEER + 1; // consider the fake thread
 	int ret = 0;
 	int added = 0;
 
@@ -221,14 +306,6 @@ static void accept_peer(void)
 	slog_info(FILE_LEVEL, "Superpeer contacted by peer %s:%hu",
 			inet_ntoa(addr.sin_addr), addr.sin_port);
 	addr.sin_addr.s_addr = ntohl(addr.sin_addr.s_addr);
-	num_peers = list_count(known_peers);
-	n = (size_t)list_foreach_value(known_peers, peer_already_known, &addr);
-	if (num_peers != n) { // the peer is already known, don't accept it // TODO: this mechanism is broken: what if the peer already known is the last one?
-		slog_warn(FILE_LEVEL, "Sp contacted by an already known peer");
-		close(peer_sock);
-		return;
-	}
-
 	peer_info = malloc(sizeof(struct peer_info));
 	if (!peer_info) {
 		close(peer_sock);
@@ -271,7 +348,8 @@ static void accept_peer(void)
 		PRINT_PEER;
 	}
 
-	if (num_peers + 1 > MAX_KNOWN_PEER) {
+	num_peers = list_count(known_peers);
+	if (num_peers + 1 > max_known_peers) {
 		promote_peer();
 	}
 }
@@ -437,10 +515,19 @@ void quit_all_peers(void)
 	list_foreach_value(known_peers, quit_peer_threads_iterator, NULL);
 }
 
+/*
+ * Tell to the fake-peer-info-thread to quit
+ */
+static void quit_fake_peer_info_thread(void)
+{
+	quit_peer_threads_iterator(fake_peer, 0, fake_peer);
+}
+
 void prepare_exit_sp_mode(void)
 {
 	accept_conn = false;
 	quit_all_peers();
+	quit_fake_peer_info_thread();
 	slog_info(FILE_LEVEL, "Removing the sp from the server");
 	rm_sp_from_server();
 }

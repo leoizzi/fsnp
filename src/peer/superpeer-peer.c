@@ -91,6 +91,21 @@ static void send_file_res(const struct peer_info *info,
 }
 
 /*
+ * Send a PROMOTE msg to the peer
+ */
+static void send_promote(const struct peer_info *info,
+						 const struct fsnp_promote *promote)
+{
+	fsnp_err_t err;
+
+	slog_info(FILE_LEVEL, "Sending a PROMOTE msg to %s", info->pretty_addr);
+	err = fsnp_send_promote(info->sock, promote);
+	if (err != E_NOERR) {
+		fsnp_log_err_msg(err, false);
+	}
+}
+
+/*
  * Send an error msg to the peer
  */
 static void send_error(const struct peer_info *info)
@@ -331,9 +346,26 @@ static void pipe_file_res_rvcd(const struct peer_info *info)
 /*
  * Handler called when a PIPE_PROMOTE msg type is read from the pipe
  */
-static void pipe_promote_rcvd(struct peer_info *info) {
-	// TODO: call get_prev_addr(struct fsnp_peer *prev) for getting the prev address
-	// TODO: continue from here
+static void pipe_promote_rcvd(struct peer_info *info, bool *leaving,
+		bool *should_exit) {
+	bool is_valid = false;
+	struct fsnp_peer prev;
+	in_port_t self;
+	struct fsnp_promote promote;
+
+	self = get_udp_sp_port();
+	is_valid = get_prev_addr(&prev);
+	if (!is_valid) {
+		slog_warn(FILE_LEVEL, "Prev not valid during the promotion of %s",
+				info->pretty_addr);
+		fsnp_init_promote(&promote, self, NULL);
+	} else {
+		fsnp_init_promote(&promote, self, &prev);
+	}
+
+	send_promote(info, &promote);
+	*leaving = true;
+	*should_exit = true;
 }
 /*
  * Read a message on the pipe and:
@@ -363,7 +395,7 @@ static void read_pipe_msg(struct peer_info *info, bool *leaving,
 	if (msg == PIPE_PROMOTE) {
 		slog_info(FILE_LEVEL, "Read from the pipe to promote %s",
 		          info->pretty_addr);
-		pipe_promote_rcvd(info);
+		pipe_promote_rcvd(info, leaving, should_exit);
 	} else if (msg == PIPE_FILE_RES) {
 		slog_info(FILE_LEVEL, "Read from the pipe to send file_res to %s",
 				info->pretty_addr);
