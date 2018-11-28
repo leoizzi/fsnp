@@ -65,7 +65,7 @@ static struct peer_info *fake_peer = NULL;
 /*
  *
  */
-static void fake_peer_pipe_msg(bool *should_exit)
+static void fake_peer_read_pipe_msg(bool *already_asked, bool *should_exit)
 {
 	// TODO: continue from here. Parse only msg_quit, whohas and file_res.
 }
@@ -73,10 +73,11 @@ static void fake_peer_pipe_msg(bool *should_exit)
 /*
  * handler called when an event on the pipe occurs
  */
-static void fake_peer_pipe_event(short revents, bool *should_exit)
+static void fake_peer_pipe_event(short revents, bool *already_asked,
+								 bool *should_exit)
 {
 	if (revents & POLLIN || revents & POLLPRI || revents & POLLRDBAND) {
-
+		fake_peer_read_pipe_msg(already_asked, should_exit);
 	} else {
 		slog_error(FILE_LEVEL, "pipe revents: %d", revents);
 		*should_exit = true;
@@ -89,6 +90,7 @@ static void fake_peer_pipe_event(short revents, bool *should_exit)
 static void fake_peer_info_thread(void *data)
 {
 	bool should_exit = false;
+	bool already_asked = false; // TODO: use it in fake_peer_read_pipe_msg
 	struct pollfd fd;
 	int ret = 0;
 
@@ -98,11 +100,12 @@ static void fake_peer_info_thread(void *data)
 	fd.events = POLLIN | POLLPRI;
 	fd.revents = 0;
 
+	slog_info(FILE_LEVEL, "fake-peer-info-thread is successfully initialized");
 	while (!should_exit) {
 		ret = poll(&fd, 1, -1);
 		if (ret > 0) {
 			if (fd.revents) {
-				fake_peer_pipe_event(fd.revents, &should_exit);
+				fake_peer_pipe_event(fd.revents, &already_asked, &should_exit);
 			}
 		} else {
 			should_exit = true;
