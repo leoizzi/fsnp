@@ -63,11 +63,105 @@ static linked_list_t *known_peers = NULL;
 static struct peer_info *fake_peer = NULL;
 
 /*
- *
+ * Handler called when a PIPE_FILE_RES msg is read from the pipe
+ */
+static void fake_peer_file_res_rcvd(bool *already_asked, bool *should_exit)
+{
+	ssize_t r = 0;
+	fsnp_err_t err;
+	struct fsnp_whohas whohas;
+	struct fsnp_file_res *file_res = NULL;
+
+	r = fsnp_timed_read(fake_peer->pipefd[READ_END], &whohas,
+	                    sizeof(struct fsnp_whohas), 0, &err);
+	if (r < 0) {
+		slog_error(FILE_LEVEL, "fake-peer unable to read whohas msg from the "
+						 "pipe");
+		fsnp_log_err_msg(err, false);
+		*should_exit = true;
+		return;
+	}
+
+	file_res = fsnp_create_file_res(whohas.num_peers, whohas.owners);
+	if (!file_res) {
+		slog_error(FILE_LEVEL, "Unable to create fsnp_file_res");
+		return;
+	}
+
+	file_res_rcvd(file_res);
+	*already_asked = true;
+	free(file_res);
+}
+
+/*
+ * Handler called when a PIPE_WHOHAS msg is read from the pipe
+ */
+static void fake_peer_whohas_rcvd(bool *already_asked, bool *should_exit)
+{
+	ssize_t r = 0;
+	fsnp_err_t err;
+	sha256_t file_hash;
+	int ret = 0;
+
+	r = fsnp_timed_read(fake_peer->pipefd[READ_END], file_hash, sizeof(sha256_t),
+			0, &err);
+	if (r < 0) {
+		slog_error(FILE_LEVEL, "Unable to read filer_hash from the pipe");
+		fsnp_log_err_msg(err, false);
+		*should_exit = true;
+	}
+
+	if (*already_asked == true) {
+		slog_warn(STDOUT_LEVEL, "You're already searching for a file. Wait for"
+		                        " its response before searching for another one");
+		return;
+	}
+
+
+	ret = ask_whohas(file_hash, &fake_peer->addr);
+	if (ret < 0) {
+		slog_error(FILE_LEVEL, "Unable to ask into the overlay network a file");
+		*should_exit = true;
+		return;
+	}
+
+	*already_asked = true;
+}
+
+/*
+ * Read a msg from the pipe and call the right handler
  */
 static void fake_peer_read_pipe_msg(bool *already_asked, bool *should_exit)
 {
-	// TODO: continue from here. Parse only msg_quit, whohas and file_res.
+	int msg = 0;
+	ssize_t r = 0;
+
+	r = fsnp_read(fake_peer->pipefd[READ_END], &msg, sizeof(int));
+	if (r < 0) {
+		slog_error(FILE_LEVEL, "fsnp_read error %d while reading from the pipe",
+				errno);
+		*should_exit = true;
+		return;
+	}
+
+	switch (msg) {
+		case PIPE_WHOHAS:
+			fake_peer_whohas_rcvd(already_asked, should_exit);
+			break;
+
+		case PIPE_FILE_RES:
+			fake_peer_file_res_rcvd(already_asked, should_exit);
+			break;
+
+		case PIPE_QUIT:
+			slog_info(FILE_LEVEL, "fake peer has received pipe_quit");
+			*should_exit = true;
+			break;
+
+		default:
+			slog_error(FILE_LEVEL, "Unexpected pipe msg: %d", msg);
+			break;
+	}
 }
 
 /*
@@ -90,7 +184,7 @@ static void fake_peer_pipe_event(short revents, bool *already_asked,
 static void fake_peer_info_thread(void *data)
 {
 	bool should_exit = false;
-	bool already_asked = false; // TODO: use it in fake_peer_read_pipe_msg
+	bool already_asked = false;
 	struct pollfd fd;
 	int ret = 0;
 
@@ -112,6 +206,7 @@ static void fake_peer_info_thread(void *data)
 		}
 	}
 
+	slog_info(FILE_LEVEL, "fake-peer-info-thread is exiting...");
 	close(fake_peer->pipefd[READ_END]);
 	close(fake_peer->pipefd[WRITE_END]);
 	free(fake_peer);
@@ -366,6 +461,29 @@ void sp_tcp_sock_event(short revents)
 	}
 }
 
+void sp_ask_file(const char *filename, size_t size)
+{
+	int msg = PIPE_WHOHAS;
+	sha256_t key;
+	fsnp_err_t err;
+	ssize_t w = 0;
+
+	w = fsnp_timed_write(fake_peer->pipefd[WRITE_END], &msg, sizeof(int), 0, &err);
+	if (w < 0) {
+		slog_error(FILE_LEVEL, "Unable to write PIPE_WHOHAS into fake-peer's pipe");
+		fsnp_log_err_msg(err, false);
+		return;
+	}
+
+	sha256(filename, size, key);
+	w = fsnp_timed_write(fake_peer->pipefd[WRITE_END], key, sizeof(sha256_t), 0,
+			&err);
+	if (w < 0) {
+		slog_error(FILE_LEVEL, "Unable to write into fake-peer's pipe the file hash");
+		fsnp_log_err_msg(err, false);
+	}
+}
+
 struct communicate_whohas_data {
 	struct fsnp_whohas whohas;
 	struct fsnp_peer requester;
@@ -422,7 +540,6 @@ void communicate_whohas_result_to_peer(const struct fsnp_whohas *whohas,
                                        const struct fsnp_peer *requester)
 {
 	struct communicate_whohas_data data;
-	// TODO: if the peer who asked the data is this what do we do? BIG QUESTION: how the superpeer ask anything in the network???
 	memcpy(&data.whohas, whohas, sizeof(struct fsnp_whohas));
 	memcpy(&data.requester, requester, sizeof(struct fsnp_peer));
 	list_foreach_value(known_peers, communicate_whohas_iterator, &data);
