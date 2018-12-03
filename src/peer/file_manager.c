@@ -286,6 +286,39 @@ sha256_t *retrieve_all_keys(uint32_t *num)
 	return keys;
 }
 
+#define HT_ERROR -1
+#define HT_DOESNT_EXIST 0
+#define HT_EXISTS 1
+
+bool key_exists(sha256_t key)
+{
+	int ret = 0;
+
+	if (!shared_dir_is_set()) {
+		return false;
+	}
+
+	ret = ht_exists(shared.hashtable, key, sizeof(sha256_t));
+	switch (ret) {
+		case HT_ERROR:
+			slog_error(FILE_LEVEL, "ht_exists has returned -1");
+		case HT_DOESNT_EXIST:
+			return false;
+
+		case HT_EXISTS:
+			return true;
+
+		default:
+			slog_error(FILE_LEVEL, "%d is an unexpected return value from"
+						  " ht_exists", ret);
+			return false;
+	}
+}
+
+#undef HT_ERROR
+#undef HT_DOESNT_EXIST
+#undef HT_EXISTS
+
 struct search_delete_file_data {
 	hashtable_t *table;
 	int changes;

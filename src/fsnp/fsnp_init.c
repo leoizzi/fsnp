@@ -82,7 +82,8 @@ void fsnp_init_rm_sp(struct fsnp_rm_sp *rm_sp, const struct fsnp_peer *addr,
 	fsnp_init_msg(&rm_sp->header, RM_SP, sizeof(*rm_sp));
 }
 
-struct fsnp_join *fsnp_create_join(uint32_t num_files, sha256_t *files_hash)
+struct fsnp_join *
+fsnp_create_join(uint32_t num_files, uint16_t dw_port, sha256_t *files_hash)
 {
 	uint64_t data_size = 0;
 	uint64_t size = 0;
@@ -111,6 +112,7 @@ struct fsnp_join *fsnp_create_join(uint32_t num_files, sha256_t *files_hash)
 		memset(join->files_hash, 0, sizeof(join->files_hash));
 	}
 
+	join->dw_port = dw_port;
 	fsnp_init_msg(&join->header, JOIN, size);
 	return join;
 }
@@ -250,20 +252,17 @@ void fsnp_init_whosnext(struct fsnp_whosnext *whosnext,
 	fsnp_init_msg(&whosnext->header, WHOSNEXT, sizeof(*whosnext));
 }
 
-struct fsnp_whohas *fsnp_init_whohas(struct fsnp_whohas *whohas,
-									 struct fsnp_peer *sp, sha256_t req_id,
-									 sha256_t file_hash, uint8_t num_peers,
-                                     struct fsnp_peer *owners)
+void fsnp_init_whohas(struct fsnp_whohas *whohas, struct fsnp_peer *sp,
+					  sha256_t req_id, sha256_t file_hash, uint8_t num_peers,
+                      struct fsnp_peer *owners)
 {
 	memcpy(&whohas->sp, sp, sizeof(struct fsnp_peer));
 	memcpy(whohas->req_id, req_id, sizeof(sha256_t));
 	memcpy(whohas->file_hash, file_hash, sizeof(sha256_t));
+	memset(whohas->owners, 0, sizeof(struct fsnp_peer) * FSNP_MAX_OWNERS);
 	if (num_peers > 0) {
 		memcpy(whohas->owners, owners, sizeof(struct fsnp_peer) * num_peers);
-	} else {
-		memset(whohas->owners, 0, sizeof(struct fsnp_peer) * 10);
 	}
 
 	fsnp_init_msg(&whohas->header, WHOHAS, sizeof(*whohas));
-	return whohas;
 }

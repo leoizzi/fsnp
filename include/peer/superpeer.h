@@ -31,6 +31,7 @@ struct peer_info {
 	int sock;
 	int pipefd[2];
 	struct fsnp_peer addr;
+	uint16_t dw_port;
 	/* 'joined' is used to check if the peer has respected the protocol by
 	 * sending a join message as first message. If not the superpeer will shut
 	 * down the communication with him */
@@ -44,6 +45,10 @@ struct peer_info {
 #define PIPE_PROMOTE 2
 #define PIPE_FILE_RES 3
 #define PIPE_GET_PREV 4
+
+#define NO_SP 0
+#define ONE_SP 1
+#define TWO_SPS 2
 
 /*
  * Enter the superpeer mode.

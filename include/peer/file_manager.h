@@ -62,6 +62,11 @@ bool shared_dir_is_set(void);
 sha256_t *retrieve_all_keys(uint32_t *num);
 
 /*
+ * Return true if the key is present in the file manager, false otherwise
+ */
+bool key_exists(sha256_t key);
+
+/*
  * Ask to the file manager if something has changed. Return true if changes are
  * present,false otherwise
  */

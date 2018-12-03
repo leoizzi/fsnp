@@ -27,6 +27,7 @@
 #include <errno.h>
 
 #include "peer/peer.h"
+#include "peer/peer-peer.h"
 #include "peer/superpeer.h"
 #include "peer/port.h"
 #include "peer/stdin.h"
@@ -38,13 +39,14 @@
 
 #include "slog/slog.h"
 
-#define POLLFD_NUM 2
+#define POLLFD_NUM 3
 
-#define PEER_POLLFD_NUM 1
-#define SP_POLLFD_NUM 2
+#define PEER_POLLFD_NUM 2
+#define SP_POLLFD_NUM 3
 
 #define POLL_STDIN 0
-#define POLL_SP_TCP 1
+#define POLL_DW 1
+#define POLL_SP_TCP 2
 
 struct state {
 	bool should_exit;
@@ -53,6 +55,7 @@ struct state {
 	struct pollfd fds[POLLFD_NUM];
 	in_port_t tcp_sp_port;
 	in_port_t udp_sp_port;
+	in_port_t dw_port;
 	bool localhost;
 	bool sp;
 	struct fsnp_peer server_addr;
@@ -169,6 +172,17 @@ in_port_t get_udp_sp_port(void)
 	return state.udp_sp_port;
 }
 
+in_port_t get_dw_port(void)
+{
+	return state.dw_port;
+}
+
+void set_dw_port(in_port_t dw_port)
+{
+	slog_info(FILE_LEVEL, "Setting dw_port to %hu", dw_port);
+	state.dw_port = dw_port;
+}
+
 void set_server_addr(const struct fsnp_peer *addr)
 {
 	struct in_addr a;
@@ -234,12 +248,30 @@ static void setup_signal_handler(void)
 	}
 }
 
-static void setup_poll(void)
+static int create_dw_sock(void)
+{
+	in_port_t dw_port = DW_PORT;
+	int s = 0;
+
+	s = fsnp_create_bind_tcp_sock(&dw_port, state.localhost);
+	if (s < 0) {
+		slog_error(FILE_LEVEL, "fsnp_create_bind_tcp_sock errno %d", errno);
+		return -1;
+	}
+
+	slog_info(STDOUT_LEVEL, "Download port set to %hu", dw_port);
+	set_dw_port(dw_port);
+	return s;
+}
+
+static void setup_poll(int dw_sock)
 {
 	memset(state.fds, 0, sizeof(struct pollfd) * PEER_POLLFD_NUM);
 
 	state.fds[POLL_STDIN].fd = STDIN_FILENO;
 	state.fds[POLL_STDIN].events = POLLIN | POLLPRI;
+	state.fds[POLL_DW].fd = dw_sock;
+	state.fds[POLL_DW].events = POLLIN | POLLPRI;
 }
 
 static void handle_poll_ret(int ret)
@@ -248,6 +280,11 @@ static void handle_poll_ret(int ret)
 		if (state.fds[POLL_STDIN].revents) {
 			stdin_event();
 			state.fds[POLL_STDIN].revents = 0;
+		}
+
+		if (state.fds[POLL_DW].revents) {
+			dw_sock_event(state.fds[POLL_DW].revents);
+			state.fds[POLL_DW].revents = 0;
 		}
 
 		if (is_superpeer()) {
@@ -265,6 +302,7 @@ static void handle_poll_ret(int ret)
 		} else {
 			slog_info(FILE_LEVEL, "Poll has been interrupted by a signal");
 		}
+
 		state.should_exit = true;
 	}
 }
@@ -274,6 +312,7 @@ static void handle_poll_ret(int ret)
 int peer_main(bool localhost)
 {
 	int ret = 0;
+	int s = 0;
 
 	slog_info(STDOUT_LEVEL, "Initializing the peer...");
 
@@ -304,8 +343,17 @@ int peer_main(bool localhost)
 	slog_info(STDOUT_LEVEL, "Initializing the stdin subsystem...");
 	init_stdin();
 	state.num_fd = PEER_POLLFD_NUM;
+	slog_info(STDOUT_LEVEL, "Creating download socket...");
+	s = create_dw_sock();
+	if (s < 0) {
+		slog_error(STDOUT_LEVEL, "Unable to create download socket. Aborting");
+		pthread_mutex_destroy(&state.state_mtx);
+		close_stdin();
+		exit(EXIT_FAILURE);
+	}
+
 	slog_info(STDOUT_LEVEL, "Setting up the poll interface...");
-	setup_poll();
+	setup_poll(s);
 
 	slog_info(STDOUT_LEVEL, "The peer is successfully initialized!");
 	PRINT_PEER;

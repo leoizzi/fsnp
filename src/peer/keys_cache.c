@@ -23,6 +23,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+#include "peer/peer.h"
 #include "peer/keys_cache.h"
 #include "peer/file_manager.h"
 
@@ -81,7 +82,8 @@ bool init_keys_cache(void)
  * Add a new key_cached to the hashtable.
  * Return 0 on success, -1 otherwise
  */
-static int add_new_key(sha256_t key, const struct fsnp_peer *owner)
+static int add_new_key(sha256_t key, const struct fsnp_peer *owner,
+		uint16_t dw_port)
 {
 	struct key_cached *kc = NULL;
 	struct fsnp_peer *o = NULL;
@@ -118,6 +120,7 @@ static int add_new_key(sha256_t key, const struct fsnp_peer *owner)
 	list_set_free_value_callback(kc->owners, list_free_callback);
 	memcpy(kc->key, key, sizeof(sha256_t));
 	memcpy(o, owner, sizeof(struct fsnp_peer));
+	o->port = dw_port;
 	ret = list_push_value(kc->owners, o);
 	if (ret < 0) {
 		slog_error(FILE_LEVEL, "Unable to push new entry in key->owners");
@@ -141,6 +144,7 @@ static int add_new_key(sha256_t key, const struct fsnp_peer *owner)
 
 struct duplicate {
 	struct fsnp_peer *owner;
+	uint16_t dw_port;
 	bool d;
 };
 
@@ -155,7 +159,7 @@ static int avoid_duplicate_callback(void *item, size_t idx, void *user)
 	UNUSED(idx);
 
 	if (owner->ip == duplicate->owner->ip) {
-		if (owner->port == duplicate->owner->port) {
+		if (owner->port == duplicate->dw_port) {
 			duplicate->d = true;
 			return STOP;
 		} else {
@@ -170,7 +174,8 @@ static int avoid_duplicate_callback(void *item, size_t idx, void *user)
  * Update an existing key_cached in the hashtable by adding to it 'owner'.
  * Return 0 on success, -1 otherwise
  */
-static int add_to_key(struct key_cached *kc, struct fsnp_peer *owner)
+static int add_to_key(struct key_cached *kc, struct fsnp_peer *owner,
+		uint16_t dw_port)
 {
 	struct fsnp_peer *o = NULL;
 	int ret = 0;
@@ -180,6 +185,7 @@ static int add_to_key(struct key_cached *kc, struct fsnp_peer *owner)
 	struct in_addr addr;
 
 	duplicate.owner = owner;
+	duplicate.dw_port = dw_port;
 	duplicate.d = false;
 	addr.s_addr = htonl(owner->ip);
 	STRINGIFY_HASH(sha_str, kc->key, i);
@@ -198,6 +204,7 @@ static int add_to_key(struct key_cached *kc, struct fsnp_peer *owner)
 
 
 	memcpy(o, owner, sizeof(struct fsnp_peer));
+	owner->port = dw_port;
 	slog_info(FILE_LEVEL, "Adding to %s's owners %s:%hu", sha_str, inet_ntoa(addr),
 			owner->port);
 	ret = list_push_value(kc->owners, o);
@@ -210,7 +217,8 @@ static int add_to_key(struct key_cached *kc, struct fsnp_peer *owner)
 	return 0;
 }
 
-int cache_add_keys(uint32_t num_files, uint8_t *keys, struct fsnp_peer *owner)
+int cache_add_keys(uint32_t num_files, uint8_t *keys, struct fsnp_peer *owner,
+		uint16_t dw_port)
 {
 	struct key_cached *kc = NULL;
 	uint8_t *sha = NULL;
@@ -224,9 +232,9 @@ int cache_add_keys(uint32_t num_files, uint8_t *keys, struct fsnp_peer *owner)
 		kc = ht_get(cache, sha, sizeof(sha256_t), NULL);
 		if (!kc) {
 			slog_debug(FILE_LEVEL, "Adding file %u", i + 1);
-			ret = add_new_key(sha, owner);
+			ret = add_new_key(sha, owner, dw_port);
 		} else {
-			ret = add_to_key(kc, owner);
+			ret = add_to_key(kc, owner, dw_port);
 		}
 
 		if (ret < 0) {
@@ -286,10 +294,11 @@ int rm_entries_by_peer(void *item, size_t idx, void *user)
 	return GO_AHEAD;
 }
 
-void cache_rm_keys(struct fsnp_peer *owner)
+void cache_rm_keys(struct fsnp_peer *owner, uint16_t dw_port)
 {
 	linked_list_t *list = NULL;
 	struct in_addr addr;
+	uint16_t port = 0;
 
 	addr.s_addr = htonl(owner->ip);
 	slog_debug(FILE_LEVEL, "Removing files for peer %s:%hu", inet_ntoa(addr), owner->port);
@@ -299,7 +308,10 @@ void cache_rm_keys(struct fsnp_peer *owner)
 		return;
 	}
 
+	port = owner->port;
+	owner->port = dw_port;
 	list_foreach_value(list, rm_entries_by_peer, owner);
+	owner->port = port;
 	list_destroy(list);
 }
 
@@ -308,7 +320,7 @@ static int copy_peers_iterator(void *item, size_t idx, void *user)
 	struct fsnp_peer *to_copy = (struct fsnp_peer *)item;
 	struct fsnp_peer *peers = (struct fsnp_peer *)user;
 
-	if (idx >= MAX_KNOWN_PEER) { // avoid segfault
+	if (idx >= MAX_KNOWN_PEER - 1) { // avoid segfault
 		return STOP;
 	}
 
@@ -341,6 +353,13 @@ void get_peers_for_key(sha256_t key, struct fsnp_peer *peers, uint8_t *n)
 			key_str);
 #endif
 	nk = list_count(kc->owners);
+	if (key_exists(key)) {
+		peers[0].ip = get_peer_ip();
+		peers[0].port = get_dw_port();
+		nk += 1;
+		peers += 1;
+	}
+
 	if (nk == 0) {
 		*n = 0;
 		return;

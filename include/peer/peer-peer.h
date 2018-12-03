@@ -15,25 +15,12 @@
  *  along with fsnp. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef FSNP_PORT_H
-#define FSNP_PORT_H
+#ifndef FSNP_PEER_PEER_H
+#define FSNP_PEER_PEER_H
 
-#include "compiler.h"
+/*
+ * Handle an event on the download socket
+ */
+void dw_sock_event(short revents);
 
-#ifndef PEER_TCP_PORT
-#define PEER_TCP_PORT 38819
-#endif
-
-#ifndef SP_TCP_PORT
-#define SP_TCP_PORT 38820
-#endif
-
-#ifndef SP_UDP_PORT
-#define SP_UDP_PORT 38821
-#endif
-
-#ifndef DW_PORT
-#define DW_PORT 38822
-#endif
-
-#endif //FSNP_PORT_H
+#endif //FSNP_PEER_PEER_H

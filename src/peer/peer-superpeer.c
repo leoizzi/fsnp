@@ -248,7 +248,7 @@ static int send_join_msg(int sock)
 						 " request without sharing files");
 	}
 
-	join = fsnp_create_join(num_keys, keys);
+	join = fsnp_create_join(num_keys, get_dw_port(), keys);
 	free(keys);
 
 	if (!join) {
@@ -362,6 +362,11 @@ void file_res_rcvd(struct fsnp_file_res *file_res)
 	PRINT_PEER;
 }
 
+static void promote_rcvd(const struct fsnp_promote *promote)
+{
+
+}
+
 /*
  * Check if the superpeer is still alive. If not close the communications and
  * quit the thread
@@ -432,6 +437,12 @@ static void read_sock_msg(void)
 
 			slog_info(FILE_LEVEL, "ACK sent to the superpeer");
 			break;
+
+		case PROMOTE:
+			slog_info(FILE_LEVEL, "Promote msg received. Timeouts before this"
+						 " message: %u", tcp_state.timeouts);
+			promote_rcvd((const struct fsnp_promote *)msg);
+			tcp_state.timeouts = 0;
 
 		case ACK:
 			slog_info(FILE_LEVEL, "Ack msg received. Timeouts before this "

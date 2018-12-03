@@ -183,6 +183,7 @@ struct packed fsnp_rm_sp {
 struct packed fsnp_join {
 		struct fsnp_msg header;
 		uint32_t num_files;
+		uint16_t dw_port;
 		uint8_t files_hash[1];
 };
 
@@ -302,6 +303,7 @@ struct packed fsnp_whosnext {
 	struct fsnp_peer next;
 };
 
+#define FSNP_MAX_OWNERS 10
 /*
  * Sent by a superpeer who's searching a file inside the overlay network.
  * There is a unique ID for the request so that it's impossible to create
@@ -316,7 +318,7 @@ struct packed fsnp_whohas {
 	sha256_t req_id;
 	sha256_t file_hash;
 	uint8_t num_peers;
-	struct fsnp_peer owners[10];
+	struct fsnp_peer owners[FSNP_MAX_OWNERS];
 };
 
 FSNP_END_DECL

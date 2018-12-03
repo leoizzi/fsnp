@@ -637,7 +637,8 @@ static void ensure_prev_conn(const struct sp_udp_state *sus)
 		// do this until the msg on the socket is from our promoter
 	}
 
-	if (isset_snd_next(sus->nb)) { // clear neighbors from the HACK
+	if (!cmp_snd_next_against_self(sus->nb) && isset_snd_next(sus->nb)) {
+		// clear neighbors from the HACK
 		unset_snd_next(sus->nb);
 	}
 
@@ -664,7 +665,8 @@ static void ensure_prev_conn(const struct sp_udp_state *sus)
 /*
  * Make sure that the next will send an ACK after a NEXT msg
  */
-static void ensure_next_conn(struct sp_udp_state *sus)
+static void ensure_next_conn(struct sp_udp_state *sus,
+							 const struct fsnp_peer *old_next)
 {
 	struct fsnp_msg *msg = NULL;
 	struct fsnp_peer p;
@@ -692,9 +694,9 @@ static void ensure_next_conn(struct sp_udp_state *sus)
 		} else {
 			fsnp_log_err_msg(err, false);
 			counter++;
-			slog_info(FILE_LEVEL, "Trying to contact for the %d time the next",
+			slog_info(FILE_LEVEL, "Trying to contact for the %u time the next",
 					counter);
-			send_next(sus, NULL);
+			send_next(sus, old_next);
 		}
 
 		if (!cmp_next(sus->nb, &p)) {
@@ -761,8 +763,10 @@ static void next_msg_rcvd(struct sp_udp_state *sus, const struct fsnp_next *next
 	if (next->old_next.ip != 0 && next->old_next.port) {
 		set_next(sus->nb, &next->old_next);
 		send_next(sus, NULL);
+		ensure_next_conn(sus, NULL);
 	}
 
+	set_prev(sus->nb, &sender->addr);
 	send_ack(sus, sender);
 }
 
@@ -775,8 +779,9 @@ static void promoted_msg_rcvd(struct sp_udp_state *sus,
 	UNUSED(promoted);
 
 	slog_info(FILE_LEVEL, "PROMOTED msg received from %s", sender->pretty_addr);
-	set_prev(sus->nb, &sender->addr);
-	send_ack(sus, sender);
+	set_next(sus->nb, &sender->addr);
+	send_next(sus, &sus->nb->next);
+	ensure_next_conn(sus, &sus->nb->next);
 }
 
 /*
@@ -851,9 +856,9 @@ static void whohas_msg_rcvd(struct sp_udp_state *sus,
 	}
 
 	p = peers + whohas->num_peers;
-	if (whohas->num_peers + n > 10) {
-		n = ((uint8_t)10) - whohas->num_peers;
-		whohas->num_peers = (uint8_t)10;
+	if (whohas->num_peers + n > FSNP_MAX_OWNERS) {
+		n = ((uint8_t)FSNP_MAX_OWNERS) - whohas->num_peers;
+		whohas->num_peers = (uint8_t)FSNP_MAX_OWNERS;
 		send_to_next = false;
 	} else {
 		whohas->num_peers += n;
@@ -968,13 +973,13 @@ static void generate_req_id(const struct fsnp_peer *requester,
 {
 	char key_str[SHA256_BYTES];
 	unsigned i = 0;
-	char req_id_str[SHA256_BYTES + sizeof(struct fsnp_peer) + 1];
-	size_t req_id_size = SHA256_BYTES + sizeof(struct fsnp_peer) + 1;
+	char req_id_str[SHA256_BYTES + sizeof(struct fsnp_peer) + 16 + 1];
+	size_t req_id_size = SHA256_BYTES + sizeof(struct fsnp_peer) + 16 + 1;
 	struct in_addr a;
 
 	STRINGIFY_HASH(key_str, file_hash, i);
 	a.s_addr = htonl(requester->ip);
-	snprintf("%s:%hu:%s", req_id_size + 1, inet_ntoa(a), requester->port, key_str);
+	sprintf("%s:%hu:%s", inet_ntoa(a), requester->port, key_str);
 	sha256(req_id_str, req_id_size, req_id);
 	STRINGIFY_HASH(key_str, req_id, i);
 	slog_info(FILE_LEVEL, "req_id %s generated from %s", key_str, req_id_str);
@@ -1020,6 +1025,7 @@ static void pipe_whohas_rcvd(struct sp_udp_state *sus)
 		free(req);
 		return;
 	} else if (ret == -1) {
+		free(req);
 		slog_error(FILE_LEVEL, "Unable to set the request");
 		return;
 	}
@@ -1033,7 +1039,7 @@ static void pipe_whohas_rcvd(struct sp_udp_state *sus)
 		                 whohas_msg.file_hash, n, peers);
 	}
 
-	if (n >= 16) {
+	if (n >= FSNP_MAX_OWNERS) {
 		communicate_whohas_result_to_peer(&whohas, &whohas_msg.requester);
 		ht_delete(sus->reqs, req_id, sizeof(sha256_t), NULL, NULL);
 	} else {
@@ -1139,7 +1145,7 @@ static void check_if_next_alive(struct sp_udp_state *sus)
 		case INVALIDATED_YES_SND:
 			rm_dead_sp_from_server(&old_next);
 			send_next(sus, NULL);
-			ensure_next_conn(sus);
+			ensure_next_conn(sus, NULL);
 			break;
 
 		default:
@@ -1149,7 +1155,7 @@ static void check_if_next_alive(struct sp_udp_state *sus)
 }
 
 struct invalidate_req_data {
-	hashtable_t *t;
+	struct sp_udp_state *sus;
 	struct timespec curr;
 };
 
@@ -1162,7 +1168,7 @@ static int invalidate_requests_iterator(void *item, size_t idx, void *user)
 {
 	hashtable_key_t *key = (hashtable_key_t *)item;
 	struct invalidate_req_data *data = (struct invalidate_req_data *)user;
-	struct request *req = NULL; // TODO: if the request was sent by this superpeer communicate the error to the per who has requested it
+	struct request *req = NULL;
 	double delta = 0;
 	char key_str[SHA256_BYTES];
 	unsigned i = 0;
@@ -1170,7 +1176,7 @@ static int invalidate_requests_iterator(void *item, size_t idx, void *user)
 
 	UNUSED(idx);
 
-	req = ht_get(data->t, key->data, key->len, NULL);
+	req = ht_get(data->sus->reqs, key->data, key->len, NULL);
 	if (!req) {
 		slog_warn(FILE_LEVEL, "Request iterator key not present in the hashtable");
 		return GO_AHEAD;
@@ -1181,7 +1187,7 @@ static int invalidate_requests_iterator(void *item, size_t idx, void *user)
 		p = key->data;
 		STRINGIFY_HASH(key_str, p, i);
 		slog_info(FILE_LEVEL, "Invalidating request %s", key_str);
-		ht_delete(data->t, key->data, key->len, NULL, NULL);
+		ht_delete(data->sus->reqs, key->data, key->len, NULL, NULL);
 	}
 
 	return GO_AHEAD;
@@ -1208,7 +1214,7 @@ static void invalidate_requests(struct sp_udp_state *sus)
 	}
 
 	update_timespec(&data.curr);
-	data.t = sus->reqs;
+	data.sus = sus;
 	list_foreach_value(l, invalidate_requests_iterator, &data);
 	list_destroy(l);
 }
@@ -1234,9 +1240,17 @@ static void sp_udp_thread(void *data)
 	send_promoted(sus);
 	slog_info(FILE_LEVEL, "Ensuring prev connection...");
 	ensure_prev_conn(sus);
+	if (sus->should_exit) {
+		goto th_exit;
+	}
+
 	send_next(sus, NULL);
 	slog_info(FILE_LEVEL, "Ensuring next connection...");
-	ensure_next_conn(sus);
+	ensure_next_conn(sus, NULL);
+	if (sus->should_exit) {
+		goto th_exit;
+	}
+
 	clock_gettime(CLOCK_MONOTONIC, &sus->last);
 
 	setup_poll(pollfd, sus);
@@ -1266,6 +1280,8 @@ static void sp_udp_thread(void *data)
 		}
 	}
 
+th_exit:
+	// TODO: send leave msg to next and prev
 	slog_info(FILE_LEVEL, "sp-udp-thread is leaving...");
 	ht_destroy(sus->reqs);
 	free(sus->nb);
@@ -1286,10 +1302,6 @@ static void sp_udp_thread(void *data)
 #undef INVALIDATED_NO_SND
 #undef INVALIDATED_YES_SND
 #undef VALIDATED
-
-#define NO_SP 0
-#define ONE_SP 1
-#define TWO_SPS 2
 
 #define REQS_SIZE_MAX 1UL << 16UL
 
@@ -1465,10 +1477,6 @@ int ask_whohas(const sha256_t file_hash, const struct fsnp_peer *requester)
 
 	return 0;
 }
-
-#undef NO_SP
-#undef ONE_SP
-#undef TWO_SPS
 
 #undef REQS_SIZE_MAX
 

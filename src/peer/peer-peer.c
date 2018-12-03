@@ -15,25 +15,9 @@
  *  along with fsnp. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef FSNP_PORT_H
-#define FSNP_PORT_H
+#include "peer/peer-peer.h"
 
-#include "compiler.h"
+void dw_sock_event(short revents)
+{
 
-#ifndef PEER_TCP_PORT
-#define PEER_TCP_PORT 38819
-#endif
-
-#ifndef SP_TCP_PORT
-#define SP_TCP_PORT 38820
-#endif
-
-#ifndef SP_UDP_PORT
-#define SP_UDP_PORT 38821
-#endif
-
-#ifndef DW_PORT
-#define DW_PORT 38822
-#endif
-
-#endif //FSNP_PORT_H
+}

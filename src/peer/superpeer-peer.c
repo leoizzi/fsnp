@@ -28,8 +28,6 @@
 #include "peer/peer.h"
 #include "peer/keys_cache.h"
 
-#include "peer/peer-superpeer.h" // FIXME: is this right?
-
 #include "fsnp/fsnp.h"
 
 #include "slog/slog.h"
@@ -140,10 +138,12 @@ static void join_rcvd(struct fsnp_join *join, struct peer_info *info,
 
 	slog_debug(FILE_LEVEL, "Joining peer %s", info->pretty_addr);
 	info->joined = true;
+	info->dw_port = join->dw_port;
 	if (join->num_files == 0) {
 		slog_info(FILE_LEVEL, "%s is not sharing any file", info->pretty_addr);
 	} else {
-		ret = cache_add_keys(join->num_files, join->files_hash, &info->addr);
+		ret = cache_add_keys(join->num_files, join->files_hash, &info->addr,
+				info->dw_port);
 		if (ret < 0) {
 			slog_error(FILE_LEVEL, "Unable to add %s's files to the file cache",
 			           info->pretty_addr);
@@ -153,7 +153,7 @@ static void join_rcvd(struct fsnp_join *join, struct peer_info *info,
 	ret = send_ack(info);
 	if (ret < 0) {
 		slog_error(FILE_LEVEL, "Leaving the peer %s", info->pretty_addr);
-		cache_rm_keys(&info->addr);
+		cache_rm_keys(&info->addr, info->dw_port);
 		info->joined = false;
 		*should_exit = true;
 	}
@@ -163,8 +163,9 @@ static void update_rcvd(struct fsnp_update *update, struct peer_info *info)
 {
 	int ret = 0;
 
-	cache_rm_keys(&info->addr);
-	ret = cache_add_keys(update->num_files, update->files_hash, &info->addr);
+	cache_rm_keys(&info->addr, info->dw_port);
+	ret = cache_add_keys(update->num_files, update->files_hash, &info->addr,
+			info->dw_port);
 	if (ret < 0) {
 		slog_error(FILE_LEVEL, "Unable to add the files of peer %sto the file"
 		                " cache after update", info->pretty_addr);
@@ -232,16 +233,6 @@ static void read_sock_msg(struct peer_info *info, bool leaving,
 			file_req_rcvd((const struct fsnp_file_req *)msg, info);
 			info->timeouts = 0;
 			break;
-
-		/*
-		case FILE_RES: // FIXME: is this right?
-		// maybe it's better if the superpeer just know if he has done the request for itself and directly show the result
-			slog_info(FILE_LEVEL, "%s sent a FILE_RES msg. Timeouts before "
-			                      "this: %u", info->pretty_addr, info->timeouts);
-			file_res_rcvd((struct fsnp_file_res *)msg);
-			info->timeouts = 0;
-			break;
-		 */
 
 		case UPDATE:
 			slog_info(FILE_LEVEL, "%s sent an UPDATE msg. Timeouts before "
@@ -489,7 +480,7 @@ void sp_tcp_thread(void *data)
 
 	slog_info(FILE_LEVEL, "Leaving peer %s", info->pretty_addr);
 	if (info->joined) {
-		cache_rm_keys(&info->addr);
+		cache_rm_keys(&info->addr, info->dw_port);
 	}
 
 	slog_info(FILE_LEVEL, "Removing %s from the known_peer list", info->pretty_addr);

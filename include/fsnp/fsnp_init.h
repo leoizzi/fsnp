@@ -53,7 +53,7 @@ EXPORT void fsnp_init_rm_sp(struct fsnp_rm_sp *rm_sp,
                             const struct fsnp_peer *addr,
                             fsnp_peer_type_t type);
 
-EXPORT struct fsnp_join *fsnp_create_join(uint32_t num_files,
+EXPORT struct fsnp_join *fsnp_create_join(uint32_t num_files, uint16_t dw_port,
 										  sha256_t *files_hash);
 
 EXPORT void fsnp_init_ack(struct fsnp_ack *ack);
@@ -62,8 +62,8 @@ EXPORT void fsnp_init_leave(struct fsnp_leave *leave);
 
 EXPORT void fsnp_init_file_req(struct fsnp_file_req *file_req, sha256_t hash);
 
-EXPORT struct fsnp_file_res *
-fsnp_create_file_res(uint8_t num_peers, const struct fsnp_peer *peers);
+EXPORT struct fsnp_file_res *fsnp_create_file_res(uint8_t num_peers,
+												  const struct fsnp_peer *peers);
 
 EXPORT struct fsnp_update *fsnp_create_update(uint32_t num_files,
                                               sha256_t *files_hash);
@@ -94,9 +94,9 @@ EXPORT void fsnp_init_next(struct fsnp_next *next,
 EXPORT void fsnp_init_whosnext(struct fsnp_whosnext *whosnext,
                                const struct fsnp_peer *next);
 
-EXPORT struct fsnp_whohas *fsnp_init_whohas(struct fsnp_whohas *whohas, struct fsnp_peer *sp,
-                                            sha256_t req_id, sha256_t file_hash, uint8_t num_peers,
-                                            struct fsnp_peer *owners);
+EXPORT void fsnp_init_whohas(struct fsnp_whohas *whohas, struct fsnp_peer *sp,
+                             sha256_t req_id, sha256_t file_hash,
+                             uint8_t num_peers, struct fsnp_peer *owners);
 
 FSNP_END_DECL
 

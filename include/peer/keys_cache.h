@@ -38,12 +38,12 @@ bool init_keys_cache(void);
  * of sha256_t since this is the format used by the join and update messages
  */
 int cache_add_keys(uint32_t num_files, uint8_t *keys,
-                   struct fsnp_peer *owner);
+                   struct fsnp_peer *owner, uint16_t dw_port);
 
 /*
  * Remove all the files belonging to owner
  */
-void cache_rm_keys(struct fsnp_peer *owner);
+void cache_rm_keys(struct fsnp_peer *owner, uint16_t dw_port);
 
 /*
  * Retrieve all the peers who has a file registered with the key 'key'.
@@ -57,6 +57,7 @@ void get_peers_for_key(sha256_t key, struct fsnp_peer *peers, uint8_t *n);
  * Close the file cache, releasing all the resources allocated
  */
 void close_keys_cache(void);
+
 FSNP_END_DECL
 
 #endif //FSNP_FILE_CACHE_H

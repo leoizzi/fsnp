@@ -116,7 +116,7 @@ static void first_peer(void)
 
 		close(sock);
 	} else {
-		ret = enter_sp_mode(NULL, 0);
+		ret = enter_sp_mode(NULL, NO_SP);
 		if (ret == false) {
 			slog_error(STDOUT_LEVEL, "Unable to enter the sp_mode");
 			PRINT_PEER;

@@ -84,6 +84,16 @@ in_port_t get_udp_sp_port(void);
 void set_udp_sp_port(in_port_t port);
 
 /*
+ * Get the download port
+ */
+in_port_t get_dw_port(void);
+
+/*
+ * Set the download port
+ */
+void set_dw_port(in_port_t dw_port);
+
+/*
  * Set the address of the last bootstrap server contacted by the peer.
  */
 void set_server_addr(const struct fsnp_peer *addr);
