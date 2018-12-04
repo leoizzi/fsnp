@@ -1349,14 +1349,20 @@ static void sp_udp_thread(void *data)
 th_exit:
 	// TODO: send leave msg to next and prev
 	slog_info(FILE_LEVEL, "sp-udp-thread is leaving...");
+	slog_info(FILE_LEVEL, "Destroyng the request cache");
 	ht_destroy(sus->reqs);
+	slog_info(FILE_LEVEL, "Unsetting al the neighbors");
+	unset_all(sus->nb);
 	free(sus->nb);
+	slog_info(FILE_LEVEL, "Closing the UDP socket");
 	close(sus->sock);
+	slog_info(FILE_LEVEL, "Closing the pipe");
 	pthread_mutex_lock(&stp.mtx);
 	close(sus->pipe[READ_END]);
 	close(sus->pipe[WRITE_END]);
 	memset(stp.pipe_fd, 0, sizeof(int) * 2);
 	pthread_mutex_unlock(&stp.mtx);
+	slog_info(FILE_LEVEL, "Destroying the stp mutex");
 	pthread_mutex_destroy(&stp.mtx);
 	// Don't free sus, it will be freed by the thread_manager
 }
