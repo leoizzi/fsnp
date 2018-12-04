@@ -1,3 +1,5 @@
 add_library(fsnp SHARED fsnp_tcp_op.c sha-256.c fsnp_init.c fsnp_err.c fsnp_udp_op.c)
 target_compile_options(fsnp PUBLIC ${COMMON_COMPILER_FLAGS} -fvisibility=hidden)
+message(STATUS "FSNP_MAX_OWNERS is equal to ${FSNP_MAX_OWNERS}")
+target_compile_definitions(fsnp PUBLIC -DFSNP_MAX_OWNERS=${FSNP_MAX_OWNERS})
 target_link_libraries(fsnp PUBLIC slog)

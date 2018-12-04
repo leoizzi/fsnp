@@ -466,7 +466,10 @@ static void read_sock_msg(void)
 			break;
 
 		case ERROR:
-			// TODO: implement (this must be done before testing the superpeer)
+			slog_warn(STDOUT_LEVEL, "The superpeer has sent an ERROR msg");
+			PRINT_PEER;
+			tcp_state.timeouts = 0;
+			break;
 
 		case LEAVE:
 			slog_info(FILE_LEVEL, "Leave msg received");
@@ -544,6 +547,7 @@ static void send_file_req(void)
 	fsnp_err_t err;
 	struct fsnp_file_req file_req;
 	sha256_t sha;
+	struct fsnp_msg *fm = NULL;
 #ifdef FSNP_DEBUG
 	char key_str[SHA256_BYTES];
 	unsigned i = 0;
@@ -577,9 +581,32 @@ static void send_file_req(void)
 		return;
 	}
 
-	// TODO: wait for an ACK or an ERROR (this must be implemented before testing the superpeer)
+	slog_info(FILE_LEVEL, "Reading superpeer's response");
+	fm = fsnp_read_msg_tcp(tcp_state.sock, 0, NULL, &err);
+	if (!fm) {
+		fsnp_log_err_msg(err, false);
+		if (err == E_PEER_DISCONNECTED) {
+			tcp_state.quit_loop = true;
+		}
 
-	tcp_state.file_asked = true;
+		return;
+	}
+
+	if (fm->msg_type == ACK) {
+		slog_info(FILE_LEVEL, "The superpeer has accepted the file_req");
+		tcp_state.file_asked = true;
+	} else if (fm->msg_type == ERROR) {
+		slog_warn(STDOUT_LEVEL, "The superpeer has refused the request");
+		PRINT_PEER;
+		tcp_state.file_asked = false;
+	} else {
+		slog_warn(STDOUT_LEVEL, "Unexpected msg_type from the superpeer: %u",
+				fm->msg_type);
+		PRINT_PEER;
+		tcp_state.file_asked = false;
+	}
+
+	free(fm);
 }
 
 /*

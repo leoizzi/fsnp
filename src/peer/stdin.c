@@ -369,7 +369,6 @@ static void parse_msg(const char *msg, size_t n)
 	const char show_download_path[] = "show_download_path\n";
 	const char who_has[] = "who_has\n";
 	const char download[] = "download\n";
-	const char list_sp[] = "list_sp\n";
 	const char help[] = "help\n";
 	const char quit[] = "quit\n";
 
@@ -415,9 +414,7 @@ void stdin_event(void)
 	}
 
 	parse_msg(msg, n);
-
 	cleanup_stdin();
-
 	PRINT_PEER;
 }
 

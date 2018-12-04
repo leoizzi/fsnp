@@ -7,6 +7,8 @@ set(CMAKE_C_STANDARD 99)
 
 set(SERVER_PORT 38818 CACHE VALUE "The default listening port of the server")
 set(FSNP_TIMEOUT 5000 CACHE VALUE "The standard timeout in milliseconds for reading and writing to sockets.")
+set(FSNP_MAX_OWNERS 10 CACHE VALUE "The maximum number of owners in a whohas request")
+set(MAX_KNOWN_PEER 16 CACHE VALUE "The maximum number of peers that a superpeer can known. It must be greater or equal to FSNP_MAX_OWNERS")
 option(FSNP_MEM_DEBUG "Enable this option if you want to compile for Valgrind" OFF)
 
 include_directories(include)
@@ -23,6 +25,18 @@ if (NOT FSNP_TIMEOUT)
 	set(FSNP_TIMEOUT 5000)
 elseif(FSNP_TIMEOUT LESS 0)
 	message(FATAL_ERROR "The timeout value must be a positive number")
+endif()
+
+if (NOT FSNP_MAX_OWNERS)
+	set(FSNP_MAX_OWNERS 10)
+endif()
+
+if (NOT MAX_KNOWN_PEER)
+	set(MAX_KNOWN_PEER 16)
+endif()
+
+if (FSNP_MAX_OWNERS GREATER MAX_KNOWN_PEER)
+	message(FATAL_ERROR "FSNP_MAX_OWNERS cannot be greater than MAX_KNOWN_PEER")
 endif()
 
 if (FSNP_MEM_DEBUG)

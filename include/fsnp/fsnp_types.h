@@ -303,7 +303,6 @@ struct packed fsnp_whosnext {
 	struct fsnp_peer next;
 };
 
-#define FSNP_MAX_OWNERS 10
 /*
  * Sent by a superpeer who's searching a file inside the overlay network.
  * There is a unique ID for the request so that it's impossible to create

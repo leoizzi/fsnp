@@ -332,10 +332,10 @@ void get_peers_for_key(sha256_t key, struct fsnp_peer *peers, uint8_t *n)
 {
 	struct key_cached *kc = NULL;
 	uint64_t nk = 0;
+	int it = 0;
 #ifdef FSNP_DEBUG
 	char key_str[32];
 	unsigned i = 0;
-	int it = 0;
 
 	STRINGIFY_HASH(key_str, key, i);
 #endif
