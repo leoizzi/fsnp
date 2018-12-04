@@ -378,7 +378,6 @@ static void accept_peer(void)
 	socklen_t socklen = sizeof(struct sockaddr_in);
 	struct peer_info *peer_info = NULL;
 	size_t num_peers = 0;
-	size_t max_known_peers = MAX_KNOWN_PEER + 1; // consider the fake thread
 	int ret = 0;
 	int added = 0;
 
@@ -443,7 +442,7 @@ static void accept_peer(void)
 	}
 
 	num_peers = list_count(known_peers);
-	if (num_peers + 1 > max_known_peers) {
+	if (num_peers > MAX_KNOWN_PEER) {
 		promote_peer();
 	}
 }
