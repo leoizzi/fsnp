@@ -361,7 +361,7 @@ void get_peers_for_key(sha256_t key, struct fsnp_peer *peers, uint8_t *n)
 
 	it = list_foreach_value(kc->owners, copy_peers_iterator, peers);
 
-	if (key_exists(key) && it > 0 && it < FSNP_MAX_OWNERS) {
+	if (key_exists(key) && it >= 0 && it < FSNP_MAX_OWNERS) {
 		peers[it].ip = get_peer_ip();
 		peers[it].port = get_dw_port();
 		nk += 1;
