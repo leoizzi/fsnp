@@ -316,7 +316,7 @@ static void pipe_file_res_rvcd(const struct peer_info *info)
 	struct fsnp_file_res *file_res = NULL;
 
 	r = fsnp_timed_read(info->pipefd[READ_END], &whohas,
-			sizeof(struct fsnp_whohas), 0, &err);
+			sizeof(struct fsnp_whohas), FSNP_TIMEOUT, &err);
 	if (r < 0) {
 		slog_error(FILE_LEVEL, "Unable to read whohas msg from the pipe of %s",
 				info->pretty_addr);
@@ -337,8 +337,7 @@ static void pipe_file_res_rvcd(const struct peer_info *info)
 /*
  * Handler called when a PIPE_PROMOTE msg type is read from the pipe
  */
-static void pipe_promote_rcvd(struct peer_info *info, bool *leaving,
-		bool *should_exit) {
+static void pipe_promote_rcvd(struct peer_info *info, bool *leaving) {
 	bool is_valid = false;
 	struct fsnp_peer prev;
 	in_port_t self;
@@ -347,7 +346,7 @@ static void pipe_promote_rcvd(struct peer_info *info, bool *leaving,
 	self = get_udp_sp_port();
 	is_valid = get_prev_addr(&prev);
 	if (!is_valid) {
-		slog_warn(FILE_LEVEL, "Prev not valid during the promotion of %s",
+		slog_info(FILE_LEVEL, "Prev not valid during the promotion of %s",
 				info->pretty_addr);
 		fsnp_init_promote(&promote, self, NULL);
 	} else {
@@ -356,7 +355,6 @@ static void pipe_promote_rcvd(struct peer_info *info, bool *leaving,
 
 	send_promote(info, &promote);
 	*leaving = true;
-	*should_exit = true;
 }
 /*
  * Read a message on the pipe and:
@@ -386,7 +384,7 @@ static void read_pipe_msg(struct peer_info *info, bool *leaving,
 	if (msg == PIPE_PROMOTE) {
 		slog_info(FILE_LEVEL, "Read from the pipe to promote %s",
 		          info->pretty_addr);
-		pipe_promote_rcvd(info, leaving, should_exit);
+		pipe_promote_rcvd(info, leaving);
 	} else if (msg == PIPE_FILE_RES) {
 		slog_info(FILE_LEVEL, "Read from the pipe to send file_res to %s",
 				info->pretty_addr);

@@ -69,7 +69,7 @@ static void fake_peer_file_res_rcvd(bool *already_asked, bool *should_exit)
 	struct fsnp_file_res *file_res = NULL;
 
 	r = fsnp_timed_read(fake_peer->pipefd[READ_END], &whohas,
-	                    sizeof(struct fsnp_whohas), 0, &err);
+	                    sizeof(struct fsnp_whohas), FSNP_TIMEOUT, &err);
 	if (r < 0) {
 		slog_error(FILE_LEVEL, "fake-peer unable to read whohas msg from the "
 						 "pipe");
@@ -100,7 +100,7 @@ static void fake_peer_whohas_rcvd(bool *already_asked, bool *should_exit)
 	int ret = 0;
 
 	r = fsnp_timed_read(fake_peer->pipefd[READ_END], file_hash, sizeof(sha256_t),
-			0, &err);
+			FSNP_TIMEOUT, &err);
 	if (r < 0) {
 		slog_error(FILE_LEVEL, "Unable to read filer_hash from the pipe");
 		fsnp_log_err_msg(err, false);
@@ -352,11 +352,9 @@ static void promote_peer(void)
 	int msg = PIPE_PROMOTE;
 	ssize_t w = 0;
 	struct peer_info *to_promote = NULL;
-	struct in_addr a;
 
 	to_promote = list_shift_value(known_peers);
-	a.s_addr = htonl(to_promote->addr.ip);
-	slog_info(FILE_LEVEL, "Promoting peer %s:%hu", inet_ntoa(a), to_promote->addr.port);
+	slog_info(FILE_LEVEL, "Promoting peer %s", to_promote->pretty_addr);
 	w = fsnp_write(to_promote->pipefd[WRITE_END], &msg, sizeof(int));
 	if (w < 0) {
 		slog_error(FILE_LEVEL, "fsn_write error %d", errno);
@@ -463,7 +461,8 @@ void sp_ask_file(const char *filename, size_t size)
 	fsnp_err_t err;
 	ssize_t w = 0;
 
-	w = fsnp_timed_write(fake_peer->pipefd[WRITE_END], &msg, sizeof(int), 0, &err);
+	w = fsnp_timed_write(fake_peer->pipefd[WRITE_END], &msg, sizeof(int),
+			FSNP_TIMEOUT, &err);
 	if (w < 0) {
 		slog_error(FILE_LEVEL, "Unable to write PIPE_WHOHAS into fake-peer's pipe");
 		fsnp_log_err_msg(err, false);
@@ -471,8 +470,8 @@ void sp_ask_file(const char *filename, size_t size)
 	}
 
 	sha256(filename, size, key);
-	w = fsnp_timed_write(fake_peer->pipefd[WRITE_END], key, sizeof(sha256_t), 0,
-			&err);
+	w = fsnp_timed_write(fake_peer->pipefd[WRITE_END], key, sizeof(sha256_t),
+			FSNP_TIMEOUT, &err);
 	if (w < 0) {
 		slog_error(FILE_LEVEL, "Unable to write into fake-peer's pipe the file hash");
 		fsnp_log_err_msg(err, false);
@@ -494,7 +493,7 @@ static void pipe_write_file_res(const struct peer_info *info,
 	ssize_t w = 0;
 	fsnp_err_t err;
 
-	w = fsnp_timed_write(info->pipefd[WRITE_END], &msg, sizeof(int), 0,
+	w = fsnp_timed_write(info->pipefd[WRITE_END], &msg, sizeof(int), FSNP_TIMEOUT,
 	                     &err);
 	if (w < 0) {
 		slog_error(FILE_LEVEL, "Unable to write PIPE_FILE_RES in the pipe");
@@ -502,7 +501,7 @@ static void pipe_write_file_res(const struct peer_info *info,
 	}
 
 	w = fsnp_timed_write(info->pipefd[WRITE_END], &data->whohas,
-	                     sizeof(struct fsnp_whohas), 0, &err);
+	                     sizeof(struct fsnp_whohas), FSNP_TIMEOUT, &err);
 	if (w < 0) {
 		slog_error(FILE_LEVEL, "Unable to communicate to peer %s about the"
 		                       " search results", info->pretty_addr);

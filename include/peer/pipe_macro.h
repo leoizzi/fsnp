@@ -18,11 +18,13 @@
 #ifndef FSNP_PIPE_MACRO_H
 #define FSNP_PIPE_MACRO_H
 
-#define PIPE_WHOHAS 0
-#define PIPE_QUIT 1
-#define PIPE_PROMOTE 2
-#define PIPE_FILE_RES 3
-#define PIPE_GET_PREV 4
-#define PIPE_DOWNLOAD 5
+enum pipe_macro {
+	PIPE_WHOHAS = 0,
+	PIPE_QUIT,
+	PIPE_PROMOTE,
+	PIPE_FILE_RES,
+	PIPE_GET_PREV,
+	PIPE_DOWNLOAD
+};
 
 #endif //FSNP_PIPE_MACRO_H

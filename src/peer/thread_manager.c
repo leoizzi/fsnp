@@ -111,6 +111,7 @@ static void *start(void *d)
 	int ret = 0;
 	struct launch_data *ld = (struct launch_data *)d;
 
+	pthread_setname_np(ld->name);
 	slog_info(FILE_LEVEL, "Thread %s is running", ld->name);
 	slog_debug(FILE_LEVEL, "Pushing %s inside running_threads", ld->name);
 	ret = list_push_value(running_threads, ld);

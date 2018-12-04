@@ -518,14 +518,14 @@ static size_t read_filename_from_pipe(char *msg)
 	fsnp_err_t err;
 
 	pipe_read = tcp_state.pipe_fd[READ_END];
-	r = fsnp_timed_read(pipe_read, &size, sizeof(size_t), 1000, &err);
+	r = fsnp_timed_read(pipe_read, &size, sizeof(size_t), FSNP_TIMEOUT, &err);
 	if (r < 0) {
 		fsnp_log_err_msg(err, false);
 		slog_error(FILE_LEVEL, "Unable to read the length of the filename");
 		return 0;
 	}
 
-	r = fsnp_timed_read(pipe_read, msg, size, 1000, &err);
+	r = fsnp_timed_read(pipe_read, msg, size, FSNP_TIMEOUT, &err);
 	if (r < 0) {
 		fsnp_log_err_msg(err, false);
 		slog_error(FILE_LEVEL, "Unable to read the filename from the pipe");
