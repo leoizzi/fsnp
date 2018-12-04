@@ -205,18 +205,6 @@ static void join_sp_handler(void)
 }
 
 /*
- * Only if superpeer: print on the stdout the list of known superpeer
- */
-static void show_sp_list(void)
-{
-	if (!is_superpeer()) {
-		return;
-	}
-
-	// TODO: implement
-}
-
-/*
  * Helper function for asking the user a path
  */
 static int request_dir(char *path)
@@ -354,7 +342,6 @@ static void show_help(void)
 	       "%-10s %-30s\n\n"
 	       "%-10s %-30s\n\n"
 	       "%-10s %-30s\n\n"
-	       "%-10s %-30s\n\n"
 	       "%-10s %-30s\n",
 	       "query_sp", "Contact the bootstrap server to get a list of superpeer",
 	       "join_sp", "Join a superpeer",
@@ -367,7 +354,6 @@ static void show_help(void)
 	       "show_download_path", "Show the path of the download directory",
 	       "who_has", "Search inside the network who has a file",
 	       "download", "download a file from a peer",
-	       "list_sp", "Show the list of superpeers known by this superpeer",
 	       "quit", "Exit the peer executable");
 }
 
@@ -391,8 +377,6 @@ static void parse_msg(const char *msg, size_t n)
 		query_sp_handler();
 	} else if (!strncmp(msg, join_sp, n)) {
 		join_sp_handler();
-	} else if (!strncmp(msg, list_sp, n)) {
-		show_sp_list();
 	} else if (!strncmp(msg, shared_dir, n)) {
 		update_shared_dir();
 	} else if (!strncmp(msg, download_dir, n)) {

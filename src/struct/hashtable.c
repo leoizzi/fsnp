@@ -256,8 +256,6 @@ ht_grow_table(hashtable_t *table)
                 new_list = malloc(sizeof(ht_items_list_t));
                 // XXX - if malloc fails here the table is irremediably corrupted
                 //       so there is no point in handling the case.
-                //       TODO : using an internal prealloc'd bufferpool would ensure
-                //              us to always obtain a valid pointer here
                 TAILQ_INIT(&new_list->head);
                 SPIN_INIT(new_list->lock);
                 size_t index = item->hash%new_size;

@@ -15,11 +15,14 @@
  *  along with fsnp. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "peer/peer-peer.h"
-#include "compiler.h"
+#ifndef FSNP_PIPE_MACRO_H
+#define FSNP_PIPE_MACRO_H
 
-void dw_sock_event(short revents)
-{
-	// TODO: implement
-	UNUSED(revents);
-}
+#define PIPE_WHOHAS 0
+#define PIPE_QUIT 1
+#define PIPE_PROMOTE 2
+#define PIPE_FILE_RES 3
+#define PIPE_GET_PREV 4
+#define PIPE_DOWNLOAD 5
+
+#endif //FSNP_PIPE_MACRO_H

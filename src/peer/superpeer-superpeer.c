@@ -37,8 +37,6 @@
 
 #include "slog/slog.h"
 
-// TODO: what to do if the neighbors field are set to this peer?
-
 struct neighbors_flag {
 	uint8_t next_set : 1;
 	uint8_t snd_next_set : 1;
@@ -715,6 +713,53 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 	free(msg);
 }
 
+static void ensure_whohas(struct sp_udp_state *sus,
+						  const struct fsnp_whohas *whohas, bool send_to_next)
+{
+	struct fsnp_msg *msg = NULL;
+	struct fsnp_peer p;
+	fsnp_err_t err;
+	unsigned counter = 0;
+
+	if (!isset_next(sus->nb)) {
+		return;
+	}
+
+	if (cmp_next_against_self(sus->nb)) {
+		return;
+	}
+
+	while (true) {
+		msg = fsnp_timed_recvfrom(sus->sock, 0, &p, &err);
+		if (!msg && counter >= 4) {
+			slog_warn(FILE_LEVEL, "Unable to send whohas");
+			fsnp_log_err_msg(err, false);
+			return;
+		} else {
+			fsnp_log_err_msg(err, false);
+			counter++;
+			slog_info(FILE_LEVEL, "Trying to contact for the %u time whohas's"
+						 " receiver",
+			          counter);
+			send_whohas(sus, whohas, send_to_next);
+		}
+
+		if (send_to_next && !cmp_next(sus->nb, &p)) {
+			free(msg);
+			continue;
+		} else {
+			break;
+		}
+	}
+
+	if (msg->msg_type != ACK) {
+		slog_warn(FILE_LEVEL, "Wrong msg type received from %s: expected %u, "
+		                      "got %u", sus->nb->next_pretty, NEXT, msg->msg_type);
+	}
+
+	free(msg);
+}
+
 #define POLLFD_NUM 2
 #define PIPE 0
 #define SOCK 1
@@ -852,6 +897,7 @@ static void whohas_msg_rcvd(struct sp_udp_state *sus,
 	get_peers_for_key(whohas->file_hash, peers, &n);
 	if (n == 0) { // just send the message to the next
 		send_whohas(sus, whohas, send_to_next);
+		ensure_whohas(sus, whohas, send_to_next);
 		return;
 	}
 
@@ -869,6 +915,7 @@ static void whohas_msg_rcvd(struct sp_udp_state *sus,
 	}
 
 	send_whohas(sus, whohas, send_to_next);
+	ensure_whohas(sus, whohas, send_to_next);
 }
 
 /*
@@ -1057,6 +1104,7 @@ static void pipe_whohas_rcvd(struct sp_udp_state *sus)
 		ht_delete(sus->reqs, req_id, sizeof(sha256_t), NULL, NULL);
 	} else {
 		send_whohas(sus, &whohas, true);
+		ensure_whohas(sus, &whohas, true);
 	}
 }
 

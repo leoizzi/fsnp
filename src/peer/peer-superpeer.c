@@ -33,10 +33,10 @@
 #include "peer/file_manager.h"
 #include "peer/peer.h"
 #include "peer/thread_manager.h"
+#include "peer/superpeer.h"
+#include "peer/pipe_macro.h"
 
 #include "slog/slog.h"
-
-// TODO: if a superpeer disconnect itself without sending a leave message it's dead. It has to be removed from the server list
 
 struct periodic_data {
 	pthread_mutex_t mtx;
@@ -333,6 +333,7 @@ struct peer_tcp_state {
 	bool send_leave_msg;
 	bool file_asked;
 	unsigned int timeouts;
+	struct fsnp_peer sp_addr;
 };
 
 static struct peer_tcp_state tcp_state;
@@ -364,7 +365,21 @@ void file_res_rcvd(struct fsnp_file_res *file_res)
 
 static void promote_rcvd(const struct fsnp_promote *promote)
 {
+	struct fsnp_peer sps[2];
+	unsigned n = 0;
 
+	memset(sps, 0, sizeof(struct fsnp_peer) * 2);
+	if (promote->sp_port) {
+		sps[0].ip = tcp_state.sp_addr.ip;
+		sps[0].port = promote->sp_port;
+		n++;
+		if (promote->sp.ip != 0 && promote->sp.port != 0) {
+			memcpy(&sps[1], &promote->sp, sizeof(struct fsnp_peer));
+			n++;
+		}
+	}
+
+	enter_sp_mode(sps, n);
 }
 
 /*
@@ -450,6 +465,9 @@ static void read_sock_msg(void)
 			tcp_state.timeouts = 0;
 			break;
 
+		case ERROR:
+			// TODO: implement (this must be done before testing the superpeer)
+
 		case LEAVE:
 			slog_info(FILE_LEVEL, "Leave msg received");
 			tcp_state.timeouts = 0;
@@ -483,10 +501,6 @@ static void sock_event(short revents)
 		slog_error(FILE_LEVEL, "revents %hd", revents);
 	}
 }
-
-#define PIPE_QUIT -1
-#define PIPE_WHO_HAS 0
-#define PIPE_DOWNLOAD 1
 
 #define FILENAME_SIZE 256
 
@@ -563,7 +577,7 @@ static void send_file_req(void)
 		return;
 	}
 
-	// TODO: wait for an ACK or an ERROR
+	// TODO: wait for an ACK or an ERROR (this must be implemented before testing the superpeer)
 
 	tcp_state.file_asked = true;
 }
@@ -591,7 +605,7 @@ static void read_pipe_msg(void)
 			tcp_state.quit_loop = true;
 			break;
 
-		case PIPE_WHO_HAS:
+		case PIPE_WHOHAS:
 			send_file_req();
 			break;
 
@@ -727,7 +741,7 @@ static void peer_tcp_thread(void *data)
 /*
  * Set up 'tcp_state' and spawn the relative thread
  */
-static void launch_peer_thread(int sock)
+static void launch_peer_thread(int sock, const struct fsnp_peer *sp)
 {
 	int ret = 0;
 
@@ -745,6 +759,7 @@ static void launch_peer_thread(int sock)
 	tcp_state.sock = sock;
 	tcp_state.quit_loop = false;
 	tcp_state.send_leave_msg = false;
+	memcpy(&tcp_state.sp_addr, sp, sizeof(struct fsnp_peer));
 	ret = start_new_thread(peer_tcp_thread, NULL, "peer_tcp_thread");
 	if (ret < 0) {
 		slog_error(FILE_LEVEL, "unable to start the peer_tcp_thread", errno);
@@ -809,13 +824,13 @@ void join_sp(const struct fsnp_query_res *query_res)
 		return;
 	}
 
-	launch_peer_thread(sock);
+	launch_peer_thread(sock, &query_res->sp_list[choice]);
 }
 
 void peer_ask_file(const char *filename, size_t size)
 {
 	ssize_t ret = 0;
-	int to_write = PIPE_WHO_HAS;
+	int to_write = PIPE_WHOHAS;
 	static const char err_msg[] = "unable to send WHO_HAS";
 
 	ret = fsnp_write(tcp_state.pipe_fd[WRITE_END], &to_write, sizeof(int));

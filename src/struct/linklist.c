@@ -1138,9 +1138,6 @@ list_quick_sort(list_entry_t *head,
 
     }
 
-    // TODO - optimize the pivot selection on the sublists
-    //        (it could be done while traversing the list
-    //        earlier in this function)
     int l1 = 0;
     p1 = head;
     while (p1 != pivot) {

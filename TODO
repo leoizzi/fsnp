@@ -3,6 +3,4 @@ Se si cambia la shared_dir di un peer connesso ad un sp non viene mandato un mes
 Nella relazione scrivere che la hashtable presentava dei bug nelle funzioni che
 ne permettevano l'iterazione, per cui è stato preferito l'uso delle liste
 
-Levare il limite sui download
-
 Il superpeer manda un promote. Successivamente chiuderà la connessione con il peer. Il peer farà lo stesso

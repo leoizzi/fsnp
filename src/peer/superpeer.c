@@ -46,10 +46,6 @@
 #define READ_END 0
 #define WRITE_END 1
 
-//TODO: improve the error handling in the sockets' poll handlers
-
-// TODO: add all the files of file_manager to the keys_cache when the peer is becoming a superpeer
-
 /*
  * This list doesn't have a free callback because it shares the content with
  * a 'sp_tcp_thread'. The thread will free the memory when it's about to close

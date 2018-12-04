@@ -21,6 +21,8 @@
 #include <stdbool.h>
 #include <arpa/inet.h>
 
+#include "peer/pipe_macro.h"
+
 #include "fsnp/fsnp.h"
 
 #include "compiler.h"
@@ -39,12 +41,6 @@ struct peer_info {
 	unsigned int timeouts;
 	char pretty_addr[32]; // for printing and logging purposes
 };
-
-#define PIPE_WHOHAS 0
-#define PIPE_QUIT 1
-#define PIPE_PROMOTE 2
-#define PIPE_FILE_RES 3
-#define PIPE_GET_PREV 4
 
 #define NO_SP 0
 #define ONE_SP 1
