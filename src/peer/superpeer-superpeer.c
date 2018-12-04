@@ -1193,6 +1193,11 @@ static void check_if_next_alive(struct sp_udp_state *sus)
 	int ret = 0;
 	struct fsnp_peer old_next;
 
+	if (cmp_snd_next_against_self(sus->nb)) {
+		slog_debug(FILE_LEVEL, "next field is set to self. check_if_next_alive will not remove it.");
+		return;
+	}
+
 	clock_gettime(CLOCK_MONOTONIC, &curr);
 	ret = invalidate_next_if_needed(sus->nb, &sus->last, &curr, &old_next);
 	switch (ret) {
