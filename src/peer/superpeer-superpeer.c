@@ -855,7 +855,7 @@ static void whohas_msg_rcvd(struct sp_udp_state *sus,
 		return;
 	}
 
-	p = peers + whohas->num_peers;
+	p = whohas->owners + whohas->num_peers;
 	if (whohas->num_peers + n > FSNP_MAX_OWNERS) {
 		n = ((uint8_t)FSNP_MAX_OWNERS) - whohas->num_peers;
 		whohas->num_peers = (uint8_t)FSNP_MAX_OWNERS;
@@ -878,11 +878,24 @@ static void leave_msg_rcvd(struct sp_udp_state *sus,
 		const struct fsnp_leave *leave, const struct sender *sender)
 {
     UNUSED(leave);
+    struct fsnp_whosnext whosnext;
+    struct sender s;
 
 	if (cmp_next(sus->nb, &sender->addr)) {
+		slog_info(FILE_LEVEL, "next %s is leaving", sus->nb->next_pretty);
         set_next_as_snd_next(sus->nb);
+        send_next(sus, NULL);
+        ensure_next_conn(sus, NULL);
+        fsnp_init_whosnext(&whosnext, NULL);
+        s.addr = sus->nb->next;
+        memcpy(s.pretty_addr, sus->nb->next_pretty, sizeof(char) * 32);
+        send_whosnext(sus, &whosnext, &s);
 	} else if (cmp_prev(sus->nb, &sender->addr)) {
+		slog_info(FILE_LEVEL, "prev %s is leaving", sus->nb->prev_pretty);
 	    unset_prev(sus->nb);
+	} else {
+		slog_info(FILE_LEVEL, "%s is leaving. No special actions required",
+				sender->pretty_addr);
 	}
 
 	send_ack(sus, sender);
