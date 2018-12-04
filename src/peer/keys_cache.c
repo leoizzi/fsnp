@@ -320,7 +320,7 @@ static int copy_peers_iterator(void *item, size_t idx, void *user)
 	struct fsnp_peer *to_copy = (struct fsnp_peer *)item;
 	struct fsnp_peer *peers = (struct fsnp_peer *)user;
 
-	if (idx >= MAX_KNOWN_PEER - 1) { // avoid segfault
+	if (idx >= FSNP_MAX_OWNERS) {
 		return STOP;
 	}
 
@@ -335,6 +335,7 @@ void get_peers_for_key(sha256_t key, struct fsnp_peer *peers, uint8_t *n)
 #ifdef FSNP_DEBUG
 	char key_str[32];
 	unsigned i = 0;
+	int it = 0;
 
 	STRINGIFY_HASH(key_str, key, i);
 #endif
@@ -353,20 +354,20 @@ void get_peers_for_key(sha256_t key, struct fsnp_peer *peers, uint8_t *n)
 			key_str);
 #endif
 	nk = list_count(kc->owners);
-	if (key_exists(key)) {
-		peers[0].ip = get_peer_ip();
-		peers[0].port = get_dw_port();
-		nk += 1;
-		peers += 1;
-	}
-
-	if (nk == 0) {
+	if (nk == 0 && !key_exists(key)) {
 		*n = 0;
 		return;
 	}
 
+	it = list_foreach_value(kc->owners, copy_peers_iterator, peers);
+
+	if (key_exists(key) && it > 0 && it < FSNP_MAX_OWNERS) {
+		peers[it].ip = get_peer_ip();
+		peers[it].port = get_dw_port();
+		nk += 1;
+	}
+
 	*n = (uint8_t)nk;
-	list_foreach_value(kc->owners, copy_peers_iterator, peers);
 }
 
 void close_keys_cache(void)
