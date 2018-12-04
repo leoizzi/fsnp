@@ -244,7 +244,7 @@ static int send_join_msg(int sock)
 
 	keys = retrieve_all_keys(&num_keys);
 	if (!keys) {
-		slog_error(FILE_LEVEL, "Unable to retrieve all the keys. Sending the"
+		slog_warn(FILE_LEVEL, "Unable to retrieve all the keys. Sending the"
 						 " request without sharing files");
 	}
 
