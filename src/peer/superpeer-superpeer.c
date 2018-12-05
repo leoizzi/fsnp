@@ -414,6 +414,10 @@ static int invalidate_next_if_needed(struct neighbors *nb,
 		return INVALIDATED_NO_SND;
 	}
 #else
+	UNUSED(nb);
+	UNUSED(last);
+	UNUSED(curr);
+	UNUSED(old_next);
 	return VALIDATED;
 #endif
 }
