@@ -1096,7 +1096,7 @@ static void generate_req_id(const struct fsnp_peer *requester,
 
 	STRINGIFY_HASH(key_str, file_hash, i);
 	a.s_addr = htonl(requester->ip);
-	sprintf("%s:%hu:%s", inet_ntoa(a), requester->port, key_str);
+	sprintf(req_id_str, "%s:%hu:%s", inet_ntoa(a), requester->port, key_str);
 	sha256(req_id_str, req_id_size, req_id);
 	STRINGIFY_HASH(key_str, req_id, i);
 	slog_info(FILE_LEVEL, "req_id %s generated from %s", key_str, req_id_str);
@@ -1157,6 +1157,10 @@ static void pipe_whohas_rcvd(struct sp_udp_state *sus)
 		communicate_whohas_result_to_peer(&whohas, &whohas_msg.requester);
 		ht_delete(sus->reqs, req_id, sizeof(sha256_t), NULL, NULL);
 	} else {
+		if (cmp_next_against_self(sus->nb)) {
+			// there's no other sp in the network. Just send the response
+			communicate_whohas_result_to_peer(&whohas, &whohas_msg.requester);
+		}
 		send_whohas(sus, &whohas, true);
 		ensure_whohas(sus, &whohas, true);
 	}
@@ -1247,8 +1251,6 @@ static void check_if_next_alive(struct sp_udp_state *sus)
 	struct fsnp_peer old_next;
 
 	if (cmp_next_against_self(sus->nb)) {
-		slog_debug(FILE_LEVEL, "next field is set to self. check_if_next_alive "
-						 "will not remove it.");
 		return;
 	}
 
@@ -1302,6 +1304,7 @@ static int invalidate_requests_iterator(void *item, size_t idx, void *user)
 		return GO_AHEAD;
 	}
 
+	// TODO: if a request sent from us expires send an error to the requester
 	delta = calculate_timespec_delta(&req->creation_time, &data->curr);
 	if (delta > INVALIDATE_REQ_THRESHOLD) {
 		p = key->data;

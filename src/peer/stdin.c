@@ -313,7 +313,6 @@ static void who_has_handler(void)
 
 	if (filename[s - 1] == '\n') {
 		filename[s - 1] = '\0';
-		s--;
 	}
 
 	if (is_superpeer()) {
