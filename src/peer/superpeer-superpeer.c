@@ -585,7 +585,7 @@ static void send_whohas(const struct sp_udp_state *sus,
  * Make sure that the prev will send a NEXT msg. If the timer will fire, send a
  * NEXT msg to his prev, which is stored in the snd_next position
  */
-static void ensure_prev_conn(const struct sp_udp_state *sus)
+static void ensure_prev_conn(struct sp_udp_state *sus)
 {
 	struct fsnp_msg *msg = NULL;
 	struct fsnp_next *next = NULL;
@@ -665,6 +665,7 @@ static void ensure_prev_conn(const struct sp_udp_state *sus)
 	next = (struct fsnp_next *)msg;
 	if (next->old_next.ip != 0 && next->old_next.port != 0) {
 		set_next(sus->nb, &next->old_next);
+		update_timespec(&sus->last);
 	}
 
 	free(next);
@@ -824,6 +825,7 @@ static void next_msg_rcvd(struct sp_udp_state *sus, const struct fsnp_next *next
 	slog_info(FILE_LEVEL, "NEXT msg received from sp %s", sender->pretty_addr);
 	if (next->old_next.ip != 0 && next->old_next.port) {
 		set_next(sus->nb, &next->old_next);
+		update_timespec(&sus->last);
 		send_next(sus, NULL);
 		ensure_next_conn(sus, NULL);
 	}
@@ -844,6 +846,7 @@ static void promoted_msg_rcvd(struct sp_udp_state *sus,
 	slog_info(FILE_LEVEL, "PROMOTED msg received from sp %s", sender->pretty_addr);
 	memcpy(&old_next, &sus->nb->next, sizeof(struct fsnp_peer));
 	set_next(sus->nb, &sender->addr);
+	update_timespec(&sus->last);
 	send_next(sus, &old_next);
 	ensure_next_conn(sus, &old_next);
 }
@@ -950,6 +953,7 @@ static void leave_msg_rcvd(struct sp_udp_state *sus,
 	if (cmp_next(sus->nb, &sender->addr)) {
 		slog_info(FILE_LEVEL, "next %s is leaving", sus->nb->next_pretty);
         set_next_as_snd_next(sus->nb);
+        update_timespec(&sus->last);
         send_next(sus, NULL);
         ensure_next_conn(sus, NULL);
         fsnp_init_whosnext(&whosnext, NULL);
