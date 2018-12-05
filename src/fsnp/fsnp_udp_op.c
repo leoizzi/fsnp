@@ -136,7 +136,53 @@ fsnp_err_t fsnp_sendto(int sock, const struct fsnp_msg *msg,
 	}
 }
 
+struct fsnp_msg *fsnp_recvfrom(int sock, struct fsnp_peer *peer, fsnp_err_t *err)
+{
+	struct sockaddr_in addr;
+	socklen_t socklen = sizeof(addr);
+	struct fsnp_msg *msg = NULL;
+	char buf[MAX_UDP_PKT_SIZE];
+	struct fsnp_msg header;
+	ssize_t r = 0;
+	int ret = 0;
 
+	memset(&addr, 0, socklen);
+	memset(buf, 0, sizeof(buf));
+	r = recvfrom(sock, buf, sizeof(buf), 0, (struct sockaddr *)&addr, &socklen);
+	if (r < 0) {
+		*err = errno_check();
+		return NULL;
+	} else if (r == 0) {
+		*err = E_PEER_DISCONNECTED;
+		return NULL;
+	}
+
+	if (r < (ssize_t)sizeof(header)) { // the packet doesn't belong to the protocol
+		*err = E_NOT_FSNP_MSG;
+		return NULL;
+	}
+
+	memcpy(&header, buf, sizeof(header));
+	ret = strncmp((char *)header.magic, FSNP_MAGIC, FSNP_MAGIC_SIZE);
+	if (ret != 0) {
+		// not an fsnp message
+		*err = E_NOT_FSNP_MSG;
+		return NULL;
+	}
+
+	msg = malloc(sizeof(header) + header.msg_size);
+	if (!msg) {
+		*err = E_OUT_OF_MEM;
+		return NULL;
+	}
+
+	*err = E_NOERR;
+	peer->ip = ntohl(addr.sin_addr.s_addr);
+	peer->port = ntohs(addr.sin_port);
+	memcpy(msg, buf, sizeof(header) + header.msg_size);
+	return msg;
+}
+/*
 struct fsnp_msg *fsnp_recvfrom(int sock, struct fsnp_peer *peer,
 							   fsnp_err_t *err)
 {
@@ -201,6 +247,7 @@ struct fsnp_msg *fsnp_recvfrom(int sock, struct fsnp_peer *peer,
 
 	return msg;
 }
+ */
 
 fsnp_err_t fsnp_timed_sendto(int sock, uint16_t timeout,
                              const struct fsnp_msg *msg,

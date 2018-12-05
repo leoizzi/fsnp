@@ -718,7 +718,7 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 
 	if (msg->msg_type != ACK) {
 		slog_warn(FILE_LEVEL, "Wrong msg type received from sp %s: expected ACK "
-						"(%u), got %u", sus->nb->next_pretty, NEXT, msg->msg_type);
+						"(%u), got %u", sus->nb->next_pretty, ACK, msg->msg_type);
 	} else {
 		slog_info(FILE_LEVEL, "The next has sent an ACK msg. Next validated");
 	}
