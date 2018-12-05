@@ -65,13 +65,13 @@ EXPORT ssize_t fsnp_write(int sock, const void *buf, size_t bytes);
  * fsnp wrapper of read with a timer associated.
  */
 EXPORT ssize_t fsnp_timed_read(int sock, void *buf, size_t bytes,
-							   uint16_t timeout, fsnp_err_t *err);
+                               timeout_t timeout, fsnp_err_t *err);
 
 /*
  * fsnp wrapper of write with a timer associated.
  */
 EXPORT ssize_t fsnp_timed_write(int sock, const void *buf, size_t bytes,
-                                uint16_t timeout, fsnp_err_t *err);
+                                timeout_t timeout, fsnp_err_t *err);
 
 /*
  * Read an fsnp message from a TCP socket and return a pointer to it.
@@ -83,8 +83,8 @@ EXPORT ssize_t fsnp_timed_write(int sock, const void *buf, size_t bytes,
  *
  * The caller is responsible for the memory deallocation.
  */
-EXPORT struct fsnp_msg *fsnp_read_msg_tcp(int sock, uint16_t timeout,
-										  ssize_t *r, fsnp_err_t *err);
+EXPORT struct fsnp_msg *fsnp_read_msg_tcp(int sock, timeout_t timeout,
+                                          ssize_t *r, fsnp_err_t *err);
 
 /*
  * Write an fsnp message to a TCP socket and return how many bites were written.
@@ -92,7 +92,7 @@ EXPORT struct fsnp_msg *fsnp_read_msg_tcp(int sock, uint16_t timeout,
  * The timeout is expressed in ms. Passing 0 means that the function will use
  * the standard fsnp timeout
  */
-EXPORT ssize_t fsnp_write_msg_tcp(int sock, uint16_t timeout,
+EXPORT ssize_t fsnp_write_msg_tcp(int sock, timeout_t timeout,
                                   const struct fsnp_msg *msg, fsnp_err_t *err);
 
 

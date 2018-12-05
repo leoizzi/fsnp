@@ -97,6 +97,11 @@ enum fsnp_type {
 	WHOHAS
 };
 typedef enum fsnp_type fsnp_type_t;
+#ifdef FSNP_INF_TIMEOUT
+typedef short timeout_t;
+#else
+typedef uint16_t timeout_t;
+#endif
 
 #define FSNP_MAGIC "FSNP"
 #define FSNP_MAGIC_SIZE 4

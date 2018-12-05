@@ -136,7 +136,7 @@ ssize_t fsnp_write(int sock, const void *buf, size_t bytes)
 	return w;
 }
 
-ssize_t fsnp_timed_read(int sock, void *buf, size_t bytes, uint16_t timeout,
+ssize_t fsnp_timed_read(int sock, void *buf, size_t bytes, timeout_t timeout,
                         fsnp_err_t *err)
 {
 	struct pollfd pollfd;
@@ -177,7 +177,7 @@ ssize_t fsnp_timed_read(int sock, void *buf, size_t bytes, uint16_t timeout,
 }
 
 ssize_t fsnp_timed_write(int sock, const void *buf, size_t bytes,
-						 uint16_t timeout, fsnp_err_t *err)
+                         timeout_t timeout, fsnp_err_t *err)
 {
 	struct pollfd pollfd;
 	ssize_t w = 0;
@@ -216,7 +216,7 @@ ssize_t fsnp_timed_write(int sock, const void *buf, size_t bytes,
 	return w;
 }
 
-struct fsnp_msg *fsnp_read_msg_tcp(int sock, uint16_t timeout, ssize_t *r,
+struct fsnp_msg *fsnp_read_msg_tcp(int sock, timeout_t timeout, ssize_t *r,
                                    fsnp_err_t *err)
 {
 	struct fsnp_msg header;
@@ -290,7 +290,7 @@ struct fsnp_msg *fsnp_read_msg_tcp(int sock, uint16_t timeout, ssize_t *r,
 	return msg;
 }
 
-ssize_t fsnp_write_msg_tcp(int sock, uint16_t timeout,
+ssize_t fsnp_write_msg_tcp(int sock, timeout_t timeout,
                            const struct fsnp_msg *msg, fsnp_err_t *err)
 {
 	size_t tot_size = 0;

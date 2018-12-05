@@ -74,9 +74,9 @@ EXPORT struct fsnp_msg *fsnp_recvfrom(int sock, struct fsnp_peer *peer,
  * The timeout is expressed in ms. If 0 is passed the standard fsnp timeout will
  * be used.
  */
-EXPORT fsnp_err_t fsnp_timed_sendto(int sock, uint16_t timeout,
-									const struct fsnp_msg *msg,
-									const struct fsnp_peer *peer);
+EXPORT fsnp_err_t fsnp_timed_sendto(int sock, timeout_t timeout,
+                                    const struct fsnp_msg *msg,
+                                    const struct fsnp_peer *peer);
 
 /*
  * fsnp wrapper for recvfrom with a timer associated.
@@ -86,46 +86,47 @@ EXPORT fsnp_err_t fsnp_timed_sendto(int sock, uint16_t timeout,
  * case the timeout fires. The backoff will be performed for 4 times before
  * returning to the caller
  */
-EXPORT struct fsnp_msg *fsnp_timed_recvfrom(int sock, uint16_t timeout, struct fsnp_peer *peer,
+EXPORT struct fsnp_msg *fsnp_timed_recvfrom(int sock, timeout_t timeout,
+                                            struct fsnp_peer *peer,
                                             fsnp_err_t *err);
 
 /*
  * Send an ACK msg to 'peer'
  */
-EXPORT fsnp_err_t fsnp_send_udp_ack(int sock, uint16_t timeout,
-									const struct fsnp_ack *ack,
-									const struct fsnp_peer *peer);
+EXPORT fsnp_err_t fsnp_send_udp_ack(int sock, timeout_t timeout,
+                                    const struct fsnp_ack *ack,
+                                    const struct fsnp_peer *peer);
 /*
  * Send a LEAVE msg to 'peer'
  */
-EXPORT fsnp_err_t fsnp_send_udp_leave(int sock, uint16_t timeout,
+EXPORT fsnp_err_t fsnp_send_udp_leave(int sock, timeout_t timeout,
                                       const struct fsnp_leave *leave,
                                       const struct fsnp_peer *peer);
 
 /*
  * Send a PROMOTED msg to 'peer'
  */
-EXPORT fsnp_err_t fsnp_send_promoted(int sock, uint16_t timeout,
+EXPORT fsnp_err_t fsnp_send_promoted(int sock, timeout_t timeout,
                                      const struct fsnp_promoted *promoted,
                                      const struct fsnp_peer *peer);
 
 /*
  * Send a NEXT msg to 'peer'
  */
-EXPORT fsnp_err_t fsnp_send_next(int sock, uint16_t timeout,
+EXPORT fsnp_err_t fsnp_send_next(int sock, timeout_t timeout,
                                  const struct fsnp_next *next,
                                  const struct fsnp_peer *peer);
 
 /*
  * Send a WHOSNEXT msg to 'peer'
  */
-EXPORT fsnp_err_t fsnp_send_whosnext(int sock, uint16_t timeout,
+EXPORT fsnp_err_t fsnp_send_whosnext(int sock, timeout_t timeout,
                                      const struct fsnp_whosnext *whosnext,
                                      const struct fsnp_peer *peer);
 
-EXPORT fsnp_err_t fsnp_send_whohas(int sock, uint16_t timeout,
-								   const struct fsnp_whohas *whohas,
-								   const struct fsnp_peer *peer);
+EXPORT fsnp_err_t fsnp_send_whohas(int sock, timeout_t timeout,
+                                   const struct fsnp_whohas *whohas,
+                                   const struct fsnp_peer *peer);
 FSNP_END_DECL
 
 #endif //FSNP_FSNP_UDP_OP_H

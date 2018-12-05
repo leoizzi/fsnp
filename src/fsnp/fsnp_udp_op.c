@@ -249,7 +249,7 @@ struct fsnp_msg *fsnp_recvfrom(int sock, struct fsnp_peer *peer,
 }
  */
 
-fsnp_err_t fsnp_timed_sendto(int sock, uint16_t timeout,
+fsnp_err_t fsnp_timed_sendto(int sock, timeout_t timeout,
                              const struct fsnp_msg *msg,
                              const struct fsnp_peer *peer)
 {
@@ -287,8 +287,8 @@ fsnp_err_t fsnp_timed_sendto(int sock, uint16_t timeout,
 	return err;
 }
 
-struct fsnp_msg *fsnp_timed_recvfrom(int sock, uint16_t timeout,
-									 struct fsnp_peer *peer, fsnp_err_t *err)
+struct fsnp_msg *fsnp_timed_recvfrom(int sock, timeout_t timeout,
+                                     struct fsnp_peer *peer, fsnp_err_t *err)
 {
 	struct pollfd pollfd;
 	int t = 0;
@@ -325,42 +325,42 @@ struct fsnp_msg *fsnp_timed_recvfrom(int sock, uint16_t timeout,
 	}
 }
 
-fsnp_err_t fsnp_send_udp_ack(int sock, uint16_t timeout,
+fsnp_err_t fsnp_send_udp_ack(int sock, timeout_t timeout,
                              const struct fsnp_ack *ack,
                              const struct fsnp_peer *peer)
 {
 	return fsnp_timed_sendto(sock, timeout, (const struct fsnp_msg *)ack, peer);
 }
 
-fsnp_err_t fsnp_send_udp_leave(int sock, uint16_t timeout,
+fsnp_err_t fsnp_send_udp_leave(int sock, timeout_t timeout,
                                const struct fsnp_leave *leave,
                                const struct fsnp_peer *peer)
 {
 	return fsnp_timed_sendto(sock, timeout, (const struct fsnp_msg *)leave, peer);
 }
 
-fsnp_err_t fsnp_send_promoted(int sock, uint16_t timeout,
+fsnp_err_t fsnp_send_promoted(int sock, timeout_t timeout,
                               const struct fsnp_promoted *promoted,
                               const struct fsnp_peer *peer)
 {
 	return fsnp_timed_sendto(sock, timeout, (const struct fsnp_msg *)promoted, peer);
 }
 
-fsnp_err_t fsnp_send_next(int sock, uint16_t timeout,
+fsnp_err_t fsnp_send_next(int sock, timeout_t timeout,
                           const struct fsnp_next *next,
                           const struct fsnp_peer *peer)
 {
 	return fsnp_timed_sendto(sock, timeout, (const struct fsnp_msg *)next, peer);
 }
 
-fsnp_err_t fsnp_send_whosnext(int sock, uint16_t timeout,
+fsnp_err_t fsnp_send_whosnext(int sock, timeout_t timeout,
                               const struct fsnp_whosnext *whosnext,
                               const struct fsnp_peer *peer)
 {
 	return fsnp_timed_sendto(sock, timeout, (const struct fsnp_msg *)whosnext, peer);
 }
 
-fsnp_err_t fsnp_send_whohas(int sock, uint16_t timeout,
+fsnp_err_t fsnp_send_whohas(int sock, timeout_t timeout,
                             const struct fsnp_whohas *whohas,
                             const struct fsnp_peer *peer)
 {
