@@ -299,11 +299,10 @@ static void handle_poll_ret(int ret)
 	} else {
 		if (errno != EINTR) {
 			slog_error(STDOUT_LEVEL, "poll error %d", errno);
+			state.should_exit = true;
 		} else {
 			slog_info(FILE_LEVEL, "Poll has been interrupted by a signal");
 		}
-
-		state.should_exit = true;
 	}
 }
 
