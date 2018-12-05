@@ -339,7 +339,7 @@ struct sp_udp_state {
 #define WRITE_END 1
 
 #define NSEC_TO_SEC(ns) ((double)(ns) / 1000000000.)
-#define INVALIDATE_THRESHOLD 2. // minutes
+#define INVALIDATE_THRESHOLD 2. * 60 // 2 minutes
 
 #define VALIDATED 0
 #define INVALIDATED_NO_SND 1
@@ -392,6 +392,8 @@ static int invalidate_next_if_needed(struct neighbors *nb,
                                      const struct timespec *curr,
                                      struct fsnp_peer *old_next)
 {
+#ifndef FSNP_INF_TIMEOUT
+	
 	double delta = 0;
 
 	delta = calculate_timespec_delta(last, curr);
@@ -411,6 +413,9 @@ static int invalidate_next_if_needed(struct neighbors *nb,
 		unset_next(nb);
 		return INVALIDATED_NO_SND;
 	}
+#else
+	return VALIDATED;
+#endif
 }
 
 #undef NSEC_TO_SEC
