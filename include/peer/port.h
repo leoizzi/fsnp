@@ -21,19 +21,19 @@
 #include "compiler.h"
 
 #ifndef PEER_TCP_PORT
-#define PEER_TCP_PORT 38819
+#define PEER_TCP_PORT 30819
 #endif
 
 #ifndef SP_TCP_PORT
-#define SP_TCP_PORT 38820
+#define SP_TCP_PORT 35820
 #endif
 
 #ifndef SP_UDP_PORT
-#define SP_UDP_PORT 38821
+#define SP_UDP_PORT 40821
 #endif
 
 #ifndef DW_PORT
-#define DW_PORT 38822
+#define DW_PORT 45822
 #endif
 
 #endif //FSNP_PORT_H

@@ -433,7 +433,7 @@ static void send_promoted(const struct sp_udp_state *sus)
 	}
 
 	fsnp_init_promoted(&promoted);
-	slog_info(FILE_LEVEL, "Sending an updated msg to %s", sus->nb->prev_pretty);
+	slog_info(FILE_LEVEL, "Sending a promoted msg to sp %s", sus->nb->prev_pretty);
 	err = fsnp_send_promoted(sus->sock, 0, &promoted, &sus->nb->prev);
 	if (err != E_NOERR) {
 		fsnp_log_err_msg(err, false);
@@ -462,10 +462,10 @@ static void send_next(const struct sp_udp_state *sus,
 	fsnp_init_next(&next, old);
 	if (old) {
 		addr.s_addr = htonl(old->ip);
-		slog_info(FILE_LEVEL, "Sending a NEXT msg to %s with old_peer %s:%hu",
+		slog_info(FILE_LEVEL, "Sending a NEXT msg to sp %s with old_peer %s:%hu",
 				sus->nb->next_pretty, inet_ntoa(addr), old->port);
 	} else {
-		slog_info(FILE_LEVEL, "Sending a NEXT msg to %s without old_peer",
+		slog_info(FILE_LEVEL, "Sending a NEXT msg to sp %s without old_peer",
 				sus->nb->next_pretty)
 	}
 
@@ -509,7 +509,7 @@ static void send_ack(const struct sp_udp_state *sus, const struct sender *s)
 		return;
 	}
 
-	slog_info(FILE_LEVEL, "Sending an ACK msg to %s", s->pretty_addr);
+	slog_info(FILE_LEVEL, "Sending an ACK msg to sp %s", s->pretty_addr);
 	err = fsnp_send_udp_ack(sus->sock, 0, &ack, &s->addr);
 	if (err != E_NOERR) {
 		fsnp_log_err_msg(err, false);
@@ -528,7 +528,7 @@ static void send_whosnext(const struct sp_udp_state *sus,
 		return;
 	}
 
-	slog_info(FILE_LEVEL, "Sending a WHOSNEXT msg to %s", s->pretty_addr);
+	slog_info(FILE_LEVEL, "Sending a WHOSNEXT msg to sp %s", s->pretty_addr);
 	err = fsnp_send_whosnext(sus->sock, 0, whosnext, &s->addr);
 	if (err != E_NOERR) {
 		fsnp_log_err_msg(err, false);
@@ -573,7 +573,7 @@ static void send_whohas(const struct sp_udp_state *sus,
 		         self.port);
 	}
 
-	slog_info(FILE_LEVEL, "Sending a WHOHAS msg to %s", pretty_addr);
+	slog_info(FILE_LEVEL, "Sending a WHOHAS msg to sp %s", pretty_addr);
 	err = fsnp_send_whohas(sus->sock, 0, whohas, p);
 	if (err != E_NOERR) {
 		fsnp_log_err_msg(err, false);
@@ -589,6 +589,7 @@ static void ensure_prev_conn(const struct sp_udp_state *sus)
 	struct fsnp_msg *msg = NULL;
 	struct fsnp_next *next = NULL;
 	struct fsnp_peer p;
+	struct sender s;
 	fsnp_err_t err;
 	unsigned counter = 0;
 
@@ -601,9 +602,10 @@ static void ensure_prev_conn(const struct sp_udp_state *sus)
 	}
 
 	while (true) {
+		slog_info(FILE_LEVEL, "Waiting a NEXT msg from the prev");
 		msg = fsnp_timed_recvfrom(sus->sock, 0, &p, &err);
 		if (!msg && counter >= 4) {
-			slog_warn(FILE_LEVEL, "Unable to receive a next msg from the prev");
+			slog_warn(FILE_LEVEL, "Unable to receive a NEXT msg from the prev sp");
 			unset_prev(sus->nb);
 			fsnp_log_err_msg(err, false);
 			if (isset_snd_next(sus->nb)) {
@@ -612,22 +614,25 @@ static void ensure_prev_conn(const struct sp_udp_state *sus)
 				unset_snd_next(sus->nb);
 				continue;
 			} else {
-				slog_warn(FILE_LEVEL, "Unable to ensure the prev's connection");
+				slog_warn(FILE_LEVEL, "Unable to ensure the prev's sp connection");
 				slog_warn(STDOUT_LEVEL, "Please join the network again");
 				unset_all(sus->nb);
 				prepare_exit_sp_mode();
 				exit_sp_mode();
 				return;
 			}
-		} else {
+		} else if (!msg && counter < 4){
 			fsnp_log_err_msg(err, false);
 			counter++;
-			slog_info(FILE_LEVEL, "Trying to contact for the %d time the prev",
+			slog_info(FILE_LEVEL, "Trying to contact for the %d time the sp",
 			          counter);
 			send_promoted(sus);
 		}
 
 		if (!cmp_prev(sus->nb, &p)) {
+			struct in_addr a;
+			a.s_addr = htonl(p.ip);
+			slog_warn(FILE_LEVEL, "UDP msg received from another sp (%s:%hu) while waiting for a NEXT", inet_ntoa(a), p.port);
 			free(msg);
 			continue;
 		} else {
@@ -642,8 +647,8 @@ static void ensure_prev_conn(const struct sp_udp_state *sus)
 	}
 
 	if (msg->msg_type != NEXT) {
-		slog_warn(FILE_LEVEL, "Wrong msg type received from %s: expected %u, "
-						"got %u", sus->nb->prev_pretty, NEXT, msg->msg_type);
+		slog_warn(FILE_LEVEL, "Wrong msg type received from sp %s: expected NEXT "
+						"(%u), got %u", sus->nb->prev_pretty, NEXT, msg->msg_type);
 		free(msg);
 		slog_warn(STDOUT_LEVEL, "Please join the network again");
 		unset_all(sus->nb);
@@ -653,6 +658,9 @@ static void ensure_prev_conn(const struct sp_udp_state *sus)
 	}
 
 	slog_info(FILE_LEVEL, "NEXT msg received from prev %s", sus->nb->prev_pretty);
+	s.addr = sus->nb->prev;
+	memcpy(s.pretty_addr, sus->nb->prev_pretty, sizeof(char) * 32);
+	send_ack(sus, &s);
 	next = (struct fsnp_next *)msg;
 	if (next->old_next.ip != 0 && next->old_next.port != 0) {
 		set_next(sus->nb, &next->old_next);
@@ -681,6 +689,7 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 	}
 
 	while (true) {
+		slog_info(FILE_LEVEL, "Waiting an ACK for validating the next...");
 		msg = fsnp_timed_recvfrom(sus->sock, 0, &p, &err);
 		if (!msg && counter >= 4) {
 			slog_warn(FILE_LEVEL, "Unable to ensure next's connection");
@@ -690,7 +699,7 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 			exit_sp_mode();
 			sus->should_exit = true;
 			return;
-		} else {
+		} else if (!msg && counter < 4){
 			fsnp_log_err_msg(err, false);
 			counter++;
 			slog_info(FILE_LEVEL, "Trying to contact for the %u time the next",
@@ -699,6 +708,7 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 		}
 
 		if (!cmp_next(sus->nb, &p)) {
+			slog_warn(FILE_LEVEL, "UDP msg received from another sp while waiting for an ACK");
 			free(msg);
 			continue;
 		} else {
@@ -707,8 +717,10 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 	}
 
 	if (msg->msg_type != ACK) {
-		slog_warn(FILE_LEVEL, "Wrong msg type received from %s: expected %u, "
-		                      "got %u", sus->nb->next_pretty, NEXT, msg->msg_type);
+		slog_warn(FILE_LEVEL, "Wrong msg type received from sp %s: expected ACK "
+						"(%u), got %u", sus->nb->next_pretty, NEXT, msg->msg_type);
+	} else {
+		slog_info(FILE_LEVEL, "The next has sent an ACK msg. Next validated");
 	}
 
 	free(msg);
@@ -731,12 +743,13 @@ static void ensure_whohas(struct sp_udp_state *sus,
 	}
 
 	while (true) {
+		slog_info(FILE_LEVEL, "Waiting for an ACK for validating WHOHAS msg...");
 		msg = fsnp_timed_recvfrom(sus->sock, 0, &p, &err);
 		if (!msg && counter >= 4) {
 			slog_warn(FILE_LEVEL, "Unable to send whohas");
 			fsnp_log_err_msg(err, false);
 			return;
-		} else {
+		} else if (!msg && counter < 4) {
 			fsnp_log_err_msg(err, false);
 			counter++;
 			slog_info(FILE_LEVEL, "Trying to contact for the %u time whohas's"
@@ -754,8 +767,10 @@ static void ensure_whohas(struct sp_udp_state *sus,
 	}
 
 	if (msg->msg_type != ACK) {
-		slog_warn(FILE_LEVEL, "Wrong msg type received from %s: expected %u, "
-		                      "got %u", sus->nb->next_pretty, NEXT, msg->msg_type);
+		slog_warn(FILE_LEVEL, "Wrong msg type received from whohas's receiver:"
+						" expected ACK(%u), got %u", NEXT, msg->msg_type);
+	} else {
+		slog_info(FILE_LEVEL, "ACK msg received from whohas's receiver.");
 	}
 
 	free(msg);
@@ -805,7 +820,7 @@ static void stringify_sender(const struct neighbors *nb, struct sender *sender)
 static void next_msg_rcvd(struct sp_udp_state *sus, const struct fsnp_next *next,
 		const struct sender *sender)
 {
-	slog_info(FILE_LEVEL, "NEXT msg received from %s", sender->pretty_addr);
+	slog_info(FILE_LEVEL, "NEXT msg received from sp %s", sender->pretty_addr);
 	if (next->old_next.ip != 0 && next->old_next.port) {
 		set_next(sus->nb, &next->old_next);
 		send_next(sus, NULL);
@@ -822,12 +837,14 @@ static void next_msg_rcvd(struct sp_udp_state *sus, const struct fsnp_next *next
 static void promoted_msg_rcvd(struct sp_udp_state *sus,
 		const struct fsnp_promoted *promoted, const struct sender *sender)
 {
+	struct fsnp_peer old_next;
 	UNUSED(promoted);
 
-	slog_info(FILE_LEVEL, "PROMOTED msg received from %s", sender->pretty_addr);
+	slog_info(FILE_LEVEL, "PROMOTED msg received from sp %s", sender->pretty_addr);
+	memcpy(&old_next, &sus->nb->next, sizeof(struct fsnp_peer));
 	set_next(sus->nb, &sender->addr);
-	send_next(sus, &sus->nb->next);
-	ensure_next_conn(sus, &sus->nb->next);
+	send_next(sus, &old_next);
+	ensure_next_conn(sus, &old_next);
 }
 
 /*
@@ -836,7 +853,7 @@ static void promoted_msg_rcvd(struct sp_udp_state *sus,
 static void whosnext_msg_rcvd(struct sp_udp_state *sus,
 		struct fsnp_whosnext *whosnext, const struct sender *sender)
 {
-	slog_info(FILE_LEVEL, "WHOSNEXT msg received from %s", sender->pretty_addr);
+	slog_info(FILE_LEVEL, "WHOSNEXT msg received from sp %s", sender->pretty_addr);
 	if (whosnext->next.ip == 0 && whosnext->next.port == 0) {
 		memcpy(&whosnext->next, &sus->nb->next, sizeof(struct fsnp_peer));
 		send_whosnext(sus, whosnext, sender);
@@ -869,7 +886,7 @@ static void whohas_msg_rcvd(struct sp_udp_state *sus,
 	bool send_to_next = true;
 
 	STRINGIFY_HASH(key_str, whohas->req_id, i);
-	slog_info(FILE_LEVEL, "WHOHAS msg received from %s. req_id = %s",
+	slog_info(FILE_LEVEL, "WHOHAS msg received from sp %s. req_id = %s",
 	          sender->pretty_addr, key_str);
 	req = ht_get(sus->reqs, whohas->req_id, sizeof(sha256_t), NULL);
 	if (req) {
@@ -942,7 +959,7 @@ static void leave_msg_rcvd(struct sp_udp_state *sus,
 		slog_info(FILE_LEVEL, "prev %s is leaving", sus->nb->prev_pretty);
 	    unset_prev(sus->nb);
 	} else {
-		slog_info(FILE_LEVEL, "%s is leaving. No special actions required",
+		slog_info(FILE_LEVEL, "Sp %s is leaving. No special actions are required",
 				sender->pretty_addr);
 	}
 
@@ -987,7 +1004,7 @@ static void read_sock_msg(struct sp_udp_state *sus)
 			break;
 
 		case ACK:
-			slog_info(FILE_LEVEL, "ACK msg received from %s", sender.pretty_addr);
+			slog_info(FILE_LEVEL, "ACK msg received from sp %s", sender.pretty_addr);
 			break;
 
 		case LEAVE:
@@ -1013,7 +1030,7 @@ static void sock_event(struct sp_udp_state *sus, short revents)
 	} else if (revents & POLLHUP) { // ???
 		return;
 	} else {
-		slog_error(FILE_LEVEL, "sock revents: %d", revents);
+		slog_error(FILE_LEVEL, "sp UDP sock revents: %d", revents);
 		prepare_exit_sp_mode();
 		exit_sp_mode();
 		sus->should_exit = true;
@@ -1118,7 +1135,7 @@ static void write_prev_to_pipe(struct sp_udp_state *sus)
 		memcpy(&prev, &sus->nb->prev, sizeof(struct fsnp_peer));
 	}
 
-	slog_debug(FILE_LEVEL, "Writing into the pipe to ")
+	slog_debug(FILE_LEVEL, "Writing into the pipe prev's address")
 	w = fsnp_timed_write(sus->w_pipe[WRITE_END], &prev, sizeof(struct fsnp_peer),
 			FSNP_TIMEOUT, &err);
 	if (w < 0) {
@@ -1137,7 +1154,7 @@ static void read_pipe_msg(struct sp_udp_state *sus)
 
 	r = fsnp_read(sus->r_pipe[READ_END], &msg, sizeof(int));
 	if (r < 0) {
-		slog_fatal(FILE_LEVEL, "Unable to read a message from the pipe");
+		slog_fatal(FILE_LEVEL, "Unable to read a message from the sp UDP pipe");
 		sus->should_exit = true;
 		prepare_exit_sp_mode();
 		exit_sp_mode();
@@ -1145,22 +1162,22 @@ static void read_pipe_msg(struct sp_udp_state *sus)
 
 	switch (msg) {
 		case PIPE_WHOHAS:
-			slog_info(FILE_LEVEL, "PIPE_WHOHAS read from pipe");
+			slog_info(FILE_LEVEL, "PIPE_WHOHAS read from sp UDP pipe");
 			pipe_whohas_rcvd(sus);
 			break;
 
 		case PIPE_GET_PREV:
-			slog_info(FILE_LEVEL, "PIPE_GET_PREV read from pipe");
+			slog_info(FILE_LEVEL, "PIPE_GET_PREV read from sp UDP pipe");
 			write_prev_to_pipe(sus);
 			break;
 
 		case PIPE_QUIT:
-			slog_info(FILE_LEVEL, "PIPE_QUIT read from pipe");
+			slog_info(FILE_LEVEL, "PIPE_QUIT read from sp UDP pipe");
 			sus->should_exit = true;
 			break;
 
 		default:
-			slog_error(FILE_LEVEL, "Unexpected pipe message: %d", msg);
+			slog_error(FILE_LEVEL, "Unexpected sp UDP pipe message: %d", msg);
 			break;
 	}
 }
@@ -1173,7 +1190,7 @@ static void pipe_event(struct sp_udp_state *sus, short revents)
 	if (revents & POLLIN || revents & POLLPRI || revents & POLLRDBAND) {
 		read_pipe_msg(sus);
 	} else {
-		slog_error(FILE_LEVEL, "pipe revents: %d", revents);
+		slog_error(FILE_LEVEL, "sp UDP pipe revents: %d", revents);
 		prepare_exit_sp_mode();
 		exit_sp_mode();
 		sus->should_exit = true;
@@ -1190,8 +1207,9 @@ static void check_if_next_alive(struct sp_udp_state *sus)
 	int ret = 0;
 	struct fsnp_peer old_next;
 
-	if (cmp_snd_next_against_self(sus->nb)) {
-		slog_debug(FILE_LEVEL, "next field is set to self. check_if_next_alive will not remove it.");
+	if (cmp_next_against_self(sus->nb)) {
+		slog_debug(FILE_LEVEL, "next field is set to self. check_if_next_alive "
+						 "will not remove it.");
 		return;
 	}
 
@@ -1301,18 +1319,20 @@ static void sp_udp_thread(void *data)
 	struct pollfd pollfd[POLLFD_NUM];
 	int ret = 0;
 
+	sleep(10); // so we're sure to have left the sp
+	slog_debug(FILE_LEVEL, "sp-udp-thread is awake");
 	send_promoted(sus);
 	slog_info(FILE_LEVEL, "Ensuring prev connection...");
 	ensure_prev_conn(sus);
 	if (sus->should_exit) {
-		goto th_exit;
+		goto no_leave;
 	}
 
 	send_next(sus, NULL);
 	slog_info(FILE_LEVEL, "Ensuring next connection...");
 	ensure_next_conn(sus, NULL);
 	if (sus->should_exit) {
-		goto th_exit;
+		goto prev_leave;
 	}
 
 	clock_gettime(CLOCK_MONOTONIC, &sus->last);
@@ -1344,8 +1364,10 @@ static void sp_udp_thread(void *data)
 		}
 	}
 
-th_exit:
-	// TODO: send leave msg to next and prev
+	//TODO: send leave to next
+prev_leave:
+	// TODO: send leave to prev
+no_leave:
 	slog_info(FILE_LEVEL, "sp-udp-thread is leaving...");
 	slog_info(FILE_LEVEL, "Destroyng the request cache");
 	ht_destroy(sus->reqs);
@@ -1549,7 +1571,7 @@ int ask_whohas(const sha256_t file_hash, const struct fsnp_peer *requester)
 		return -1;
 	}
 
-	slog_debug(FILE_LEVEL, "Writing PIPE_WHOHAS in the pipe");
+	slog_debug(FILE_LEVEL, "Writing PIPE_WHOHAS msg to the sp-udp thread");
 	w = fsnp_timed_write(we, &msg, sizeof(int), FSNP_TIMEOUT, &err);
 	if (w < 0) {
 		slog_error(FILE_LEVEL, "Unable to write the message in the pipe");
@@ -1559,7 +1581,7 @@ int ask_whohas(const sha256_t file_hash, const struct fsnp_peer *requester)
 
 	memcpy(&whohas_msg.file_hash, file_hash, sizeof(sha256_t));
 	memcpy(&whohas_msg.requester, requester, sizeof(struct fsnp_peer));
-	slog_debug(FILE_LEVEL, "Writing pipe_whohas_msg in the pipe");
+	slog_debug(FILE_LEVEL, "Writing the pipe_whohas_msg in the pipe");
 	w = fsnp_timed_write(we, &whohas_msg, sizeof(struct pipe_whohas_msg),
 			FSNP_TIMEOUT, &err);
 	if (w < 0) {
@@ -1599,7 +1621,7 @@ bool get_prev_addr(struct fsnp_peer *prev)
 		return false;
 	}
 
-	slog_debug(FILE_LEVEL, "Reading prev address from the pipe");
+	slog_debug(FILE_LEVEL, "Reading prev address from the sp UDP pipe");
 	rw = fsnp_timed_read(re, prev, sizeof(struct fsnp_peer), FSNP_TIMEOUT, &err);
 	if (rw < 0) {
 		slog_error(FILE_LEVEL, "Unable to read prev address from the pipe");
@@ -1630,7 +1652,7 @@ void exit_sp_network(void)
 
 	w = fsnp_timed_write(we, &msg, sizeof(int), FSNP_TIMEOUT, &err);
 	if (w < 0) {
-		slog_error(FILE_LEVEL, "Unable to write PIPE_QUIT in the pipe");
+		slog_error(FILE_LEVEL, "Unable to write PIPE_QUIT in the sp UDP pipe");
 		fsnp_log_err_msg(err, false);
 	}
 }

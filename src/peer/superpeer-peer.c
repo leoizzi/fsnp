@@ -63,7 +63,7 @@ static int send_ack(const struct peer_info *info)
 
 	fsnp_init_ack(&ack);
 	// don't really care about any error here, just log it
-	slog_info(FILE_LEVEL, "Sending an ACK msg to %s", info->pretty_addr);
+	slog_info(FILE_LEVEL, "Sending an ACK msg to peer %s", info->pretty_addr);
 	err = fsnp_send_tcp_ack(info->sock, &ack);
 	if (err != E_NOERR) {
 		fsnp_log_err_msg(err, false);
@@ -81,7 +81,7 @@ static void send_file_res(const struct peer_info *info,
 {
 	fsnp_err_t err;
 
-	slog_info(FILE_LEVEL, "Sending a FILE_RES msg to %s", info->pretty_addr);
+	slog_info(FILE_LEVEL, "Sending a FILE_RES msg to peer %s", info->pretty_addr);
 	err = fsnp_send_file_res(info->sock, file_res);
 	if (err != E_NOERR) {
 		fsnp_log_err_msg(err, false);
@@ -96,7 +96,7 @@ static void send_promote(const struct peer_info *info,
 {
 	fsnp_err_t err;
 
-	slog_info(FILE_LEVEL, "Sending a PROMOTE msg to %s", info->pretty_addr);
+	slog_info(FILE_LEVEL, "Sending a PROMOTE msg to peer %s", info->pretty_addr);
 	err = fsnp_send_promote(info->sock, promote);
 	if (err != E_NOERR) {
 		fsnp_log_err_msg(err, false);
@@ -112,7 +112,7 @@ static void send_error(const struct peer_info *info)
 	fsnp_err_t err;
 
 	fsnp_init_error(&error);
-	slog_info(FILE_LEVEL, "Sending an error msg to %s", info->pretty_addr);
+	slog_info(FILE_LEVEL, "Sending an error msg to peer %s", info->pretty_addr);
 	err = fsnp_send_error(info->sock, &error);
 	if (err != E_NOERR) {
 		fsnp_log_err_msg(err, false);
@@ -140,12 +140,13 @@ static void join_rcvd(struct fsnp_join *join, struct peer_info *info,
 	info->joined = true;
 	info->dw_port = join->dw_port;
 	if (join->num_files == 0) {
-		slog_info(FILE_LEVEL, "%s is not sharing any file", info->pretty_addr);
+		slog_info(FILE_LEVEL, "Peer %s is not sharing any file", info->pretty_addr);
 	} else {
 		ret = cache_add_keys(join->num_files, join->files_hash, &info->addr,
 				info->dw_port);
 		if (ret < 0) {
-			slog_error(FILE_LEVEL, "Unable to add %s's files to the file cache",
+			slog_error(FILE_LEVEL, "Unable to add peer %s's files to the file "
+						  "cache",
 			           info->pretty_addr);
 		}
 	}
@@ -167,7 +168,7 @@ static void update_rcvd(struct fsnp_update *update, struct peer_info *info)
 	ret = cache_add_keys(update->num_files, update->files_hash, &info->addr,
 			info->dw_port);
 	if (ret < 0) {
-		slog_error(FILE_LEVEL, "Unable to add the files of peer %sto the file"
+		slog_error(FILE_LEVEL, "Unable to add the files of peer %s to the file"
 		                " cache after update", info->pretty_addr);
 	}
 
@@ -182,7 +183,7 @@ static void file_req_rcvd(const struct fsnp_file_req *file_req,
 	ret = ask_whohas(file_req->hash, &info->addr);
 	if (ret < 0) {
 		slog_error(FILE_LEVEL, "Unable to ask in the overlay network a file for"
-						 " %s", info->pretty_addr);
+						 " peer %s", info->pretty_addr);
 		send_error(info);
 		return;
 	}
@@ -205,7 +206,8 @@ static void read_sock_msg(struct peer_info *info, bool leaving,
 
 	if (!msg) {
 		fsnp_log_err_msg(err, false);
-		slog_error(FILE_LEVEL, "Unable to read a message from %s", info->pretty_addr);
+		slog_error(FILE_LEVEL, "Unable to read a message from peer %s",
+				info->pretty_addr);
 		if (err == E_PEER_DISCONNECTED) {
 			*should_exit = true;
 		}
@@ -216,33 +218,33 @@ static void read_sock_msg(struct peer_info *info, bool leaving,
 	/* shut down the communication if so, as explained in the field 'joined' of
 	 * the peer_info struct */
 	if (!info->joined && msg->msg_type != JOIN) {
-		slog_warn(FILE_LEVEL, "%s sent a message before joining this sp",
+		slog_warn(FILE_LEVEL, "Peer %s sent a message before joining this sp",
 				info->pretty_addr);
 		*should_exit = true;
 	}
 
 	switch (msg->msg_type) {
 		case JOIN:
-			slog_info(FILE_LEVEL, "%s sent a JOIN msg", info->pretty_addr);
+			slog_info(FILE_LEVEL, "Peer %s sent a JOIN msg", info->pretty_addr);
 			join_rcvd((struct fsnp_join *)msg, info, should_exit);
 			break;
 
 		case FILE_REQ:
-			slog_info(FILE_LEVEL, "%s sent a FILE_REQ msg. Timeouts before "
+			slog_info(FILE_LEVEL, "Peer %s sent a FILE_REQ msg. Timeouts before "
 						 "this: %u", info->pretty_addr, info->timeouts);
 			file_req_rcvd((const struct fsnp_file_req *)msg, info);
 			info->timeouts = 0;
 			break;
 
 		case UPDATE:
-			slog_info(FILE_LEVEL, "%s sent an UPDATE msg. Timeouts before "
+			slog_info(FILE_LEVEL, "%Peer s sent an UPDATE msg. Timeouts before "
 			                      "this: %u", info->pretty_addr, info->timeouts);
 			update_rcvd((struct fsnp_update *)msg, info);
 			info->timeouts = 0;
 			break;
 
 		case ALIVE:
-			slog_info(FILE_LEVEL, "%s sent an ALIVE msg. Timeouts before "
+			slog_info(FILE_LEVEL, "Peer %s sent an ALIVE msg. Timeouts before "
 			                      "this: %u", info->pretty_addr, info->timeouts);
 			fsnp_init_ack(&ack);
 			slog_info(FILE_LEVEL, "Sending an ACK msg to %s", info->pretty_addr);
@@ -255,11 +257,11 @@ static void read_sock_msg(struct peer_info *info, bool leaving,
 			break;
 
 		case LEAVE:
-			slog_info(FILE_LEVEL, "%s sent a LEAVE msg. Timeouts before "
+			slog_info(FILE_LEVEL, "Peer %s sent a LEAVE msg. Timeouts before "
 			                      "this: %u", info->pretty_addr, info->timeouts);
 			fsnp_init_ack(&ack);
 			// don't care about the return... just quit
-			slog_info(FILE_LEVEL, "Sending the last ACK to %s. If an error"
+			slog_info(FILE_LEVEL, "Sending the last ACK to peer %s. If an error"
 						 " occurred is not checked", info->pretty_addr);
 			fsnp_send_tcp_ack(info->sock, &ack);
 			*should_exit = true;
@@ -267,7 +269,7 @@ static void read_sock_msg(struct peer_info *info, bool leaving,
 			break;
 
 		case ACK:
-			slog_info(FILE_LEVEL, "%s sent an ACK msg. Timeouts before "
+			slog_info(FILE_LEVEL, "Peer %s sent an ACK msg. Timeouts before "
 			                      "this: %u", info->pretty_addr, info->timeouts);
 			if (leaving) {
 				slog_debug(FILE_LEVEL, "The ACK was sent for a LEAVE msg");
@@ -280,7 +282,7 @@ static void read_sock_msg(struct peer_info *info, bool leaving,
 			break;
 
 		default:
-			slog_warn(FILE_LEVEL, "%s sent an unexpected message type: %d",
+			slog_warn(FILE_LEVEL, "Peer %s sent an unexpected message type: %d",
 					info->pretty_addr, msg->msg_type);
 			info->timeouts = 0;
 			break;
@@ -298,9 +300,10 @@ static void sock_event(short revents, struct peer_info *info, bool leaving,
 	if (revents & POLLIN || revents & POLLPRI || revents & POLLRDBAND) {
 		read_sock_msg(info, leaving, should_exit);
 	} else if (revents & POLLHUP) {
-		slog_warn(FILE_LEVEL, "%s revents: POLLHUP", info->pretty_addr);
+		slog_warn(FILE_LEVEL, "Peer %s revents: POLLHUP", info->pretty_addr);
 	} else {
-		slog_error(FILE_LEVEL, "%s sock revents: %d", info->pretty_addr, revents);
+		slog_error(FILE_LEVEL, "Peer %s sock revents: %d", info->pretty_addr,
+				revents);
 		*should_exit = true;
 	}
 }
@@ -318,8 +321,8 @@ static void pipe_file_res_rvcd(const struct peer_info *info)
 	r = fsnp_timed_read(info->pipefd[READ_END], &whohas,
 			sizeof(struct fsnp_whohas), FSNP_TIMEOUT, &err);
 	if (r < 0) {
-		slog_error(FILE_LEVEL, "Unable to read whohas msg from the pipe of %s",
-				info->pretty_addr);
+		slog_error(FILE_LEVEL, "Unable to read whohas msg from the pipe of peer"
+						 " %s", info->pretty_addr);
 		fsnp_log_err_msg(err, false);
 		return;
 	}
@@ -346,7 +349,7 @@ static void pipe_promote_rcvd(struct peer_info *info, bool *leaving) {
 	self = get_udp_sp_port();
 	is_valid = get_prev_addr(&prev);
 	if (!is_valid) {
-		slog_info(FILE_LEVEL, "Prev not valid during the promotion of %s",
+		slog_info(FILE_LEVEL, "Prev not valid during the promotion of peer %s",
 				info->pretty_addr);
 		fsnp_init_promote(&promote, self, NULL);
 	} else {
@@ -369,30 +372,33 @@ static void read_pipe_msg(struct peer_info *info, bool *leaving,
 	struct fsnp_leave leave;
 	fsnp_err_t err;
 
-	slog_debug(FILE_LEVEL, "Reading a msg for %s from the pipe", info->pretty_addr);
+	slog_debug(FILE_LEVEL, "Reading a msg for peer %s from the pipe",
+			info->pretty_addr);
 	r = fsnp_read(info->pipefd[READ_END], &msg, sizeof(int));
 	if (r < 0) {
 		/* something wrong happened in the pipe, it's likely possible that the
 		 * thread will not be able to communicate with the main thread again.
 		 * Let's quit */
-		slog_error(FILE_LEVEL, "The pipe for communicating with %s is broken",
+		slog_error(FILE_LEVEL, "The pipe for communicating with peer %s is broken",
 				info->pretty_addr);
 		*should_exit = true;
 		return;
 	}
 
 	if (msg == PIPE_PROMOTE) {
-		slog_info(FILE_LEVEL, "Read from the pipe to promote %s",
+		slog_info(FILE_LEVEL, "Read from the pipe to promote peer %s",
 		          info->pretty_addr);
 		pipe_promote_rcvd(info, leaving);
 	} else if (msg == PIPE_FILE_RES) {
-		slog_info(FILE_LEVEL, "Read from the pipe to send file_res to %s",
+		slog_info(FILE_LEVEL, "Read from the pipe to send file_res to peer %s",
 				info->pretty_addr);
 		pipe_file_res_rvcd(info);
 	} else { // msg = PIPE_QUIT
-		slog_info(FILE_LEVEL, "Read from the pipe to leave %s", info->pretty_addr);
+		slog_info(FILE_LEVEL, "Read from the pipe to leave peer %s",
+				info->pretty_addr);
 		fsnp_init_leave(&leave);
-		slog_info(FILE_LEVEL, "Sending a LEAVE msg to %s", info->pretty_addr);
+		slog_info(FILE_LEVEL, "Sending a LEAVE msg to peer %s",
+				info->pretty_addr);
 		err = fsnp_send_tcp_leave(info->sock, &leave);
 		if (err != E_NOERR) {
 			fsnp_log_err_msg(err, false);
@@ -411,7 +417,8 @@ static void pipe_event(short revents, struct peer_info *info, bool *leaving,
 	if (revents & POLLIN || revents & POLLPRI || revents & POLLRDBAND) {
 		read_pipe_msg(info, leaving, should_exit);
 	} else {
-		slog_error(FILE_LEVEL, "%s pipe revents: %d", info->pretty_addr, revents);
+		slog_error(FILE_LEVEL, "peer %s pipe revents: %d", info->pretty_addr,
+				revents);
 		*should_exit = true;
 	}
 }
@@ -426,19 +433,19 @@ static void is_alive(struct peer_info *info, bool *should_exit)
 	struct fsnp_alive alive;
 
 	info->timeouts++;
-	slog_debug(FILE_LEVEL, "The sp_tcp_thread's poll for %s has fired its "
+	slog_debug(FILE_LEVEL, "The sp_tcp_thread's poll for peer %s has fired its "
 						"timeout timer. Now the timeouts are %u",
 						info->pretty_addr, info->timeouts);
 	if (info->timeouts > 4) {
 		// the peer didn't contacted us for more than 2 minutes
-		slog_warn(FILE_LEVEL, "%s didn't show any sign of life for more then 2"
-						"minutes. Leaving it.", info->pretty_addr);
+		slog_warn(FILE_LEVEL, "Peer %s didn't show any sign of life for more "
+						"then 2 minutes. Leaving it.", info->pretty_addr);
 		*should_exit = true;
 		return;
 	}
 
 	fsnp_init_alive(&alive);
-	slog_info(FILE_LEVEL, "Sending an ALIVE msg to %s", info->pretty_addr);
+	slog_info(FILE_LEVEL, "Sending an ALIVE msg to peer %s", info->pretty_addr);
 	err = fsnp_send_tcp_alive(info->sock, &alive);
 	if (err == E_PEER_DISCONNECTED) {
 		fsnp_log_err_msg(err, false);
@@ -455,7 +462,8 @@ void sp_tcp_thread(void *data)
 	bool should_exit = false;
 	bool leaving = false;
 
-	slog_info(FILE_LEVEL, "sp_tcp_thread for %s is operative", info->pretty_addr);
+	slog_info(FILE_LEVEL, "sp_tcp_thread for peer %s is operative",
+			info->pretty_addr);
 	setup_poll(pollfd, info->pipefd[READ_END], info->sock);
 	while (!should_exit) {
 		ret = poll(pollfd, POLLFD_NUM, POLL_ALIVE_TIMEOUT);
@@ -470,8 +478,8 @@ void sp_tcp_thread(void *data)
 		} else if (ret == 0) {
 			is_alive(info, &should_exit);
 		} else {
-			slog_error(FILE_LEVEL, "sp_tcp_thread poll for %s has returned -1."
-						  " Error: %d", info->pretty_addr, errno);
+			slog_error(FILE_LEVEL, "sp_tcp_thread poll for peer %s has returned"
+						  " -1. Error: %d", info->pretty_addr, errno);
 			should_exit = true;
 		}
 	}
@@ -481,9 +489,11 @@ void sp_tcp_thread(void *data)
 		cache_rm_keys(&info->addr, info->dw_port);
 	}
 
-	slog_info(FILE_LEVEL, "Removing %s from the known_peer list", info->pretty_addr);
+	slog_info(FILE_LEVEL, "Removing peer %s from the known_peer list",
+			info->pretty_addr);
 	rm_peer_from_list(&info->addr);
-	slog_info(FILE_LEVEL, "Leaving procedure for %s completed", info->pretty_addr);
+	slog_info(FILE_LEVEL, "Leaving procedure for peer %s completed",
+			info->pretty_addr);
 	close(info->sock);
 	close(info->pipefd[READ_END]);
 	close(info->pipefd[WRITE_END]);
