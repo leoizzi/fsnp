@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include "fsnp/fsnp_err.h"
 
@@ -25,7 +26,8 @@
 
 static void log_e_errno_err(int level)
 {
-	slog_warn(level, "fsnp error type: E_ERRNO. errno value: %d.", errno);
+	slog_warn(level, "fsnp error type: E_ERRNO. errno value: %d.\nExplanation:"
+				  " %s", errno, strerror(errno));
 }
 
 static void log_e_timeout_err(int level)
