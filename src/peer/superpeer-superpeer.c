@@ -510,6 +510,7 @@ static void send_ack(const struct sp_udp_state *sus, const struct sender *s)
 	}
 
 	slog_info(FILE_LEVEL, "Sending an ACK msg to sp %s", s->pretty_addr);
+	fsnp_init_ack(&ack);
 	err = fsnp_send_udp_ack(sus->sock, 0, &ack, &s->addr);
 	if (err != E_NOERR) {
 		fsnp_log_err_msg(err, false);
