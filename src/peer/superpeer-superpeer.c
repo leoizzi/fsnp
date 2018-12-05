@@ -591,6 +591,31 @@ static void send_whohas(const struct sp_udp_state *sus,
 }
 
 /*
+ * Send a leave msg. If next is true the message will be sent to him, otherwise
+ * will be sent to the prev
+ */
+static void send_leave(const struct sp_udp_state *sus, bool next)
+{
+	struct fsnp_leave leave;
+	fsnp_err_t err;
+
+	fsnp_init_leave(&leave);
+	if (next) {
+		slog_info(FILE_LEVEL, "Sending leave msg to the next %s",
+				sus->nb->next_pretty);
+		err = fsnp_send_udp_leave(sus->sock, 0, &leave, &sus->nb->next);
+	} else {
+		slog_info(FILE_LEVEL, "Sending leave msg to the prev %s",
+				sus->nb->prev_pretty);
+		err = fsnp_send_udp_leave(sus->sock, 0, &leave, &sus->nb->prev);
+	}
+
+	if (err != E_NOERR) {
+		fsnp_log_err_msg(err, false);
+	}
+}
+
+/*
  * Make sure that the prev will send a NEXT msg. If the timer will fire, send a
  * NEXT msg to his prev, which is stored in the snd_next position
  */
@@ -1378,9 +1403,9 @@ static void sp_udp_thread(void *data)
 		}
 	}
 
-	//TODO: send leave to next
+	send_leave(sus, true);
 prev_leave:
-	// TODO: send leave to prev
+	send_leave(sus, false);
 no_leave:
 	slog_info(FILE_LEVEL, "sp-udp-thread is leaving...");
 	slog_info(FILE_LEVEL, "Destroyng the request cache");
