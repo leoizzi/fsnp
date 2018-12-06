@@ -952,6 +952,7 @@ static void whohas_msg_rcvd(struct sp_udp_state *sus,
 
 	get_peers_for_key(whohas->file_hash, peers, &n);
 	if (n == 0) { // just send the message to the next
+		send_ack(sus, sender);
 		send_whohas(sus, whohas, send_to_next);
 		ensure_whohas(sus, whohas, send_to_next);
 		return;
@@ -970,6 +971,7 @@ static void whohas_msg_rcvd(struct sp_udp_state *sus,
 		memcpy(&p[j], &peers[j], sizeof(struct fsnp_peer));
 	}
 
+	send_ack(sus, sender);
 	send_whohas(sus, whohas, send_to_next);
 	ensure_whohas(sus, whohas, send_to_next);
 }
