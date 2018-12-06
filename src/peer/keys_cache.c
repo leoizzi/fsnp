@@ -342,24 +342,28 @@ void get_peers_for_key(sha256_t key, struct fsnp_peer *peers, uint8_t *n)
 
 	memset(peers, 0, sizeof(struct fsnp_peer) * MAX_KNOWN_PEER);
 	kc = ht_get(cache, key, sizeof(sha256_t), NULL);
-	if (!kc) {
+	if (!kc && !key_exists(key)) {
 #ifdef FSNP_DEBUG
 		slog_debug(FILE_LEVEL, "No peers known for key %s", key_str);
 #endif
 		return;
 	}
 
+	if (kc) {
 #ifdef FSNP_DEBUG
 	slog_debug(FILE_LEVEL, "%u peers known for key %s", list_count(kc->owners),
 			key_str);
 #endif
-	nk = list_count(kc->owners);
-	if (nk == 0 && !key_exists(key)) {
-		*n = 0;
-		return;
-	}
+		nk = list_count(kc->owners);
+		if (nk == 0 && !key_exists(key)) {
+			*n = 0;
+			return;
+		}
 
-	it = list_foreach_value(kc->owners, copy_peers_iterator, peers);
+		it = list_foreach_value(kc->owners, copy_peers_iterator, peers);
+	} else {
+		it = 0;
+	}
 
 	if (key_exists(key) && it >= 0 && it < FSNP_MAX_OWNERS) {
 		peers[it].ip = get_peer_ip();
