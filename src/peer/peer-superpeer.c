@@ -568,11 +568,11 @@ static void send_file_req(void)
 	}
 
 	sha256(msg, size, sha);
+	fsnp_init_file_req(&file_req, sha);
 #ifdef FSNP_DEBUG
 	STRINGIFY_HASH(key_str, sha, i);
 	slog_debug(FILE_LEVEL, "SHA-256 of the file searched: %s", key_str);
 #endif
-	fsnp_init_file_req(&file_req, sha);
 	err = fsnp_send_file_req(tcp_state.sock, &file_req);
 	slog_info(FILE_LEVEL, "Sending a file_req to the superpeer");
 	if (err != E_NOERR) {

@@ -179,7 +179,10 @@ static void file_req_rcvd(const struct fsnp_file_req *file_req,
 						  const struct peer_info *info)
 {
 	int ret = 0;
+	char key_str[SHA256_BYTES];
+	unsigned i;
 
+	STRINGIFY_HASH(key_str, file_req->hash, i);
 	ret = ask_whohas(file_req->hash, &info->addr);
 	if (ret < 0) {
 		slog_error(FILE_LEVEL, "Unable to ask in the overlay network a file for"
