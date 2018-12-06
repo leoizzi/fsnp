@@ -509,54 +509,25 @@ static void sock_event(short revents)
 #define FILENAME_SIZE 256
 
 /*
- * Read from the pipe the filename and its size
- */
-static size_t read_filename_from_pipe(char *msg)
-{
-	int pipe_read = 0;
-	ssize_t r = 0;
-	size_t size;
-	fsnp_err_t err;
-
-	pipe_read = tcp_state.pipe_fd[READ_END];
-	r = fsnp_timed_read(pipe_read, &size, sizeof(size_t), FSNP_TIMEOUT, &err);
-	if (r < 0) {
-		fsnp_log_err_msg(err, false);
-		slog_error(FILE_LEVEL, "Unable to read the length of the filename");
-		return 0;
-	}
-
-	r = fsnp_timed_read(pipe_read, msg, size, FSNP_TIMEOUT, &err);
-	if (r < 0) {
-		fsnp_log_err_msg(err, false);
-		slog_error(FILE_LEVEL, "Unable to read the filename from the pipe");
-		return 0;
-	}
-
-	slog_info(FILE_LEVEL, "Filename %s of length %llu has been read from the"
-					   " pipe", msg, size);
-	return size;
-}
-
-/*
  *  Send a who_has message to the superpeer
  */
 static void send_file_req(void)
 {
-	size_t size;
-	char msg[FILENAME_SIZE];
 	fsnp_err_t err;
 	struct fsnp_file_req file_req;
-	sha256_t sha;
+	sha256_t file_hash;
+	ssize_t r = 0;
 	struct fsnp_msg *fm = NULL;
 #ifdef FSNP_DEBUG
 	char key_str[SHA256_BYTES];
 	unsigned i = 0;
 #endif
 
-	size = read_filename_from_pipe(msg);
-	if (size == 0) {
-		return;
+	r = fsnp_timed_read(tcp_state.pipe_fd[READ_END], file_hash, sizeof(sha256_t),
+	                    FSNP_TIMEOUT, &err);
+	if (r < 0) {
+		slog_error(FILE_LEVEL, "Unable to read file_hash from the pipe");
+		fsnp_log_err_msg(err, false);
 	}
 
 	if (tcp_state.file_asked) {
@@ -568,10 +539,9 @@ static void send_file_req(void)
 		return;
 	}
 
-	sha256(msg, size, sha);
-	fsnp_init_file_req(&file_req, sha);
+	fsnp_init_file_req(&file_req, file_hash);
 #ifdef FSNP_DEBUG
-	STRINGIFY_HASH(key_str, sha, i);
+	STRINGIFY_HASH(key_str, file_hash, i);
 	slog_debug(FILE_LEVEL, "SHA-256 of the file searched: %s", key_str);
 #endif
 	err = fsnp_send_file_req(tcp_state.sock, &file_req);
@@ -857,26 +827,27 @@ void join_sp(const struct fsnp_query_res *query_res)
 
 void peer_ask_file(const char *filename, size_t size)
 {
-	ssize_t ret = 0;
-	int to_write = PIPE_WHOHAS;
-	static const char err_msg[] = "unable to send WHO_HAS";
+	int msg = PIPE_WHOHAS;
+	sha256_t key;
+	fsnp_err_t err;
+	ssize_t w = 0;
 
-	ret = fsnp_write(tcp_state.pipe_fd[WRITE_END], &to_write, sizeof(int));
-	if (ret < 0) {
-		slog_error(FILE_LEVEL, "%s", err_msg);
+	w = fsnp_timed_write(tcp_state.pipe_fd[WRITE_END], &msg, sizeof(int),
+	                     FSNP_TIMEOUT, &err);
+	if (w < 0) {
+		slog_error(FILE_LEVEL, "Unable to write PIPE_WHOHAS into "
+						 "peer-tcp-thread's pipe");
+		fsnp_log_err_msg(err, false);
 		return;
 	}
 
-	ret = fsnp_write(tcp_state.pipe_fd[WRITE_END], &size, sizeof(size_t));
-	if (ret < 0) {
-		slog_error(FILE_LEVEL, "%s", err_msg);
-		return;
-	}
-
-	ret = fsnp_write(tcp_state.pipe_fd[WRITE_END], filename, size);
-	if (ret < 0) {
-		slog_error(FILE_LEVEL, "%s", err_msg);
-		return;
+	sha256(filename, size, key);
+	w = fsnp_timed_write(tcp_state.pipe_fd[WRITE_END], key, sizeof(sha256_t),
+	                     FSNP_TIMEOUT, &err);
+	if (w < 0) {
+		slog_error(FILE_LEVEL, "Unable to write PIPE_WHOHAS into "
+		                       "peer-tcp-thread's the file hash");
+		fsnp_log_err_msg(err, false);
 	}
 }
 
