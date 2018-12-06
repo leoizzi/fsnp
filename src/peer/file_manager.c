@@ -28,7 +28,7 @@
 
 #include "peer/file_manager.h"
 #include "peer/thread_manager.h"
-
+#include "peer/peer-superpeer.h"
 
 #include "struct/hashtable.h"
 
@@ -467,7 +467,7 @@ static void launch_update_thread(bool first_launch)
 	                          "shared";
 	int ret = 0;
 
-	if (first_launch) {
+	if (first_launch && get_peer_sock() == 0) {
 		utd.changes = false;
 	} else {
 		utd.changes = true;
