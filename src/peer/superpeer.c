@@ -534,8 +534,15 @@ void communicate_whohas_result_to_peer(const struct fsnp_whohas *whohas,
                                        const struct fsnp_peer *requester)
 {
 	struct communicate_whohas_data data;
+	int ret = 0;
+
 	memcpy(&data.whohas, whohas, sizeof(struct fsnp_whohas));
 	memcpy(&data.requester, requester, sizeof(struct fsnp_peer));
+	ret = communicate_whohas_iterator(fake_peer, 0, &data);
+	if (ret == STOP) {
+		return;
+	}
+	
 	list_foreach_value(known_peers, communicate_whohas_iterator, &data);
 }
 
