@@ -431,48 +431,48 @@ ht_set_internal(hashtable_t *table,
     }
 
     if (!prev) {
-        ht_item_t *item = (ht_item_t *)calloc(1, sizeof(ht_item_t));
-        if (!item) {
+        ht_item_t *it = (ht_item_t *)calloc(1, sizeof(ht_item_t));
+        if (!it) {
             //fprintf(stderr, "Can't create new item: %s\n", strerror(errno));
             SPIN_UNLOCK(list->lock);
             return -1;
         }
-        item->hash = hash;
-        item->klen = klen;
+        it->hash = hash;
+        it->klen = klen;
 
-        if (klen > sizeof(item->kbuf)) {
-            item->key = malloc(klen);
-            if (!item->key) {
-                free(item);
+        if (klen > sizeof(it->kbuf)) {
+            it->key = malloc(klen);
+            if (!it->key) {
+                free(it);
                 SPIN_UNLOCK(list->lock);
                 return -1;
             }
         } else {
-            item->key = item->kbuf;
+            it->key = it->kbuf;
         }
 
-        memcpy(item->key, key, klen);
+        memcpy(it->key, key, klen);
 
         if (copy) {
             if (dlen) {
-                item->data = malloc(dlen);
-                if (!item->data) {
-                    if (klen > sizeof(item->kbuf))
-                        free(item->key);
-                    free(item);
+                it->data = malloc(dlen);
+                if (!it->data) {
+                    if (klen > sizeof(it->kbuf))
+                        free(it->key);
+                    free(it);
                     SPIN_UNLOCK(list->lock);
                     return -1;
                 }
-                memcpy(item->data, data, dlen);
+                memcpy(it->data, data, dlen);
             } else {
-                item->data = NULL;
+                it->data = NULL;
             }
         } else {
-            item->data = data;
+            it->data = data;
         }
-        item->dlen = dlen;
+        it->dlen = dlen;
 
-        TAILQ_INSERT_TAIL(&list->head, item, next);
+        TAILQ_INSERT_TAIL(&list->head, it, next);
         ATOMIC_INCREMENT(table->count);
     } else {
         if (inx) {
