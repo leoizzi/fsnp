@@ -102,7 +102,7 @@ static void fake_peer_whohas_rcvd(bool *already_asked, bool *should_exit)
 	r = fsnp_timed_read(fake_peer->pipefd[READ_END], file_hash, sizeof(sha256_t),
 			FSNP_TIMEOUT, &err);
 	if (r < 0) {
-		slog_error(FILE_LEVEL, "Unable to read filer_hash from the pipe");
+		slog_error(FILE_LEVEL, "Unable to read file_hash from the pipe");
 		fsnp_log_err_msg(err, false);
 		*should_exit = true;
 	}
