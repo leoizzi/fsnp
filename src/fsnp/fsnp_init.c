@@ -103,7 +103,7 @@ fsnp_create_join(uint32_t num_files, uint16_t dw_port, sha256_t *files_hash)
 	}
 
 	join->num_files = num_files;
-	if (data_size > 0) {
+	if (num_files > 0) {
 		for (i = 0; i < num_files; i++) {
 			memcpy(join->files_hash + i * sizeof(sha256_t), files_hash[i],
 					sizeof(sha256_t));
