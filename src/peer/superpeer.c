@@ -542,7 +542,7 @@ void communicate_whohas_result_to_peer(const struct fsnp_whohas *whohas,
 	if (ret == STOP) {
 		return;
 	}
-	
+
 	list_foreach_value(known_peers, communicate_whohas_iterator, &data);
 }
 
