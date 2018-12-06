@@ -458,6 +458,7 @@ static void read_sock_msg(void)
 						 " message: %u", tcp_state.timeouts);
 			promote_rcvd((const struct fsnp_promote *)msg);
 			tcp_state.timeouts = 0;
+			break;
 
 		case ACK:
 			slog_info(FILE_LEVEL, "Ack msg received. Timeouts before this "
