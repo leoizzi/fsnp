@@ -85,7 +85,7 @@ static void fake_peer_file_res_rcvd(bool *already_asked, bool *should_exit)
 	}
 
 	file_res_rcvd(file_res);
-	*already_asked = true;
+	*already_asked = false;
 	free(file_res);
 }
 
