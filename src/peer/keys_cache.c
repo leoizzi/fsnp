@@ -302,6 +302,11 @@ void cache_rm_keys(struct fsnp_peer *owner, uint16_t dw_port)
 
 	addr.s_addr = htonl(owner->ip);
 	slog_debug(FILE_LEVEL, "Removing files for peer %s:%hu", inet_ntoa(addr), owner->port);
+	if (!cache) {
+		// avoid segfault if the cache was closed before a thread call this func
+		return;
+	}
+	
 	list = ht_get_all_keys(cache);
 	if (!list) {
 		slog_warn(FILE_LEVEL, "Unable to retrieve all the cache values");
