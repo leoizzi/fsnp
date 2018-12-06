@@ -264,5 +264,6 @@ void fsnp_init_whohas(struct fsnp_whohas *whohas, struct fsnp_peer *sp,
 		memcpy(whohas->owners, owners, sizeof(struct fsnp_peer) * num_peers);
 	}
 
+	whohas->num_peers = num_peers;
 	fsnp_init_msg(&whohas->header, WHOHAS, sizeof(*whohas));
 }
