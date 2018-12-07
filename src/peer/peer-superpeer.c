@@ -225,7 +225,8 @@ static int connect_to_sp(const struct fsnp_peer *sp)
 
 	sock = fsnp_create_connect_tcp_sock(a, sp->port);
 	if (sock < 0) {
-		slog_error(FILE_LEVEL, "fsnp_create_connect_to_tcp_sock error %d", errno);
+		slog_error(FILE_LEVEL, "fsnp_create_connect_to_tcp_sock error %d -> %s",
+				errno, strerror(errno));
 		return -1;
 	}
 

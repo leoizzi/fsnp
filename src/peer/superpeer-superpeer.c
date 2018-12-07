@@ -1102,9 +1102,10 @@ static void generate_req_id(const struct fsnp_peer *requester,
 	memset(&req_id_str, 0, sizeof(char) * (32 + SHA256_BYTES));
 	a.s_addr = htonl(requester->ip);
 	snprintf(addr_str, sizeof(char) * 32, "%s:%hu", inet_ntoa(a), requester->port);
-	STRINGIFY_HASH(key_str, req_id, i);
+	STRINGIFY_HASH(key_str, file_hash, i);
 	snprintf(req_id_str, sizeof(char) * (32 + SHA256_BYTES), "%s:%s", addr_str,
 			key_str);
+	sha256(req_id_str, sizeof(char) * (32 + SHA256_BYTES), req_id);
 	slog_info(FILE_LEVEL, "req_id %s generated from %s", key_str, req_id_str);
 }
 /*
