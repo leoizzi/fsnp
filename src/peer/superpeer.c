@@ -478,6 +478,44 @@ void sp_ask_file(const char *filename, size_t size)
 	}
 }
 
+/*
+ * Iterate over known_peers to find to who send the error
+ */
+static int communicate_error_iterator(void *item, size_t idx, void *user)
+{
+	struct peer_info *info = (struct peer_info *)item;
+	struct fsnp_peer *peer = (struct fsnp_peer *)user;
+	ssize_t w = 0;
+	int msg = PIPE_ERROR;
+	fsnp_err_t err;
+
+	UNUSED(idx);
+
+	if (!memcmp(&info->addr, peer, sizeof(struct fsnp_peer))) {
+		slog_info(FILE_LEVEL, "Communicating to %s about the error");
+		w = fsnp_timed_write(info->pipefd[WRITE_END], &msg, sizeof(int), 0, &err);
+		if (w < 0) {
+			fsnp_log_err_msg(err, false);
+		}
+
+		return STOP;
+	}
+
+	return GO_AHEAD;
+}
+
+void communicate_error_to_peer(struct fsnp_peer *peer)
+{
+	int ret = 0;
+
+	ret = communicate_error_iterator(fake_peer, 0, peer);
+	if (ret == STOP) {
+		return;
+	}
+
+	list_foreach_value(known_peers, communicate_error_iterator, peer);
+}
+
 struct communicate_whohas_data {
 	struct fsnp_whohas whohas;
 	struct fsnp_peer requester;

@@ -312,6 +312,7 @@ static void unset_all(struct neighbors *nb)
 
 struct request {
 	struct timespec creation_time;
+	sha256_t file_hash;
 	bool sent_by_me;
 	struct fsnp_peer requester; // this field has a mean only if sent_by_me is true
 };
@@ -946,6 +947,8 @@ static void whohas_msg_rcvd(struct sp_udp_state *sus,
 	} else {
 		update_timespec(&req->creation_time);
 		req->sent_by_me = false;
+		memcpy(req->file_hash, whohas->file_hash, sizeof(sha256_t));
+		memset(&req->requester, 0, sizeof(struct fsnp_peer));
 		ht_set(sus->reqs, whohas->req_id, sizeof(sha256_t), req,
 				sizeof(struct request));
 	}
@@ -1137,12 +1140,14 @@ static void pipe_whohas_rcvd(struct sp_udp_state *sus)
 
 	generate_req_id(&whohas_msg.requester, whohas_msg.file_hash, req_id);
 	memcpy(&req->requester, &whohas_msg.requester, sizeof(struct fsnp_peer));
+	memcpy(req->file_hash, whohas_msg.file_hash, sizeof(sha256_t));
 	update_timespec(&req->creation_time);
 	req->sent_by_me = true;
 	ret = ht_set_if_not_exists(sus->reqs, req_id, sizeof(sha256_t), req,
 			sizeof(struct request));
 	if (ret == 1) {
 		slog_warn(FILE_LEVEL, "This request is already set");
+		communicate_error_to_peer(&req->requester);
 		free(req);
 		return;
 	} else if (ret == -1) {
@@ -1288,7 +1293,7 @@ struct invalidate_req_data {
 	struct timespec curr;
 };
 
-#define INVALIDATE_REQ_THRESHOLD 300.0f // 5 minutes
+#define INVALIDATE_REQ_THRESHOLD 120.0f // 2 minutes
 
 /*
  * Iterate over all the keys, removing that ones that are expired
@@ -1302,6 +1307,8 @@ static int invalidate_requests_iterator(void *item, size_t idx, void *user)
 	char key_str[SHA256_BYTES];
 	unsigned i = 0;
 	uint8_t *p = NULL;
+	struct fsnp_whohas whohas;
+	struct fsnp_peer self;
 
 	UNUSED(idx);
 
@@ -1311,10 +1318,17 @@ static int invalidate_requests_iterator(void *item, size_t idx, void *user)
 		return GO_AHEAD;
 	}
 
-	// TODO: if a request sent from us expires send an error to the requester
 	delta = calculate_timespec_delta(&req->creation_time, &data->curr);
 	if (delta > INVALIDATE_REQ_THRESHOLD) {
 		p = key->data;
+		if (req->sent_by_me) {
+			// Tell to the peer that nothing was found
+			self.ip = get_peer_ip();
+			self.port = get_udp_sp_port();
+			fsnp_init_whohas(&whohas, &self, p, req->file_hash, 0, NULL);
+			communicate_whohas_result_to_peer(&whohas, &req->requester);
+		}
+
 		STRINGIFY_HASH(key_str, p, i);
 		slog_info(FILE_LEVEL, "Invalidating request %s", key_str);
 		ht_delete(data->sus->reqs, key->data, key->len, NULL, NULL);

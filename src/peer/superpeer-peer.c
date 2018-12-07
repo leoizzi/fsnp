@@ -120,6 +120,23 @@ static void send_error(const struct peer_info *info)
 }
 
 /*
+ * Send a leave msg to the peer
+ */
+static void send_leave(const struct peer_info *info)
+{
+	struct fsnp_leave leave;
+	fsnp_err_t err;
+
+	fsnp_init_leave(&leave);
+	slog_info(FILE_LEVEL, "Sending a LEAVE msg to peer %s",
+	          info->pretty_addr);
+	err = fsnp_send_tcp_leave(info->sock, &leave);
+	if (err != E_NOERR) {
+		fsnp_log_err_msg(err, false);
+	}
+}
+
+/*
  * Join a peer, adding all of its files to the file cache and sending an ACK to
  * him
  */
@@ -160,6 +177,9 @@ static void join_rcvd(struct fsnp_join *join, struct peer_info *info,
 	}
 }
 
+/*
+ * Update the value cached for the peer and send him an ACK
+ */
 static void update_rcvd(struct fsnp_update *update, struct peer_info *info)
 {
 	int ret = 0;
@@ -175,6 +195,9 @@ static void update_rcvd(struct fsnp_update *update, struct peer_info *info)
 	send_ack(info); // don't care about errors here
 }
 
+/*
+ * Ask in behalf of the peer who has a file in the network
+ */
 static void file_req_rcvd(const struct fsnp_file_req *file_req,
 						  const struct peer_info *info)
 {
@@ -313,6 +336,8 @@ static void sock_event(short revents, struct peer_info *info, bool leaving,
 
 /*
  * Handler called when a PIPE_FILE_RES msg type is read from the pipe
+ *
+ * Send the result of the search to the peer
  */
 static void pipe_file_res_rvcd(const struct peer_info *info)
 {
@@ -342,6 +367,8 @@ static void pipe_file_res_rvcd(const struct peer_info *info)
 
 /*
  * Handler called when a PIPE_PROMOTE msg type is read from the pipe
+ *
+ * Promote the peer to superpeer
  */
 static void pipe_promote_rcvd(struct peer_info *info, bool *leaving) {
 	bool is_valid = false;
@@ -362,6 +389,28 @@ static void pipe_promote_rcvd(struct peer_info *info, bool *leaving) {
 	send_promote(info, &promote);
 	*leaving = true;
 }
+
+/*
+ * Handler called when a PIPE_ERROR msg type is read from the pipe
+ *
+ * Send an error to the peer
+ */
+static void pipe_error_rcvd(const struct peer_info *info)
+{
+	send_error(info);
+}
+
+/*
+ * Handler called when a PIPE_LEAVE msg type is read from the pipe
+ *
+ * Leave the peer
+ */
+static void pipe_leave_rcvd(const struct peer_info *info, bool *leaving)
+{
+	send_leave(info);
+	*leaving = true;
+}
+
 /*
  * Read a message on the pipe and:
  * - if is a PIPE_PROMOTE message promote the peer
@@ -372,8 +421,6 @@ static void read_pipe_msg(struct peer_info *info, bool *leaving,
 {
 	ssize_t r = 0;
 	int msg = 0;
-	struct fsnp_leave leave;
-	fsnp_err_t err;
 
 	slog_debug(FILE_LEVEL, "Reading a msg for peer %s from the pipe",
 			info->pretty_addr);
@@ -394,20 +441,16 @@ static void read_pipe_msg(struct peer_info *info, bool *leaving,
 		pipe_promote_rcvd(info, leaving);
 	} else if (msg == PIPE_FILE_RES) {
 		slog_info(FILE_LEVEL, "Read from the pipe to send file_res to peer %s",
-				info->pretty_addr);
+		          info->pretty_addr);
 		pipe_file_res_rvcd(info);
+	} else if (msg == PIPE_ERROR) {
+		slog_info(FILE_LEVEL, "Read from the pipe to send error to peer %s",
+				info->pretty_addr);
+		pipe_error_rcvd(info);
 	} else { // msg = PIPE_QUIT
 		slog_info(FILE_LEVEL, "Read from the pipe to leave peer %s",
 				info->pretty_addr);
-		fsnp_init_leave(&leave);
-		slog_info(FILE_LEVEL, "Sending a LEAVE msg to peer %s",
-				info->pretty_addr);
-		err = fsnp_send_tcp_leave(info->sock, &leave);
-		if (err != E_NOERR) {
-			fsnp_log_err_msg(err, false);
-		}
-
-		*leaving = true;
+		pipe_leave_rcvd(info, leaving);
 	}
 }
 

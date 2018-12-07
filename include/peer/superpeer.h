@@ -69,6 +69,12 @@ void sp_tcp_sock_event(short revents);
 void sp_ask_file(const char *filename, size_t size);
 
 /*
+ * Communicate to 'peer' that an error has occurred while searching a file for
+ * him
+ */
+void communicate_error_to_peer(struct fsnp_peer *peer);
+
+/*
  * Communicate the whohas result contained in 'whohas' to the peer contained
  * in 'requester'
  */
