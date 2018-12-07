@@ -340,7 +340,7 @@ struct sp_udp_state {
 #define WRITE_END 1
 
 #define NSEC_TO_SEC(ns) ((double)(ns) / 1000000000.)
-#define INVALIDATE_THRESHOLD 2. * 60 // 2 minutes
+#define INVALIDATE_THRESHOLD 120.f // 2 minutes
 
 #define VALIDATED 0
 #define INVALIDATED_NO_SND 1
