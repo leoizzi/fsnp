@@ -1090,17 +1090,21 @@ struct pipe_whohas_msg {
 static void generate_req_id(const struct fsnp_peer *requester,
                             const sha256_t file_hash, sha256_t req_id)
 {
+
+	char addr_str[32];
 	char key_str[SHA256_BYTES];
+	char req_id_str[32 + SHA256_BYTES];
 	unsigned i = 0;
-	char req_id_str[SHA256_BYTES + sizeof(struct fsnp_peer) + 16 + 1];
-	size_t req_id_size = SHA256_BYTES + sizeof(struct fsnp_peer) + 16 + 1;
 	struct in_addr a;
 
-	STRINGIFY_HASH(key_str, file_hash, i);
+	memset(&addr_str, 0, sizeof(char) * 32);
+	memset(&key_str, 0, sizeof(char) * SHA256_BYTES);
+	memset(&req_id_str, 0, sizeof(char) * (32 + SHA256_BYTES));
 	a.s_addr = htonl(requester->ip);
-	sprintf(req_id_str, "%s:%hu:%s", inet_ntoa(a), requester->port, key_str);
-	sha256(req_id_str, req_id_size, req_id);
+	snprintf(addr_str, sizeof(char) * 32, "%s:%hu", inet_ntoa(a), requester->port);
 	STRINGIFY_HASH(key_str, req_id, i);
+	snprintf(req_id_str, sizeof(char) * (32 + SHA256_BYTES), "%s:%s", addr_str,
+			key_str);
 	slog_info(FILE_LEVEL, "req_id %s generated from %s", key_str, req_id_str);
 }
 /*
