@@ -149,6 +149,10 @@ static void fake_peer_read_pipe_msg(bool *already_asked, bool *should_exit)
 			fake_peer_file_res_rcvd(already_asked, should_exit);
 			break;
 
+		case PIPE_DOWNLOAD:
+			// TODO: implement
+			break;
+
 		case PIPE_QUIT:
 			slog_info(FILE_LEVEL, "fake peer has received pipe_quit");
 			*should_exit = true;

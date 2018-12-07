@@ -272,13 +272,13 @@ void rm_dead_sp_from_server(struct fsnp_peer *dead_sp)
 {
 	int sock = 0;
 	struct fsnp_peer serv;
-	struct in_addr addr;
+	struct in_addr ip;
 	struct fsnp_rm_sp rm_sp;
 	fsnp_err_t err;
 
 	get_server_addr(&serv);
-	addr.s_addr = htonl(serv.ip);
-	sock = fsnp_create_connect_tcp_sock(addr, serv.port);
+	ip.s_addr = serv.ip;
+	sock = fsnp_create_connect_tcp_sock(ip, serv.port);
 	if (sock < 0) {
 		slog_error(FILE_LEVEL, "Unable to establish a connection with the server");
 		return;

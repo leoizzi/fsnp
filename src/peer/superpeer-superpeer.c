@@ -126,11 +126,11 @@ static inline void unset_next(struct neighbors *nb)
 
 	memset(&nb->next, 0, sizeof(struct fsnp_peer));
     memset(nb->next_pretty, 0, sizeof(char) * 32);
-    self.ip = get_peer_ip();
-    self.port = get_udp_sp_port();
-    memcpy(&nb->next, &self, sizeof(struct fsnp_peer));
     UNSET_NEXT(nb->flags);
-    slog_info(FILE_LEVEL, "next sp unset");
+    slog_info(FILE_LEVEL, "next sp unset. Setting it to self");
+	self.ip = get_peer_ip();
+	self.port = get_udp_sp_port();
+	set_next(nb, &self);
 }
 
 /*
@@ -197,11 +197,11 @@ static inline void unset_snd_next(struct neighbors *nb)
 
 	memset(&nb->snd_next, 0, sizeof(struct fsnp_peer));
     memset(nb->snd_next_pretty, 0, sizeof(char) * 32);
+    UNSET_SND_NEXT(nb->flags);
+    slog_info(FILE_LEVEL, "snd_next sp unset. Setting it to self");
 	self.ip = get_peer_ip();
 	self.port = get_udp_sp_port();
-	memcpy(&nb->next, &self, sizeof(struct fsnp_peer));
-    UNSET_SND_NEXT(nb->flags);
-    slog_info(FILE_LEVEL, "snd_next sp unset");
+	set_snd_next(nb, &self);
 }
 
 /*
@@ -275,11 +275,11 @@ static inline void unset_prev(struct neighbors *nb)
 	
 	memset(&nb->prev, 0, sizeof(struct fsnp_peer));
     memset(nb->prev_pretty, 0, sizeof(char) * 32);
+    UNSET_PREV(nb->flags);
+    slog_info(FILE_LEVEL, "prev sp unset. Setting it to self");
 	self.ip = get_peer_ip();
 	self.port = get_udp_sp_port();
-	memcpy(&nb->next, &self, sizeof(struct fsnp_peer));
-    UNSET_PREV(nb->flags);
-    slog_info(FILE_LEVEL, "prev sp unset");
+	set_prev(nb, &self);
 }
 
 /*
@@ -347,15 +347,6 @@ struct sp_udp_state {
 #define INVALIDATED_YES_SND 2
 
 /*
- * Copy the content of b in a
- */
-static inline void swap_timespec(struct timespec *a, const struct timespec *b)
-{
-	a->tv_sec = b->tv_sec;
-	a->tv_nsec = b->tv_nsec;
-}
-
-/*
  * Update 't' to the current time
  */
 static inline void update_timespec(struct timespec *t)
@@ -398,7 +389,6 @@ static int invalidate_next_if_needed(struct neighbors *nb,
 	double delta = 0;
 
 	delta = calculate_timespec_delta(last, curr);
-	swap_timespec(last, curr);
 	if (delta < INVALIDATE_THRESHOLD) {
 		return VALIDATED;
 	}
@@ -1261,6 +1251,8 @@ static void check_if_next_alive(struct sp_udp_state *sus)
 	struct timespec curr;
 	int ret = 0;
 	struct fsnp_peer old_next;
+	struct fsnp_whosnext whosnext;
+	struct sender s;
 
 	if (cmp_next_against_self(sus->nb)) {
 		return;
@@ -1270,6 +1262,10 @@ static void check_if_next_alive(struct sp_udp_state *sus)
 	ret = invalidate_next_if_needed(sus->nb, &sus->last, &curr, &old_next);
 	switch (ret) {
 		case VALIDATED:
+			s.addr = sus->nb->next;
+			memcpy(s.pretty_addr, sus->nb->next_pretty, sizeof(char) * 32);
+			fsnp_init_whosnext(&whosnext, NULL);
+			send_whosnext(sus, &whosnext, &s);
 			break;
 
 		case INVALIDATED_NO_SND:
