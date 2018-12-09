@@ -35,6 +35,9 @@ EXPORT void sha256(const void *data, size_t len, sha256_t hash);
 /*
  * Convert 'sha' (which is a SHA256 byte array) to a string.
  * The result is stored inside 'sha_str'
+ *
+ * This function was not part of the original library. It was added to this
+ * project by me
  */
 EXPORT void stringify_hash(char sha_str[SHA256_STR_BYTES], const sha256_t sha);
 
