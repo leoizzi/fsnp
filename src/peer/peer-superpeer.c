@@ -198,7 +198,7 @@ static int show_sp(const struct fsnp_peer *sp_list, uint8_t num_sp)
 		if (choice == 0) {
 			slog_info(FILE_LEVEL, "User chose to not connect");
 			return -1;
-		} else if (choice >= num_sp) {
+		} else if (choice > num_sp + 1) {
 			slog_warn(STDOUT_LEVEL, "choice %u is not valid", choice);
 			retry = true;
 		} else {

@@ -403,6 +403,7 @@ static int invalidate_next_if_needed(struct neighbors *nb,
 	if (isset_snd_next(nb) && !cmp_snd_next_against_self(nb)) {
 		slog_info(FILE_LEVEL, "Next '%s' invalidated.", nb->next_pretty);
         set_next_as_snd_next(nb);
+        update_timespec(last);
 		return INVALIDATED_YES_SND;
 	} else {
 		slog_info(FILE_LEVEL, "Next '%s' invalidated. No snd_next to substitute"
@@ -536,7 +537,21 @@ static void send_whosnext(const struct sp_udp_state *sus,
 		return;
 	}
 
+#ifdef FSNP_DEBUG
+	struct in_addr a;
+	if (whosnext->next.ip == 0 && whosnext->next.port == 0) {
+		slog_debug(FILE_LEVEL, "Sending an empty WHOSNEXT msg to sp %s",
+				s->pretty_addr);
+	} else {
+		a.s_addr = htonl(whosnext->next.ip);
+		slog_debug(FILE_LEVEL, "Sending a WHOSNEXT msg filled with next "
+						 "'%s:%hu' to sp %s", inet_ntoa(a), whosnext->next.port,
+						 s->pretty_addr);
+	}
+#else // !FSNP_DEBUG
 	slog_info(FILE_LEVEL, "Sending a WHOSNEXT msg to sp %s", s->pretty_addr);
+#endif
+
 	err = fsnp_send_whosnext(sus->sock, 0, whosnext, &s->addr);
 	if (err != E_NOERR) {
 		fsnp_log_err_msg(err, false);
@@ -891,15 +906,29 @@ static void whosnext_msg_rcvd(struct sp_udp_state *sus,
 {
 	slog_info(FILE_LEVEL, "WHOSNEXT msg received from sp %s", sender->pretty_addr);
 	if (whosnext->next.ip == 0 && whosnext->next.port == 0) {
+		if (!cmp_prev(sus->nb, &sender->addr)) {
+			// the request was not sent from the prev. Do not consider it
+			slog_debug(FILE_LEVEL, "Empty WHOSNEXT not received from the prev "
+						  "but from %s. Ignoring it", sender->pretty_addr);
+			return;
+		}
+
 		memcpy(&whosnext->next, &sus->nb->next, sizeof(struct fsnp_peer));
+		slog_debug(FILE_LEVEL, "Empty WHOSNEXT msg received from sp %s. Sending"
+						 " it back with next address '%s'",sender->pretty_addr,
+						 sus->nb->next_pretty);
 		send_whosnext(sus, whosnext, sender);
 	} else {
 		if (!cmp_next(sus->nb, &sender->addr)) {
 			// the response was not sent from the next. Do not consider it
+			slog_debug(FILE_LEVEL, "Filled WHOSNEXT not sent from the next but"
+						  " from %s. Ignoring it", sender->pretty_addr);
 			return;
 		}
 
 		if (cmp_snd_next(sus->nb, &whosnext->next)) {
+			slog_debug(FILE_LEVEL, "WHOSNEXT msg contains the same address"
+						  " stored as sp snd_next '%s'", sus->nb->snd_next_pretty);
 			return;
 		}
 
@@ -907,6 +936,8 @@ static void whosnext_msg_rcvd(struct sp_udp_state *sus,
 			unset_snd_next(sus->nb);
 		}
 
+		slog_debug(FILE_LEVEL, "WHOSNEXT msg contains the address of the new"
+						 " snd_next.");
 		set_snd_next(sus->nb, &whosnext->next);
 	}
 }
