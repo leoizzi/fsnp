@@ -898,7 +898,7 @@ static void whosnext_msg_rcvd(struct sp_udp_state *sus,
 			// the response was not sent from the next. Do not consider it
 			return;
 		}
-		
+
 		if (cmp_snd_next(sus->nb, &whosnext->next)) {
 			return;
 		}
