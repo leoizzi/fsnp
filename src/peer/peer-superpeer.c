@@ -520,8 +520,7 @@ static void send_file_req(void)
 	ssize_t r = 0;
 	struct fsnp_msg *fm = NULL;
 #ifdef FSNP_DEBUG
-	char key_str[SHA256_BYTES];
-	unsigned i = 0;
+	char key_str[SHA256_STR_BYTES];
 #endif
 
 	r = fsnp_timed_read(tcp_state.pipe_fd[READ_END], file_hash, sizeof(sha256_t),
@@ -542,7 +541,7 @@ static void send_file_req(void)
 
 	fsnp_init_file_req(&file_req, file_hash);
 #ifdef FSNP_DEBUG
-	STRINGIFY_HASH(key_str, file_hash, i);
+	stringify_hash(key_str, file_hash);
 	slog_debug(FILE_LEVEL, "SHA-256 of the file searched: %s", key_str);
 #endif
 	err = fsnp_send_file_req(tcp_state.sock, &file_req);

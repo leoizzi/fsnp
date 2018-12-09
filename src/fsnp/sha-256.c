@@ -259,6 +259,87 @@ void sha256(const void *data, size_t len, sha256_t hash)
 	sha256_done(&ctx, hash);
 } /* sha256 */
 
+static char four_bit_to_hex(uint8_t b)
+{
+	switch (b) {
+		case 0:
+			return '0';
+
+		case 1:
+			return '1';
+
+		case 2:
+			return '2';
+
+		case 3:
+			return '3';
+
+		case 4:
+			return '4';
+
+		case 5:
+			return '5';
+
+		case 6:
+			return '6';
+
+		case 7:
+			return '7';
+
+		case 8:
+			return '8';
+
+		case 9:
+			return '9';
+
+		case 10:
+			return 'a';
+
+		case 11:
+			return 'b';
+
+		case 12:
+			return 'c';
+
+		case 13:
+			return 'd';
+
+		case 14:
+			return 'e';
+
+		case 15:
+			return 'f';
+
+		default:
+			// this can't happens, it's here just to make happy the compiler
+			return ' ';
+	}
+}
+
+static void byte_to_hex(char sha_str[SHA256_STR_BYTES], uint8_t byte, int i)
+{
+	uint8_t mask = 15;
+
+	sha_str[i] = four_bit_to_hex((byte >> 4) & mask);
+	sha_str[i + 1] = four_bit_to_hex(byte & mask);
+}
+
+void stringify_hash(char sha_str[SHA256_STR_BYTES], const sha256_t sha)
+{
+	int i = 0;
+	int k = 0;
+
+	for (i = 0, k = 0; i < SHA256_BYTES; i++, k+=2) {
+		byte_to_hex(sha_str, sha[i], k);
+		if (i % 4 == 3) {
+			sha_str[k + 2] = ' ';
+			k++;
+		}
+	}
+
+	sha_str[SHA256_STR_BYTES - 1] = '\0';
+}
+
 #undef FN_
 
 FSNP_END_DECL

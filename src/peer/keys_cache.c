@@ -88,8 +88,7 @@ static int add_new_key(sha256_t key, const struct fsnp_peer *owner,
 	struct key_cached *kc = NULL;
 	struct fsnp_peer *o = NULL;
 	int ret = 0;
-	char sha_str[SHA256_BYTES];
-	unsigned i = 0;
+	char sha_str[SHA256_STR_BYTES];
 	struct in_addr addr;
 
 	kc = malloc(sizeof(struct key_cached));
@@ -113,7 +112,7 @@ static int add_new_key(sha256_t key, const struct fsnp_peer *owner,
 		return -1;
 	}
 
-	STRINGIFY_HASH(sha_str, key, i);
+	stringify_hash(sha_str, key);
 	addr.s_addr = htonl(owner->ip);
 	slog_info(FILE_LEVEL, "Added key %s, owner %s:%hu", sha_str,
 			inet_ntoa(addr), owner->port);
@@ -180,15 +179,14 @@ static int add_to_key(struct key_cached *kc, struct fsnp_peer *owner,
 	struct fsnp_peer *o = NULL;
 	int ret = 0;
 	struct duplicate duplicate;
-	char sha_str[SHA256_BYTES];
-	unsigned i = 0;
+	char sha_str[SHA256_STR_BYTES];
 	struct in_addr addr;
 
 	duplicate.owner = owner;
 	duplicate.dw_port = dw_port;
 	duplicate.d = false;
 	addr.s_addr = htonl(owner->ip);
-	STRINGIFY_HASH(sha_str, kc->key, i);
+	stringify_hash(sha_str, kc->key);
 	list_foreach_value(kc->owners, avoid_duplicate_callback, &duplicate);
 	if (duplicate.d) {
 		slog_warn(FILE_LEVEL, "%s:%hu tried to add %s twice", inet_ntoa(addr),
@@ -339,10 +337,9 @@ void get_peers_for_key(sha256_t key, struct fsnp_peer *peers, uint8_t *n)
 	uint64_t nk = 0;
 	int it = 0;
 #ifdef FSNP_DEBUG
-	char key_str[32];
-	unsigned i = 0;
+	char key_str[SHA256_STR_BYTES];
 
-	STRINGIFY_HASH(key_str, key, i);
+	stringify_hash(key_str, key);
 #endif
 
 	memset(peers, 0, sizeof(struct fsnp_peer) * MAX_KNOWN_PEER);

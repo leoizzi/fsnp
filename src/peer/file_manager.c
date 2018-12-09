@@ -74,8 +74,7 @@ static void add_file_to_table(hashtable_t *hashtable, const char *name,
 	sha256_t key;
 	struct h_entry *e = NULL;
 	int ret = 0;
-	char key_str[SHA256_BYTES];
-	unsigned i = 0;
+	char key_str[SHA256_STR_BYTES];
 
 	e = malloc(sizeof(struct h_entry));
 	if (!e) {
@@ -98,7 +97,7 @@ static void add_file_to_table(hashtable_t *hashtable, const char *name,
 		slog_debug(FILE_LEVEL, "Unable to add file \"%s\"", name);
 	}
 
-	STRINGIFY_HASH(key_str, key, i);
+	stringify_hash(key_str, key);
 	slog_info(FILE_LEVEL, "Adding file \"%s\", path \"%s\", SHA-256 \"%s\"",
 			name, path, key_str);
 }
@@ -333,8 +332,7 @@ static int search_delete_file_iterator(void *item, size_t idx, void *user)
 	struct h_entry *entry = (struct h_entry *)v->data;
 	struct search_delete_file_data *d = (struct search_delete_file_data *)user;
 	sha256_t key;
-	char key_str[SHA256_BYTES];
-	unsigned i = 0;
+	char key_str[SHA256_STR_BYTES];
 
 	UNUSED(idx);
 	
@@ -343,7 +341,7 @@ static int search_delete_file_iterator(void *item, size_t idx, void *user)
 	} else {
 		sha256(entry->name, entry->name_len, key);
 		ht_delete(d->table, key, sizeof(key), NULL, NULL);
-		STRINGIFY_HASH(key_str, key, i);
+		stringify_hash(key_str, key);
 		slog_info(FILE_LEVEL, "Deleting file corresponding to key %s", key_str);
 		d->changes = NEW;
 	}

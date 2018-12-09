@@ -341,10 +341,12 @@ struct sp_udp_state {
 
 #define NSEC_TO_SEC(ns) ((double)(ns) / 1000000000.)
 #define INVALIDATE_THRESHOLD 120.f // 2 minutes
+#define V_TIMEOUT 30.f // s
 
-#define VALIDATED 0
-#define INVALIDATED_NO_SND 1
-#define INVALIDATED_YES_SND 2
+#define VALIDATED_NO_TIMEOUT 0
+#define VALIDATED_TIMEOUT 1
+#define INVALIDATED_NO_SND 2
+#define INVALIDATED_YES_SND 3
 
 /*
  * Update 't' to the current time
@@ -373,7 +375,7 @@ static inline double calculate_timespec_delta(const struct timespec *a,
  * snd_next (if present) will be done.
  * On output in last will be found the values present in curr.
  *
- * - Return VALIDATED if the superpeer has listened the next in two minutes
+ * - Return VALIDATED_TIMEOUT if the superpeer has listened the next in two minutes
  * - Return INVALIDATED_NO_SND if the next was invalidated but no snd_next is
  *      known
  * - Return INVALIDATED_YES_SND if the next was invalidated and a swap with the
@@ -390,7 +392,11 @@ static int invalidate_next_if_needed(struct neighbors *nb,
 
 	delta = calculate_timespec_delta(last, curr);
 	if (delta < INVALIDATE_THRESHOLD) {
-		return VALIDATED;
+		if (delta > V_TIMEOUT) {
+			return VALIDATED_TIMEOUT;
+		} else {
+			return VALIDATED_NO_TIMEOUT;
+		}
 	}
 
     memcpy(old_next, &nb->next, sizeof(struct fsnp_peer));
@@ -409,12 +415,13 @@ static int invalidate_next_if_needed(struct neighbors *nb,
 	UNUSED(last);
 	UNUSED(curr);
 	UNUSED(old_next);
-	return VALIDATED;
+	return VALIDATED_TIMEOUT;
 #endif
 }
 
 #undef NSEC_TO_SEC
 #undef INVALIDATE_THRESHOLD
+#undef V_TIMEOUT
 
 /*
  * Send a promoted msg to the next sp
@@ -887,6 +894,11 @@ static void whosnext_msg_rcvd(struct sp_udp_state *sus,
 		memcpy(&whosnext->next, &sus->nb->next, sizeof(struct fsnp_peer));
 		send_whosnext(sus, whosnext, sender);
 	} else {
+		if (!cmp_next(sus->nb, &sender->addr)) {
+			// the response was not sent from the next. Do not consider it
+			return;
+		}
+		
 		if (cmp_snd_next(sus->nb, &whosnext->next)) {
 			return;
 		}
@@ -905,8 +917,7 @@ static void whosnext_msg_rcvd(struct sp_udp_state *sus,
 static void whohas_msg_rcvd(struct sp_udp_state *sus,
 		struct fsnp_whohas *whohas, const struct sender *sender)
 {
-	char key_str[SHA256_BYTES];
-	unsigned i = 0;
+	char key_str[SHA256_STR_BYTES];
 	struct request *req = NULL;
 	struct fsnp_peer peers[MAX_KNOWN_PEER];
 	struct fsnp_peer *p = NULL;
@@ -914,7 +925,7 @@ static void whohas_msg_rcvd(struct sp_udp_state *sus,
 	uint8_t j = 0;
 	bool send_to_next = true;
 
-	STRINGIFY_HASH(key_str, whohas->req_id, i);
+	stringify_hash(key_str, whohas->req_id);
 	slog_info(FILE_LEVEL, "WHOHAS msg received from sp %s. req_id = %s",
 	          sender->pretty_addr, key_str);
 	req = ht_get(sus->reqs, whohas->req_id, sizeof(sha256_t), NULL);
@@ -1085,17 +1096,16 @@ static void generate_req_id(const struct fsnp_peer *requester,
 {
 
 	char addr_str[32];
-	char key_str[SHA256_BYTES];
-	char req_id_str[32 + SHA256_BYTES];
-	unsigned i = 0;
+	char key_str[SHA256_STR_BYTES];
+	char req_id_str[32 + SHA256_STR_BYTES];
 	struct in_addr a;
 
 	memset(&addr_str, 0, sizeof(char) * 32);
 	memset(&key_str, 0, sizeof(char) * SHA256_BYTES);
 	memset(&req_id_str, 0, sizeof(char) * (32 + SHA256_BYTES));
 	a.s_addr = htonl(requester->ip);
+	stringify_hash(key_str, file_hash);
 	snprintf(addr_str, sizeof(char) * 32, "%s:%hu", inet_ntoa(a), requester->port);
-	STRINGIFY_HASH(key_str, file_hash, i);
 	snprintf(req_id_str, sizeof(char) * (32 + SHA256_BYTES), "%s:%s", addr_str,
 			key_str);
 	sha256(req_id_str, sizeof(char) * (32 + SHA256_BYTES), req_id);
@@ -1162,7 +1172,9 @@ static void pipe_whohas_rcvd(struct sp_udp_state *sus)
 		if (cmp_next_against_self(sus->nb)) {
 			// there's no other sp in the network. Just send the response
 			communicate_whohas_result_to_peer(&whohas, &whohas_msg.requester);
+			ht_delete(sus->reqs, req_id, sizeof(sha256_t), NULL, NULL);
 		}
+
 		send_whohas(sus, &whohas, true);
 		ensure_whohas(sus, &whohas, true);
 	}
@@ -1261,7 +1273,10 @@ static void check_if_next_alive(struct sp_udp_state *sus)
 	clock_gettime(CLOCK_MONOTONIC, &curr);
 	ret = invalidate_next_if_needed(sus->nb, &sus->last, &curr, &old_next);
 	switch (ret) {
-		case VALIDATED:
+		case VALIDATED_NO_TIMEOUT:
+			break;
+
+		case VALIDATED_TIMEOUT:
 			s.addr = sus->nb->next;
 			memcpy(s.pretty_addr, sus->nb->next_pretty, sizeof(char) * 32);
 			fsnp_init_whosnext(&whosnext, NULL);
@@ -1300,8 +1315,7 @@ static int invalidate_requests_iterator(void *item, size_t idx, void *user)
 	struct invalidate_req_data *data = (struct invalidate_req_data *)user;
 	struct request *req = NULL;
 	double delta = 0;
-	char key_str[SHA256_BYTES];
-	unsigned i = 0;
+	char key_str[SHA256_STR_BYTES];
 	uint8_t *p = NULL;
 	struct fsnp_whohas whohas;
 	struct fsnp_peer self;
@@ -1325,7 +1339,7 @@ static int invalidate_requests_iterator(void *item, size_t idx, void *user)
 			communicate_whohas_result_to_peer(&whohas, &req->requester);
 		}
 
-		STRINGIFY_HASH(key_str, p, i);
+		stringify_hash(key_str, p);
 		slog_info(FILE_LEVEL, "Invalidating request %s", key_str);
 		ht_delete(data->sus->reqs, key->data, key->len, NULL, NULL);
 	}
@@ -1378,8 +1392,8 @@ static void sp_udp_thread(void *data)
 	struct pollfd pollfd[POLLFD_NUM];
 	int ret = 0;
 
-	sleep(10); // so we're sure to have left the sp
-	slog_debug(FILE_LEVEL, "sp-udp-thread is awake");
+	//sleep(10); // so we're sure to have left the sp
+	//slog_debug(FILE_LEVEL, "sp-udp-thread is awake");
 	send_promoted(sus);
 	slog_info(FILE_LEVEL, "Ensuring prev connection...");
 	ensure_prev_conn(sus);
@@ -1454,7 +1468,7 @@ no_leave:
 #undef POLL_TIMEOUT
 #undef INVALIDATED_NO_SND
 #undef INVALIDATED_YES_SND
-#undef VALIDATED
+#undef VALIDATED_TIMEOUT
 
 #define REQS_SIZE_MAX 1UL << 16UL
 

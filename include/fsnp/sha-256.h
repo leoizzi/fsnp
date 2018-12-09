@@ -20,20 +20,23 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "compiler.h"
 
 #define SHA256_BYTES 32
+#define SHA256_STR_BYTES SHA256_BYTES * 2 + 1 + 7
 typedef uint8_t sha256_t[SHA256_BYTES];
 
 FSNP_BEGIN_DECL
 
 EXPORT void sha256(const void *data, size_t len, sha256_t hash);
 
-#define STRINGIFY_HASH(key_str, key, i) \
-	for (i = 0; i < SHA256_BYTES; i++) { \
-		snprintf(&key_str[i], sizeof(uint8_t) + 1, "%hhx", key[i]); \
-	}
+/*
+ * Convert 'sha' (which is a SHA256 byte array) to a string.
+ * The result is stored inside 'sha_str'
+ */
+EXPORT void stringify_hash(char sha_str[SHA256_STR_BYTES], const sha256_t sha);
 
 FSNP_END_DECL
 
