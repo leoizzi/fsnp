@@ -86,6 +86,22 @@ size_t get_file_size(sha256_t key);
 int get_file_desc(sha256_t key, bool read, char filename[FSNP_NAME_MAX]);
 
 /*
+ * Create a new file called 'filename' in the download_path. It must be closed
+ * with close_download_file.
+ *
+ * The return value is a file descriptor
+ */
+int create_download_file(char filename[FSNP_NAME_MAX]);
+
+/*
+ * Close a file previosly opened with create_download_file.
+ *
+ * If del is true the file will be closed and removed, otherwise will be
+ * available for sharing
+ */
+void close_download_file(int fd, char filename[256], sha256_t hash, bool del);
+
+/*
  * Ask to the file manager if something has changed. Return true if changes are
  * present,false otherwise
  */

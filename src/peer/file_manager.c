@@ -374,6 +374,30 @@ int get_file_desc(sha256_t key, bool read, char filename[FSNP_NAME_MAX])
 	return fd;
 }
 
+int create_download_file(char filename[FSNP_NAME_MAX])
+{
+	return get_file_desc(NULL, false, filename);
+}
+
+void close_download_file(int fd, char filename[256], sha256_t hash, bool del)
+{
+	int ret = 0;
+	char path[PATH_MAX];
+
+	close(fd);
+	if (del) {
+		snprintf(path, sizeof(char) * PATH_MAX, "%s/%s", download.path, filename);
+		ret = remove(path);
+		if (ret < 0) {
+			slog_error(FILE_LEVEL, "Unable to delete file %s. Error %d,"
+						  " strerror %s", path, errno, strerror(errno));
+		}
+	} else {
+		add_file_to_table(download.hashtable, filename, strlen(filename) + 1, // FIXME: the +1 is correct?
+		                  download.path, hash);
+	}
+}
+
 struct search_delete_file_data {
 	hashtable_t *table;
 	int changes;

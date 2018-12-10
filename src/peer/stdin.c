@@ -112,8 +112,8 @@ static size_t read_stdin(char *msg, int size)
 	}
 }
 
-#define IP_STR_SIZE 16
-#define PORT_STR_SIZE 6
+#define IP_STR_SIZE 17
+#define PORT_STR_SIZE 7
 
 bool request_user_ip_port(struct sockaddr_in *addr)
 {
@@ -340,6 +340,7 @@ static void download_handler(void)
 		return;
 	}
 
+	cleanup_stdin();
 	printf("Insert the name of the file you want to download (max 255 characters): ");
 	fflush(stdout);
 	slog_debug(FILE_LEVEL, "Reading name of the file to download");
@@ -347,6 +348,10 @@ static void download_handler(void)
 	if (r == 0) {
 		slog_warn(STDOUT_LEVEL, "An error occurred while reading from the stdin");
 		return;
+	}
+
+	if (filename[r - 1] == '\n') {
+		filename[r - 1] = '\0';
 	}
 
 	peer.ip = addr.sin_addr.s_addr;

@@ -194,7 +194,7 @@ void fsnp_init_alive(struct fsnp_alive *alive)
 	fsnp_init_msg(&alive->header, ALIVE, sizeof(*alive));
 }
 
-void fsnp_init_get_file(struct fsnp_get_file *get_file, sha256_t hash)
+void fsnp_init_get_file(struct fsnp_get_file *get_file, const sha256_t hash)
 {
 	memcpy(get_file->hash, hash, sizeof(sha256_t));
 	fsnp_init_msg(&get_file->header, GET_FILE, sizeof(*get_file));

@@ -70,7 +70,7 @@ EXPORT struct fsnp_update *fsnp_create_update(uint32_t num_files,
 
 EXPORT void fsnp_init_alive(struct fsnp_alive *alive);
 
-EXPORT void fsnp_init_get_file(struct fsnp_get_file *get_file, sha256_t hash);
+EXPORT void fsnp_init_get_file(struct fsnp_get_file *get_file, const sha256_t hash);
 
 EXPORT void fsnp_init_error(struct fsnp_error *error);
 

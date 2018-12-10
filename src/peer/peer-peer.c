@@ -40,14 +40,239 @@
 
 struct client_dw {
 	struct fsnp_peer peer;
+	int sock;
+	int fd;
+	size_t file_size;
 	char filename[FSNP_NAME_MAX];
 	char pretty_addr[32];
 	sha256_t file_hash;
+	char hash_str[SHA256_STR_BYTES];
 };
+
+/*
+ * Write a chunk into the file
+ */
+static bool store_chunk(const struct client_dw *cd, char buf[DW_CHUNK], size_t r)
+{
+	ssize_t w = 0;
+
+	w = fsnp_write(cd->fd, buf, r);
+	if (w < 0) {
+		slog_warn(STDOUT_LEVEL, "Error %d has occurred while writing on disk"
+						  " the file wich is being downloaded from %s.",
+						  errno, cd->pretty_addr);
+		PRINT_PEER;
+		return false;
+	} else if (w == 0) {
+		slog_warn(STDOUT_LEVEL, "File %s unexpectedly closed");
+		PRINT_PEER;
+		return false;
+	} else {
+		return true;
+	}
+}
+
+/*
+ * Read a chunk from the socket
+ */
+static bool receive_chunk(const struct client_dw *cd, char buf[DW_CHUNK], size_t *r)
+{
+	ssize_t rt = 0;
+	fsnp_err_t err;
+
+	rt = fsnp_timed_read(cd->sock, buf, DW_CHUNK, 0, &err);
+	if (rt < 0) {
+		slog_warn(STDOUT_LEVEL, "An error has occurred while downloading"
+		                        " the file from %s", cd->pretty_addr);
+		fsnp_log_err_msg(err, true);
+		PRINT_PEER;
+		*r = 1; // so the if statement in download_file get triggered
+		return false;
+	} else if (rt == 0) {
+		*r = 0;
+		return false;
+	} else {
+		*r = (size_t)rt;
+		return true;
+	}
+}
+
+/*
+ * Receive a file from a peer
+ */
+static int download_file(struct client_dw *cd)
+{
+	char buf[DW_CHUNK];
+	bool ok = true;
+	size_t rcvd = 0;
+	size_t r = 0;
+
+	while (rcvd < cd->file_size && ok) {
+		ok = receive_chunk(cd, buf, &r);
+		if (!ok && r != 0) {
+			break;
+		}
+
+		ok = store_chunk(cd, buf, r);
+		if (!ok) {
+			break;
+		}
+
+		rcvd += r;
+	}
+
+	if (ok) {
+		return 0;
+	} else {
+		return -1;
+	}
+}
+
+/*
+ * Wait for the peer response and return its type
+ */
+static fsnp_type_t wait_for_peer_response(struct client_dw *cd)
+{
+	struct fsnp_msg *msg = NULL;
+	struct fsnp_download *download = NULL;
+	fsnp_err_t err;
+	fsnp_type_t type;
+
+	slog_info(FILE_LEVEL, "Waiting for a get_file answer from %s", cd->pretty_addr);
+	msg = fsnp_read_msg_tcp(cd->sock, 0, NULL, &err);
+	if (!msg) {
+		fsnp_log_err_msg(err, true);
+		return ERROR;
+	}
+
+	if (msg->msg_type == DOWNLOAD) {
+		download = (struct fsnp_download *)msg;
+		cd->file_size = download->file_size;
+		type = DOWNLOAD;
+	} else if (msg->msg_type == ERROR) {
+		slog_warn(STDOUT_LEVEL, "The peer doesn't have the file you're searching for");
+		PRINT_PEER;
+		type = ERROR;
+	} else {
+		slog_warn(STDOUT_LEVEL, "The peer sent a corrupted response. Aborting");
+		PRINT_PEER;
+		type = ERROR;
+	}
+
+	free(msg);
+	return type;
+}
+
+static int send_get_file(const struct client_dw *cd)
+{
+	struct fsnp_get_file get_file;
+	fsnp_err_t err;
+
+	fsnp_init_get_file(&get_file, cd->file_hash);
+	slog_info(FILE_LEVEL, "Sending a GET_FILE msg to %s", cd->pretty_addr);
+	err = fsnp_send_get_file(cd->sock, &get_file);
+	if (err != E_NOERR) {
+		fsnp_log_err_msg(err, true);
+		slog_warn(STDOUT_LEVEL, "Unable to start the download session");
+		PRINT_PEER;
+		return -1;
+	}
+
+	return 0;
+}
+
+/*
+ * Create a socket and connect it to the peer specified in 'cd'
+ */
+static int connect_to_peer(struct client_dw *cd)
+{
+	struct in_addr a;
+
+	a.s_addr = cd->peer.ip;
+	cd->sock = fsnp_create_connect_tcp_sock(a, cd->peer.port);
+	if (cd->sock < 0) {
+		slog_error(FILE_LEVEL, "Unable to create/connect to %s", cd->pretty_addr);
+		slog_warn(STDOUT_LEVEL, "Unable to start the download");
+		PRINT_PEER;
+		return -1;
+	}
+
+	return 0;
+}
+
+/*
+ * Entry point for client-dw-thread
+ */
+static void client_dw_thread(void *data)
+{
+	struct client_dw *cd = (struct client_dw *)data;
+	int ret = 0;
+	fsnp_type_t type;
+
+	sha256(cd->filename, strlen(cd->filename) + 1, cd->file_hash); // FIXME: the +1 is correct?
+	stringify_hash(cd->hash_str, cd->file_hash);
+	slog_debug(FILE_LEVEL, "client-dw-thread hash of file %s -> %s",
+			cd->filename, cd->hash_str);
+	ret = connect_to_peer(cd);
+	if (ret < 0) {
+		return;
+	}
+
+	ret = send_get_file(cd);
+	if (ret < 0) {
+		close(cd->sock);
+		return;
+	}
+
+	type = wait_for_peer_response(cd);
+	if (type == ERROR) {
+		close(cd->sock);
+		return;
+	}
+
+	cd->fd = create_download_file(cd->filename);
+	if (cd->fd < 0) {
+		slog_warn(FILE_LEVEL, "Unable to create file %s. Aborting the download",
+				cd->filename);
+		close(cd->sock);
+		return;
+	}
+
+	ret = download_file(cd);
+
+	if (ret < 0) {
+		close_download_file(cd->fd, cd->filename, cd->file_hash, true);
+	} else {
+		close_download_file(cd->fd, cd->filename, cd->file_hash, false);
+	}
+
+	close(cd->sock);
+}
 
 void dw_from_peer(const struct fsnp_peer *peer, const char filename[FSNP_NAME_MAX])
 {
+	struct client_dw *cd = NULL;
+	struct in_addr a;
+	int ret = 0;
 
+	cd = calloc(1, sizeof(struct client_dw));
+	if (!cd) {
+		slog_error(FILE_LEVEL, "malloc error %d", errno);
+		slog_warn(STDOUT_LEVEL, "Unable to start the download");
+		PRINT_PEER;
+		return;
+	}
+
+	memcpy(&cd->peer, peer, sizeof(struct fsnp_peer));
+	strncpy(cd->filename, filename, sizeof(char) * FSNP_NAME_MAX);
+	a.s_addr = htonl(peer->ip);
+	snprintf(cd->pretty_addr, sizeof(char) * 32, "%s:%hu", inet_ntoa(a), peer->port);
+	ret = start_new_thread(client_dw_thread, cd, "client-dw-thread");
+	if (ret < 0) {
+		slog_error(FILE_LEVEL, "Unable to start client-dw-thread");
+		slog_warn(STDOUT_LEVEL, "Unable to start the download");
+		PRINT_PEER;
+	}
 }
 
 //------------------------------------------------------------------------------
@@ -216,6 +441,7 @@ static void server_dw_thread(void *data)
 	size = get_file_size(sd->file_hash);
 	if (size == 0) {
 		slog_error(FILE_LEVEL, "The size of the file cannot be 0");
+		send_error(sd);
 		close(sd->sock);
 		return;
 	}
