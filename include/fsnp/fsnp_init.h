@@ -74,8 +74,7 @@ EXPORT void fsnp_init_get_file(struct fsnp_get_file *get_file, sha256_t hash);
 
 EXPORT void fsnp_init_error(struct fsnp_error *error);
 
-EXPORT void fsnp_init_download(struct fsnp_download *download, uint64_t file_size,
-                               char *filename);
+EXPORT void fsnp_init_download(struct fsnp_download *download, uint64_t file_size);
 
 EXPORT void fsnp_init_promote(struct fsnp_promote *promote, in_port_t sp_port,
                               const struct fsnp_peer *sp);

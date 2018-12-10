@@ -38,7 +38,17 @@
 //******************************** CLIENT SIDE *********************************
 //------------------------------------------------------------------------------
 
+struct client_dw {
+	struct fsnp_peer peer;
+	char filename[FSNP_NAME_MAX];
+	char pretty_addr[32];
+	sha256_t file_hash;
+};
 
+void dw_from_peer(const struct fsnp_peer *peer, const char filename[FSNP_NAME_MAX])
+{
+
+}
 
 //------------------------------------------------------------------------------
 //******************************** SERVER SIDE *********************************
@@ -80,7 +90,7 @@ static bool sr_read_chunk(int fd, char *buf, size_t *size)
  *
  * Returns true if everything went well, false otherwise
  */
-static bool sr_send_chunk(struct server_dw *sd, char *buf, size_t *sz)
+static bool sr_send_chunk(const struct server_dw *sd, const char *buf, size_t *sz)
 {
 	ssize_t w = 0;
 	fsnp_err_t err;
@@ -98,7 +108,7 @@ static bool sr_send_chunk(struct server_dw *sd, char *buf, size_t *sz)
 /*
  * Send the file to the requester
  */
-static void send_file(struct server_dw *sd, int fd, size_t size)
+static void send_file(const struct server_dw *sd, int fd, size_t size)
 {
 	char buf[DW_CHUNK];
 	size_t sent = 0;
@@ -126,7 +136,7 @@ static void send_file(struct server_dw *sd, int fd, size_t size)
 /*
  * Send an ERROR msg
  */
-static void send_error(struct server_dw *sd)
+static void send_error(const struct server_dw *sd)
 {
 	struct fsnp_error error;
 	fsnp_err_t err;
@@ -142,12 +152,12 @@ static void send_error(struct server_dw *sd)
 /*
  * Send a DOWNLOAD msg
  */
-static void send_download(struct server_dw *sd, size_t size)
+static void send_download(const struct server_dw *sd, size_t size)
 {
 	struct fsnp_download download;
 	fsnp_err_t err;
 
-	fsnp_init_download(&download, size, NULL);
+	fsnp_init_download(&download, size);
 	slog_info(FILE_LEVEL, "Sending a DOWNLOAD msg to peer %s", sd->pretty_addr);
 	err = fsnp_send_download(sd->sock, &download);
 	if (err != E_NOERR) {
@@ -194,8 +204,6 @@ static void server_dw_thread(void *data)
 {
 	struct server_dw *sd = (struct server_dw *)data;
 	size_t size = 0;
-	bool valid = false;
-	char filename[FSNP_NAME_MAX];
 	int fd = 0;
 
 	wait_for_get_file(sd);
@@ -205,7 +213,6 @@ static void server_dw_thread(void *data)
 		return;
 	}
 
-	memset(filename, 0, sizeof(char) * FSNP_NAME_MAX);
 	size = get_file_size(sd->file_hash);
 	if (size == 0) {
 		slog_error(FILE_LEVEL, "The size of the file cannot be 0");
@@ -213,15 +220,8 @@ static void server_dw_thread(void *data)
 		return;
 	}
 
-	valid = get_file_name(sd->file_hash, filename);
-	if (!valid) {
-		slog_error(FILE_LEVEL, "Unable to retrieve the name of the file");
-		close(sd->sock);
-		return;
-	}
-
 	send_download(sd, size);
-	fd = get_file_desc(sd->file_hash, true, filename);
+	fd = get_file_desc(sd->file_hash, true, NULL);
 	if (fd < 0) {
 		slog_error(FILE_LEVEL, "Unable to retrieve the file descriptor");
 		close(sd->sock);

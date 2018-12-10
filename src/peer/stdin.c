@@ -30,6 +30,7 @@
 #include "peer/superpeer.h"
 #include "peer/peer-server.h"
 #include "peer/peer-superpeer.h"
+#include "peer/peer-peer.h"
 #include "peer/file_manager.h"
 
 #include "fsnp/fsnp.h"
@@ -302,9 +303,9 @@ static void who_has_handler(void)
 		return;
 	}
 
-	printf("Insert the name of the file (max 255 character): ");
+	printf("Insert the name of the file (max 255 characters): ");
 	fflush(stdout);
-	slog_debug(FILE_LEVEL, "Reading file name to download");
+	slog_debug(FILE_LEVEL, "Reading file name to search");
 	s = read_stdin(filename, FILENAME_SIZE);
 	if (s == 0) {
 		slog_warn(STDOUT_LEVEL, "An error occurred while reading from the stdin");
@@ -327,7 +328,30 @@ static void who_has_handler(void)
  */
 static void download_handler(void)
 {
-	// TODO: implement
+	size_t r = 0;
+	bool ok = false;
+	struct sockaddr_in addr;
+	char filename[FSNP_NAME_MAX];
+	struct fsnp_peer peer;
+
+	ok = request_user_ip_port(&addr);
+	if (!ok) {
+		slog_warn(FILE_LEVEL, "Unable to read peer's address");
+		return;
+	}
+
+	printf("Insert the name of the file you want to download (max 255 characters): ");
+	fflush(stdout);
+	slog_debug(FILE_LEVEL, "Reading name of the file to download");
+	r = read_stdin(filename, FSNP_NAME_MAX);
+	if (r == 0) {
+		slog_warn(STDOUT_LEVEL, "An error occurred while reading from the stdin");
+		return;
+	}
+
+	peer.ip = addr.sin_addr.s_addr;
+	peer.port = addr.sin_port;
+	dw_from_peer(&peer, filename);
 }
 
 

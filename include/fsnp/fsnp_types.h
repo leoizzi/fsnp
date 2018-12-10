@@ -106,6 +106,8 @@ typedef uint16_t timeout_t;
 #define FSNP_MAGIC "FSNP"
 #define FSNP_MAGIC_SIZE 4
 
+#define FSNP_NAME_MAX 256
+
 /*
  * The base message.
  * It contains an header for identifying it as a valid fsnp message,
@@ -256,14 +258,12 @@ struct packed fsnp_error {
 	struct fsnp_msg header;
 };
 
-#define FSNP_NAME_MAX 256
 /*
  * Sent as response to fsnp_get_file in case the file is available.
  */
 struct packed fsnp_download {
 	struct fsnp_msg header;
 	uint64_t file_size;
-	char filename[FSNP_NAME_MAX];
 };
 
 /*

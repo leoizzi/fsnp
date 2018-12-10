@@ -346,19 +346,6 @@ size_t get_file_size(sha256_t key)
 	return size;
 }
 
-bool get_file_name(sha256_t key, char filename[FSNP_NAME_MAX])
-{
-	struct h_entry *entry = NULL;
-
-	entry = ht_get(shared.hashtable, key, sizeof(sha256_t), NULL);
-	if (!entry) {
-		return false;
-	}
-
-	strncpy(filename, entry->name, sizeof(char) * FSNP_NAME_MAX);
-	return true;
-}
-
 int get_file_desc(sha256_t key, bool read, char filename[FSNP_NAME_MAX])
 {
 	int fd = 0;

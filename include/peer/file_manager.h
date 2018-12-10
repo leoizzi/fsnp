@@ -74,11 +74,6 @@ bool key_exists(sha256_t key);
 size_t get_file_size(sha256_t key);
 
 /*
- * Get the name of the file associated to key
- */
-bool get_file_name(sha256_t key, char filename[FSNP_NAME_MAX]);
-
-/*
  * Get a file descriptor for the one associated to key. The caller is responsible
  * to close it when it has done.
  *

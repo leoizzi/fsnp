@@ -18,9 +18,17 @@
 #ifndef FSNP_PEER_PEER_H
 #define FSNP_PEER_PEER_H
 
+#include "fsnp/fsnp_types.h"
+#include "fsnp/sha-256.h"
+
 /*
  * Handle an event on the download socket
  */
 void dw_sock_event(short revents);
+
+/*
+ * Start a download session with 'peer' for file 'file_hash'
+ */
+void dw_from_peer(const struct fsnp_peer *peer, const char filename[FSNP_NAME_MAX]);
 
 #endif //FSNP_PEER_PEER_H
