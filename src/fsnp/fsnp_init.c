@@ -205,10 +205,13 @@ void fsnp_init_error(struct fsnp_error *error)
 	fsnp_init_msg(&error->header, ERROR, sizeof(*error));
 }
 
-void fsnp_init_download(struct fsnp_download *download, uint64_t file_size)
+void fsnp_init_download(struct fsnp_download *download, uint64_t file_size,
+                        char *filename)
 {
 	download->file_size = file_size;
 	fsnp_init_msg(&download->header, DOWNLOAD, sizeof(*download));
+	memset(download->filename, 0, sizeof(char) * FSNP_NAME_MAX);
+	strncpy(download->filename, filename, sizeof(char) * FSNP_NAME_MAX);
 }
 
 void fsnp_init_promote(struct fsnp_promote *promote, in_port_t sp_port,

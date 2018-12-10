@@ -224,28 +224,35 @@ struct fsnp_msg *fsnp_read_msg_tcp(int sock, timeout_t timeout, ssize_t *r,
 	char *m = NULL;
 	size_t header_size = sizeof(header);
 	int ret = 0;
-	ssize_t r1 = 0;
-	ssize_t r2 = 0;
+	ssize_t r1 = -1;
+	ssize_t r2 = -1;
+	unsigned retry = 0;
 
 	if (timeout == 0) {
 		timeout = FSNP_TIMEOUT;
 	}
 
 	// try to read the header file
-	r1 = fsnp_timed_read(sock, &header, header_size, timeout, err);
-	if (r1 < 0) {
-		if (r) {
-			*r = r1;
-		}
-		return NULL;
-	}
+	while (r1 < 0) {
+		r1 = fsnp_timed_read(sock, &header, header_size, timeout, err);
+		if ((r1 < 0 && *err != E_TIMEOUT) || retry > 4) {
+			if (r) {
+				*r = r1;
+			}
 
-	if (r1 == 0) {
-		if (r) {
-			*r = r1;
+			return NULL;
+		} else if (r1 < 0 && *err == E_TIMEOUT && retry <= 4) {
+			retry++;
 		}
-		*err = E_PEER_DISCONNECTED;
-		return NULL;
+
+		if (r1 == 0) {
+			if (r) {
+				*r = r1;
+			}
+
+			*err = E_PEER_DISCONNECTED;
+			return NULL;
+		}
 	}
 	
 	ret = strncmp((char *)header.magic, FSNP_MAGIC, FSNP_MAGIC_SIZE);
@@ -274,14 +281,27 @@ struct fsnp_msg *fsnp_read_msg_tcp(int sock, timeout_t timeout, ssize_t *r,
 
 	// read the rest of the message
 	m = ((char *)msg) + header_size;
-	r2 = fsnp_timed_read(sock, m, header.msg_size, FSNP_TIMEOUT, err);
-	if (r2 < 0) {
-		if (r) {
-			*r = r1;
+	retry = 0;
+	while (r2 < 0) {
+		r2 = fsnp_timed_read(sock, m, header.msg_size, FSNP_TIMEOUT, err);
+		if ((r2 < 0 && *err != E_TIMEOUT) || retry > 4) {
+			if (r) {
+				*r = r1;
+			}
+
+			free(msg);
+			return NULL;
+		} else if (r1 < 0 && *err == E_TIMEOUT && retry <= 4) {
+			retry++;
 		}
-		free(msg);
-		return NULL;
+
+		if (r2 == 0) {
+			*err = E_PEER_DISCONNECTED;
+			free(msg);
+			return NULL;
+		}
 	}
+
 	if (r) {
 		*r = r1 + r2;
 	}
