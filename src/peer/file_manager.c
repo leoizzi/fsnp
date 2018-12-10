@@ -25,6 +25,7 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <sys/time.h>
+#include <fcntl.h>
 
 #include "peer/file_manager.h"
 #include "peer/thread_manager.h"
@@ -36,6 +37,8 @@
 #include "fsnp/sha-256.h"
 
 #include "slog/slog.h"
+
+// TODO: look for files also in the dw directory
 
 struct directory {
 	char path[PATH_MAX]; // the root path
@@ -319,6 +322,70 @@ bool key_exists(sha256_t key)
 #undef HT_ERROR
 #undef HT_DOESNT_EXIST
 #undef HT_EXISTS
+
+size_t get_file_size(sha256_t key)
+{
+	int fd = 0;
+	size_t size = 0;
+	off_t off = 0;
+
+	fd = get_file_desc(key, true, NULL);
+	if (fd < 0) {
+		return 0;
+	}
+
+	off = lseek(fd, 0, SEEK_END);
+	if (off < 0) {
+		slog_error(FILE_LEVEL, "lseek errno %d, strerror %s", errno, strerror(errno));
+		close(fd);
+		return 0;
+	}
+
+	close(fd);
+	size = (size_t)off;
+	return size;
+}
+
+bool get_file_name(sha256_t key, char filename[FSNP_NAME_MAX])
+{
+	struct h_entry *entry = NULL;
+
+	entry = ht_get(shared.hashtable, key, sizeof(sha256_t), NULL);
+	if (!entry) {
+		return false;
+	}
+
+	strncpy(filename, entry->name, sizeof(char) * FSNP_NAME_MAX);
+	return true;
+}
+
+int get_file_desc(sha256_t key, bool read, char filename[FSNP_NAME_MAX])
+{
+	int fd = 0;
+	struct h_entry *entry = NULL;
+	char path[PATH_MAX];
+
+	if (read) {
+		entry = ht_get(shared.hashtable, key, sizeof(sha256_t), NULL);
+		if (!entry) {
+			return -1;
+		}
+
+		snprintf(path, PATH_MAX, "%s/%s", entry->path, entry->name);
+		fd = open(path, O_RDONLY);
+	} else {
+		snprintf(path, PATH_MAX, "%s/%s", download.path, filename);
+		fd = open(path, O_CREAT | O_RDWR, 0644);
+	}
+
+	if (fd < 0) {
+		slog_error(FILE_LEVEL, "Error while opening %s. errno %d, strerror: %s",
+		           path, errno, strerror(errno));
+		return -1;
+	}
+
+	return fd;
+}
 
 struct search_delete_file_data {
 	hashtable_t *table;

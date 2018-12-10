@@ -53,6 +53,11 @@ void rm_poll_sp_sock(void);
 int get_tcp_sp_sock(void);
 
 /*
+ * Get the download socket. This socket cannot be unset
+ */
+int get_dw_sock(void);
+
+/*
  * Return true if the peer is also a superpeer, false otherwise
  */
 bool is_superpeer(void);

@@ -19,8 +19,10 @@
 #define FSNP_FILE_MANAGER_H
 
 #include <stdbool.h>
+#include <limits.h>
 
 #include "fsnp/sha-256.h"
+#include "fsnp/fsnp_types.h"
 
 #include "compiler.h"
 
@@ -65,6 +67,28 @@ sha256_t *retrieve_all_keys(uint32_t *num);
  * Return true if the key is present in the file manager, false otherwise
  */
 bool key_exists(sha256_t key);
+
+/*
+ * Return the size of the file associated to key
+ */
+size_t get_file_size(sha256_t key);
+
+/*
+ * Get the name of the file associated to key
+ */
+bool get_file_name(sha256_t key, char filename[FSNP_NAME_MAX]);
+
+/*
+ * Get a file descriptor for the one associated to key. The caller is responsible
+ * to close it when it has done.
+ *
+ * if read is true the file will be opened as read-only, otherwise it will be
+ * created and opened as read-write.
+ *
+ * filename has a meaning only if read is false. In this case it will be the
+ * name of the file.
+ */
+int get_file_desc(sha256_t key, bool read, char filename[FSNP_NAME_MAX]);
 
 /*
  * Ask to the file manager if something has changed. Return true if changes are
