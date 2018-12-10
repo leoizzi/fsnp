@@ -132,6 +132,19 @@ int get_tcp_sp_sock(void)
 	return sock;
 }
 
+int get_dw_sock(void)
+{
+	int s = 0;
+
+	LOCK_STATE;
+
+	s = state.fds[POLL_DW].fd;
+
+	UNLOCK_STATE;
+
+	return s;
+}
+
 bool is_superpeer(void)
 {
 	bool res;
@@ -252,6 +265,7 @@ static int create_dw_sock(void)
 {
 	in_port_t dw_port = DW_PORT;
 	int s = 0;
+	int ret = 0;
 
 	s = fsnp_create_bind_tcp_sock(&dw_port, state.localhost);
 	if (s < 0) {
@@ -259,7 +273,13 @@ static int create_dw_sock(void)
 		return -1;
 	}
 
-	slog_info(STDOUT_LEVEL, "Download port set to %hu", dw_port);
+	ret = listen(s, 128);
+	if (ret < 0) {
+		slog_error(FILE_LEVEL, "Unable to start listening on the dw socket");
+		close(s);
+		return -1;
+	}
+
 	set_dw_port(dw_port);
 	return s;
 }
