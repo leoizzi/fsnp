@@ -256,12 +256,14 @@ struct packed fsnp_error {
 	struct fsnp_msg header;
 };
 
+#define FSNP_NAME_MAX 256
 /*
  * Sent as response to fsnp_get_file in case the file is available.
  */
 struct packed fsnp_download {
 	struct fsnp_msg header;
 	uint64_t file_size;
+	char filename[FSNP_NAME_MAX];
 };
 
 /*
