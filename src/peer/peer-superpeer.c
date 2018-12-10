@@ -348,9 +348,17 @@ void file_res_rcvd(struct fsnp_file_res *file_res)
 	struct in_addr addr;
 
 	tcp_state.file_asked = false;
-	printf("\nThere are %hhu peers who have the file you're searching.\n You"
-		   " can download it from one of them by inserting the string "
-	       "'download' from the command line.\n\n", file_res->num_peers);
+	if (file_res->num_peers > 0) {
+		printf("\nThere are %hhu peers who own the file you're looking for.\n You"
+		       " can download it by inserting the string 'download' from the"
+		       " command line.\n\n", file_res->num_peers);
+	} else if (file_res->num_peers == 0) {
+		printf("\nThere are no peers who own the file you're looking for\n\n");
+	} else {
+		printf("\nThere is 1 peer who owns the file you're looking for.\n You"
+		       " can download it by inserting the string 'download' from the"
+		       " command line.\n\n");
+	}
 
 	slog_info(FILE_LEVEL, "%hhu peers own the file searched", file_res->num_peers);
 	for (i = 0; i < file_res->num_peers; i++) {
