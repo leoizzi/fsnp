@@ -110,6 +110,7 @@ static void fake_peer_whohas_rcvd(bool *already_asked, bool *should_exit)
 	if (*already_asked == true) {
 		slog_warn(STDOUT_LEVEL, "You're already searching for a file. Wait for"
 		                        " its response before searching for another one");
+		PRINT_PEER;
 		return;
 	}
 

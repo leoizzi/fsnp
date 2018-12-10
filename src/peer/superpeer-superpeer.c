@@ -664,6 +664,7 @@ static void ensure_prev_conn(struct sp_udp_state *sus)
 			} else {
 				slog_warn(FILE_LEVEL, "Unable to ensure the prev's sp connection");
 				slog_warn(STDOUT_LEVEL, "Please join the network again");
+				PRINT_PEER;
 				unset_all(sus->nb);
 				prepare_exit_sp_mode();
 				exit_sp_mode();
@@ -699,6 +700,7 @@ static void ensure_prev_conn(struct sp_udp_state *sus)
 						"(%u), got %u", sus->nb->prev_pretty, NEXT, msg->msg_type);
 		free(msg);
 		slog_warn(STDOUT_LEVEL, "Please join the network again");
+		PRINT_PEER;
 		unset_all(sus->nb);
 		prepare_exit_sp_mode();
 		exit_sp_mode();
@@ -744,6 +746,7 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 			slog_warn(FILE_LEVEL, "Unable to ensure next's connection");
 			fsnp_log_err_msg(err, false);
 			slog_warn(STDOUT_LEVEL, "Please join the network again");
+			PRINT_PEER;
 			prepare_exit_sp_mode();
 			exit_sp_mode();
 			sus->should_exit = true;

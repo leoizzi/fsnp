@@ -536,6 +536,7 @@ static void send_file_req(void)
 						" request is pending");
 		slog_warn(STDOUT_LEVEL, "You're already searching for a file. Wait for"
 						  " its response before searching for another one");
+		PRINT_PEER;
 		return;
 	}
 
@@ -548,6 +549,7 @@ static void send_file_req(void)
 	slog_info(FILE_LEVEL, "Sending a file_req to the superpeer");
 	if (err != E_NOERR) {
 		slog_warn(STDOUT_LEVEL, "Unable to send the file request");
+		PRINT_PEER;
 		fsnp_log_err_msg(err, false);
 		return;
 	}
@@ -701,7 +703,7 @@ static void peer_tcp_thread(void *data)
 	}
 
 	slog_info(STDOUT_LEVEL, "Leaving the superpeer...");
-
+	PRINT_PEER;
 	if (tcp_state.send_leave_msg) {
 		fsnp_init_leave(&leave);
 		err = fsnp_send_tcp_leave(tcp_state.sock, &leave);
@@ -873,6 +875,7 @@ void leave_sp(void)
 		tcp_state.quit_loop = true; // force the thread to quit
 		slog_error(STDOUT_LEVEL, "Forcing to quit peer_tcp_thread for an"
 						   " internal error");
+		PRINT_PEER;
 		slog_error(FILE_LEVEL, "fsnp_write. Error %d", errno);
 	}
 }

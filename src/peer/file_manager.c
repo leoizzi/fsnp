@@ -29,6 +29,7 @@
 #include "peer/file_manager.h"
 #include "peer/thread_manager.h"
 #include "peer/peer-superpeer.h"
+#include "peer/peer.h"
 
 #include "struct/hashtable.h"
 
@@ -227,6 +228,7 @@ int set_download_dir(const char *path)
 	}
 
 	slog_info(STDOUT_LEVEL, "New download directory: \"%s\"", download.path);
+	PRINT_PEER;
 	return 0;
 }
 
@@ -476,6 +478,7 @@ static void launch_update_thread(bool first_launch)
 	if (ret) {
 		slog_error(FILE_LEVEL, "Unable to initialize the mutex. Error %d", ret);
 		slog_warn(STDOUT_LEVEL, "%s", update_err);
+		PRINT_PEER;
 		return;
 	}
 
@@ -484,12 +487,14 @@ static void launch_update_thread(bool first_launch)
 		pthread_mutex_destroy(&utd.mtx);
 		slog_error(FILE_LEVEL, "Unable to initialize the condition. Error %d",ret);
 		slog_warn(STDOUT_LEVEL, "%s", update_err);
+		PRINT_PEER;
 		return;
 	}
 
 	ret = start_new_thread(update_thread, NULL, "update-thread");
 	if (ret < 0) {
 		slog_warn(STDOUT_LEVEL, "%s", update_err);
+		PRINT_PEER;
 		pthread_mutex_destroy(&utd.mtx);
 		pthread_cond_destroy(&utd.cond);
 		return;
@@ -566,7 +571,7 @@ int set_shared_dir(const char *path)
 	slog_info(STDOUT_LEVEL, "All the files were parsed. You're sharing %lu "
 	                        "files.", ht_count(shared.hashtable));
 	slog_info(STDOUT_LEVEL, "New shared directory: \"%s\"", shared.path);
-
+	PRINT_PEER;
 	launch_update_thread(first_launch);
 	first_launch = false;
 	shared.is_set = true;
