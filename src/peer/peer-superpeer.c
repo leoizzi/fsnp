@@ -616,11 +616,7 @@ static void read_pipe_msg(void)
 		case PIPE_WHOHAS:
 			send_file_req();
 			break;
-
-		case PIPE_DOWNLOAD:
-			// TODO: implement
-			break;
-
+			
 		default:
 			// if we're here something really weird happened. Close everything
 			tcp_state.quit_loop = true;
