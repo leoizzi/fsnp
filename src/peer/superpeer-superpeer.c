@@ -416,7 +416,7 @@ static int invalidate_next_if_needed(struct neighbors *nb,
 	UNUSED(last);
 	UNUSED(curr);
 	UNUSED(old_next);
-	return VALIDATED_TIMEOUT;
+	return VALIDATED_NO_TIMEOUT;
 #endif
 }
 
@@ -1214,7 +1214,10 @@ static void pipe_whohas_rcvd(struct sp_udp_state *sus)
 	}
 }
 
-static void write_prev_to_pipe(struct sp_udp_state *sus)
+/*
+ * Write the prev address into the pipe
+ */
+static void write_prev_to_pipe(const struct sp_udp_state *sus)
 {
 	struct fsnp_peer prev;
 	ssize_t w = 0;
@@ -1231,6 +1234,34 @@ static void write_prev_to_pipe(struct sp_udp_state *sus)
 			FSNP_TIMEOUT, &err);
 	if (w < 0) {
 		slog_error(FILE_LEVEL, "Unable to write prev's address in the pipe");
+		fsnp_log_err_msg(err, false);
+	}
+}
+
+/*
+ * Write a copy of the neighbors's addresses (+ a copy of self) as strings
+ */
+static void write_nb_addresses_to_pipe(const struct sp_udp_state *sus)
+{
+	struct sp_nb_addr sna;
+	struct in_addr a;
+	in_port_t port;
+	size_t s = sizeof(char) * 32;
+	ssize_t w = 0;
+	fsnp_err_t err;
+
+	memset(&sna, 0, sizeof(struct sp_nb_addr));
+	a.s_addr = htonl(get_peer_ip());
+	port = get_udp_sp_port();
+	snprintf(sna.self, s, "%s:%hu", inet_ntoa(a), port);
+	strncpy(sna.prev, sus->nb->prev_pretty, s);
+	strncpy(sna.next, sus->nb->next_pretty, s);
+	strncpy(sna.snd_next, sus->nb->snd_next_pretty, s);
+	slog_debug(FILE_LEVEL, "Writing into the pipe neighbors' addresses")
+	w = fsnp_timed_write(sus->w_pipe[WRITE_END], &sna, sizeof(struct sp_nb_addr),
+	                     FSNP_TIMEOUT, &err);
+	if (w < 0) {
+		slog_error(FILE_LEVEL, "Unable to write neighbors' addresses in the pipe");
 		fsnp_log_err_msg(err, false);
 	}
 }
@@ -1260,6 +1291,11 @@ static void read_pipe_msg(struct sp_udp_state *sus)
 		case PIPE_GET_PREV:
 			slog_info(FILE_LEVEL, "PIPE_GET_PREV read from sp UDP pipe");
 			write_prev_to_pipe(sus);
+			break;
+
+		case PIPE_ADDRESSES:
+			slog_info(FILE_LEVEL, "PIPE_ADDRESSES read from sp UDP pipe");
+			write_nb_addresses_to_pipe(sus);
 			break;
 
 		case PIPE_QUIT:
@@ -1407,8 +1443,6 @@ static void invalidate_requests(struct sp_udp_state *sus)
 	list_destroy(l);
 }
 
-#define POLL_TIMEOUT 30000 // ms
-
 struct sp_thread_pipe {
 	int r_pipe[2];
 	int w_pipe[2];
@@ -1447,7 +1481,7 @@ static void sp_udp_thread(void *data)
 	setup_poll(pollfd, sus);
 	slog_info(FILE_LEVEL, "Superpeers' overlay network successfully joined");
 	while (!sus->should_exit) {
-		ret = poll(pollfd, POLLFD_NUM, POLL_TIMEOUT);
+		ret = poll(pollfd, POLLFD_NUM, FSNP_POLL_TIMEOUT);
 		invalidate_requests(sus);
 		if (ret > 0) {
 			if (pollfd[PIPE].revents) {
@@ -1499,7 +1533,6 @@ no_leave:
 #undef POLLFD_NUM
 #undef PIPE
 #undef SOCK
-#undef POLL_TIMEOUT
 #undef INVALIDATED_NO_SND
 #undef INVALIDATED_YES_SND
 #undef VALIDATED_TIMEOUT
@@ -1743,6 +1776,43 @@ bool get_prev_addr(struct fsnp_peer *prev)
 		slog_debug(FILE_LEVEL, "get_prev: prev is NOT set to self")
 		return true;
 	}
+}
+
+int get_neighbors_addresses(struct sp_nb_addr *sna)
+{
+	int msg = PIPE_ADDRESSES;
+	int we = 0;
+	int re = 0;
+	ssize_t rw = 0;
+	fsnp_err_t err;
+
+	we = get_pipe_write_end();
+	if (we == 0) {
+		return -1;
+	}
+
+	slog_debug(FILE_LEVEL, "Writing PIPE_ADDRESSES to the sp-udp-thread");
+	rw = fsnp_timed_write(we, &msg, sizeof(int), FSNP_TIMEOUT, &err);
+	if (rw < 0) {
+		slog_error(FILE_LEVEL, "Unable to write PIPE_ADDRESSES in the pipe");
+		fsnp_log_err_msg(err, false);
+		return -1;
+	}
+
+	re = get_pipe_read_end();
+	if (re == 0) {
+		return -1;
+	}
+
+	slog_debug(FILE_LEVEL, "Reading neighbors' address from the sp UDP pipe");
+	rw = fsnp_timed_read(re, sna, sizeof(struct sp_nb_addr), FSNP_TIMEOUT, &err);
+	if (rw < 0) {
+		slog_error(FILE_LEVEL, "Unable to read neighbors' addresses from the pipe");
+		fsnp_log_err_msg(err, false);
+		return -1;
+	}
+
+	return 0;
 }
 
 void exit_sp_network(void)

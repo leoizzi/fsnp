@@ -661,7 +661,6 @@ static void setup_peer_tcp_poll(struct pollfd *fds)
 	fds[PIPE].events = POLLIN | POLLPRI;
 }
 
-#define POLL_ALIVE_TIMEOUT 30000 // ms
 /*
  * Entry point for the thread spawned by 'launch_peer_thread'.
  * Enter a poll loop for respond to a superpeer and check whether the app is
@@ -687,7 +686,7 @@ static void peer_tcp_thread(void *data)
 
 	slog_info(FILE_LEVEL, "Entering the event loop for the peer_tcp_thread");
 	while (!tcp_state.quit_loop) {
-		ret = poll(fds, 2, POLL_ALIVE_TIMEOUT);
+		ret = poll(fds, 2, FSNP_POLL_TIMEOUT);
 		if (ret > 0) {
 			if (fds[PIPE].revents) {
 				pipe_event(fds[PIPE].revents);
@@ -884,7 +883,6 @@ void leave_sp(void)
 	}
 }
 
-#undef POLL_ALIVE_TIMEOUT
 #undef READ_END
 #undef WRITE_END
 #undef SOCK

@@ -1,0 +1,2 @@
+add_executable(fsnp_type_printer fsnp_type_printer.c)
+target_link_libraries(fsnp_type_printer PUBLIC fsnp)

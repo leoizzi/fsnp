@@ -32,6 +32,7 @@
 #include "peer/peer-superpeer.h"
 #include "peer/peer-peer.h"
 #include "peer/file_manager.h"
+#include "peer/superpeer-superpeer.h"
 
 #include "fsnp/fsnp.h"
 
@@ -334,6 +335,12 @@ static void download_handler(void)
 	char filename[FSNP_NAME_MAX];
 	struct fsnp_peer peer;
 
+	if (get_peer_sock() == 0 && !is_superpeer()) {
+		slog_warn(STDOUT_LEVEL, "You have to join a superpeer before downloading"
+		                        " a file");
+		return;
+	}
+
 	ok = request_user_ip_port(&addr);
 	if (!ok) {
 		slog_warn(FILE_LEVEL, "Unable to read peer's address");
@@ -359,11 +366,35 @@ static void download_handler(void)
 	dw_from_peer(&peer, filename);
 }
 
+static void print_known_sp(void)
+{
+	int ret = 0;
+	struct sp_nb_addr sna;
+
+	if (!is_superpeer()) {
+		slog_warn(STDOUT_LEVEL, "You're not a superpeer!");
+		PRINT_PEER;
+		return;
+	}
+
+	memset(&sna, 0, sizeof(struct sp_nb_addr));
+	ret = get_neighbors_addresses(&sna);
+	if (ret < 0) {
+		slog_warn(STDOUT_LEVEL, "An error has occurred while getting the"
+						  " neighbors' addresses");
+		PRINT_PEER;
+		return;
+	}
+
+	printf("\nself:\t\t%s\nprev:\t\t%s\nnext:\t\t%s\nsnd_next:\t%s\n",
+			sna.self, sna.prev, sna.next, sna.snd_next);
+}
 
 static void show_help(void)
 {
 	printf("\n"
 		   "%-10s %-30s\n\n"
+	       "%-10s %-30s\n\n"
 	       "%-10s %-30s\n\n"
 	       "%-10s %-30s\n\n"
 	       "%-10s %-30s\n\n"
@@ -381,8 +412,11 @@ static void show_help(void)
 		                   " executable is located",
 	       "show_download_path", "Show the path of the download directory",
 	       "who_has", "Search inside the network who has a file",
-	       "download", "download a file from a peer",
-	       "quit", "Exit the peer executable");
+	       "download", "Download a file from a peer",
+	       "show_sp", "Show the others superpeers' addresses known by this"
+				      " superpeer. This command works only if this executable"
+		              " is a superpeer itself",
+	       "quit", "Close the peer executable");
 }
 
 /*
@@ -397,6 +431,7 @@ static void parse_msg(const char *msg, size_t n)
 	const char show_download_path[] = "show_download_path\n";
 	const char who_has[] = "who_has\n";
 	const char download[] = "download\n";
+	const char show_sp[] = "show_sp\n";
 	const char help[] = "help\n";
 	const char quit[] = "quit\n";
 
@@ -414,6 +449,8 @@ static void parse_msg(const char *msg, size_t n)
 		who_has_handler();
 	} else if (!strncmp(msg, download, n)) {
 		download_handler();
+	} else if (!strncmp(msg, show_sp, n)) {
+		print_known_sp();
 	} else if (!strncmp(msg, help, n)) {
 		show_help();
 	} else if (!strncmp(msg, quit, n)) {

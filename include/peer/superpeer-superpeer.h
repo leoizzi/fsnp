@@ -51,6 +51,19 @@ int ask_whohas(const sha256_t file_hash, const struct fsnp_peer *requester);
  */
 bool get_prev_addr(struct fsnp_peer *prev);
 
+struct sp_nb_addr {
+	char self[32];
+	char prev[32];
+	char next[32];
+	char snd_next[32];
+};
+
+/*
+ * Ask to the superpeer's thread a copy of all the sp addresses he knows as
+ * string
+ */
+int get_neighbors_addresses(struct sp_nb_addr *sna);
+
 /*
  * Exit the superpeer's overlay network. The socket passed when entered the
  * network will be closed.

@@ -498,7 +498,6 @@ static void is_alive(struct peer_info *info, bool *should_exit)
 	}
 }
 
-#define POLL_ALIVE_TIMEOUT 30000 // ms
 void sp_tcp_thread(void *data)
 {
 	struct peer_info *info = (struct peer_info *)data;
@@ -511,7 +510,7 @@ void sp_tcp_thread(void *data)
 			info->pretty_addr);
 	setup_poll(pollfd, info->pipefd[READ_END], info->sock);
 	while (!should_exit) {
-		ret = poll(pollfd, POLLFD_NUM, POLL_ALIVE_TIMEOUT);
+		ret = poll(pollfd, POLLFD_NUM, FSNP_POLL_TIMEOUT);
 		if (ret > 0) {
 			if (pollfd[PIPE].revents) {
 				pipe_event(pollfd[PIPE].revents, info, &leaving, &should_exit);
@@ -547,7 +546,6 @@ void sp_tcp_thread(void *data)
     */
 }
 
-#undef POLL_ALIVE_TIMEOUT
 #undef READ_END
 #undef WRITE_END
 #undef SOCK

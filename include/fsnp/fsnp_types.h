@@ -99,8 +99,10 @@ enum fsnp_type {
 typedef enum fsnp_type fsnp_type_t;
 #ifdef FSNP_INF_TIMEOUT
 typedef short timeout_t;
+#define FSNP_POLL_TIMEOUT -1
 #else
 typedef uint16_t timeout_t;
+#define FSNP_POLL_TIMEOUT 30000 // 30 s
 #endif
 
 #define FSNP_MAGIC "FSNP"

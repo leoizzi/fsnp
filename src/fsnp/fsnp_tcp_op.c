@@ -156,6 +156,8 @@ ssize_t fsnp_timed_read(int sock, void *buf, size_t bytes, timeout_t timeout,
 			r = fsnp_read(sock, buf, bytes);
 			if (r < 0) {
 				*err = E_ERRNO;
+			} else {
+				*err = E_NOERR;
 			}
 		} else if (revents & POLLHUP) {
 			r = 0;
@@ -196,6 +198,8 @@ ssize_t fsnp_timed_write(int sock, const void *buf, size_t bytes,
 			w = fsnp_write(sock, buf, bytes);
 			if (w < 0) {
 				*err = E_ERRNO;
+			} else {
+				*err = E_NOERR;
 			}
 		} else if (revents & POLLHUP) {
 			w = 0;

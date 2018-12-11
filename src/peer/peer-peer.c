@@ -80,7 +80,7 @@ static bool receive_chunk(const struct client_dw *cd, char buf[DW_CHUNK], size_t
 	ssize_t rt = 0;
 	fsnp_err_t err;
 
-	rt = fsnp_timed_read(cd->sock, buf, DW_CHUNK, 0, &err);
+	rt = fsnp_timed_read(cd->sock, buf, DW_CHUNK, FSNP_TIMEOUT, &err);
 	if (rt < 0) {
 		slog_warn(STDOUT_LEVEL, "An error has occurred while downloading"
 		                        " the file from %s", cd->pretty_addr);
@@ -107,6 +107,7 @@ static int download_file(struct client_dw *cd)
 	size_t rcvd = 0;
 	size_t r = 0;
 
+	slog_info(FILE_LEVEL, "The download is starting");
 	while (rcvd < cd->file_size && ok) {
 		ok = receive_chunk(cd, buf, &r);
 		if (!ok && r != 0) {
@@ -120,6 +121,10 @@ static int download_file(struct client_dw *cd)
 
 		rcvd += r;
 	}
+
+	slog_debug(FILE_LEVEL, "download_file has done. Over %lu bytes to receive,"
+						" %lu were actually received from %s.", cd->file_size,
+						rcvd, cd->pretty_addr);
 
 	if (ok) {
 		return 0;
@@ -209,7 +214,7 @@ static void client_dw_thread(void *data)
 	int ret = 0;
 	fsnp_type_t type;
 
-	sha256(cd->filename, strlen(cd->filename) + 1, cd->file_hash); // FIXME: the +1 is correct?
+	sha256(cd->filename, strlen(cd->filename) + 1, cd->file_hash);
 	stringify_hash(cd->hash_str, cd->file_hash);
 	slog_debug(FILE_LEVEL, "client-dw-thread hash of file %s -> %s",
 			cd->filename, cd->hash_str);
@@ -230,6 +235,7 @@ static void client_dw_thread(void *data)
 		return;
 	}
 
+	slog_info(FILE_LEVEL, "Creating download file %s",cd->filename);
 	cd->fd = create_download_file(cd->filename);
 	if (cd->fd < 0) {
 		slog_warn(FILE_LEVEL, "Unable to create file %s. Aborting the download",
@@ -320,7 +326,7 @@ static bool sr_send_chunk(const struct server_dw *sd, const char *buf, size_t *s
 	ssize_t w = 0;
 	fsnp_err_t err;
 
-	w = fsnp_timed_write(sd->sock, buf, *sz, 0, &err);
+	w = fsnp_timed_write(sd->sock, buf, *sz, FSNP_TIMEOUT, &err);
 	if (err != E_NOERR) {
 		slog_error(FILE_LEVEL, "Unable to send a chunk to %s", sd->pretty_addr);
 		return false;

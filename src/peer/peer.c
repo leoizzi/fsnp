@@ -326,7 +326,12 @@ static void handle_poll_ret(int ret)
 	}
 }
 
-#define POLL_TIMEOUT 10000 // ms
+/*
+ * This poll has a special behavior then the others. It needs to fires the
+ * timeout even when enabling FSNP_INF_TIMEOUT, because its number of file
+ * descriptors can vary anytime and it has to reacts accordingly to this change
+ */
+#define POLL_TIMEOUT 3000 // 3 s
 
 int peer_main(bool localhost)
 {
@@ -416,9 +421,7 @@ int peer_main(bool localhost)
 	return ret;
 }
 
-#undef POLL_TIMEOUT
-
 #undef PEER_POLLFD_NUM
-
+#undef POLL_TIMEOUT
 #undef POLL_STDIN
 #undef POLL_SP_TCP

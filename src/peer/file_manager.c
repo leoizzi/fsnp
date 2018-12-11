@@ -393,7 +393,7 @@ void close_download_file(int fd, char filename[256], sha256_t hash, bool del)
 						  " strerror %s", path, errno, strerror(errno));
 		}
 	} else {
-		add_file_to_table(download.hashtable, filename, strlen(filename) + 1, // FIXME: the +1 is correct?
+		add_file_to_table(download.hashtable, filename, strlen(filename) + 1,
 		                  download.path, hash);
 	}
 }
