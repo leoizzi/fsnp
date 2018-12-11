@@ -66,6 +66,9 @@ int main (int argc, char *argv[])
 			WHOHAS
 	};
 
+	UNUSED(argc);
+	UNUSED(argv);
+
 	for (i = 0; i < sizeof(values) / sizeof(fsnp_type_t); i++) {
 		printf("%s -> %u\n", names[i], values[i]);
 	}
