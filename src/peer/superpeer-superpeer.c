@@ -800,6 +800,12 @@ static void ensure_whohas(struct sp_udp_state *sus,
 		if (!msg && counter >= 4) {
 			slog_warn(FILE_LEVEL, "Unable to send whohas");
 			fsnp_log_err_msg(err, false);
+			if (err == E_TIMEOUT && send_to_next) {
+				rm_dead_sp_from_server(&sus->nb->next);
+				set_next_as_snd_next(sus->nb);
+				send_next(sus, NULL);
+				ensure_next_conn(sus, NULL);
+			}
 			return;
 		} else if (!msg && counter < 4) {
 			fsnp_log_err_msg(err, false);
