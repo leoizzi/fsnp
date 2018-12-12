@@ -101,6 +101,49 @@ static bool receive_chunk(const struct client_dw *cd, char buf[DW_CHUNK], size_t
 #define NSEC_TO_SEC(ns) ((double)(ns) / 1000000000.)
 
 /*
+ * Show on the stdout the status of the download
+ */
+static void show_dw_status(size_t rcvd, size_t tot, size_t diff, double time,
+		const char *filename)
+{
+	char *prfx[] = {
+			"B",
+			"KiB",
+			"MiB",
+			"GiB"
+	};
+	double rc = (double)rcvd;
+	double to = (double)tot;
+	double di = (double)diff;
+	unsigned i = 0;
+	unsigned j = 0;
+	unsigned k = 0;
+
+	while (tot > 1024 > 0 && i < sizeof(prfx)) {
+		tot /= 1024;
+		to /= 1024.;
+		i++;
+	}
+
+	while (rcvd > 1024 && j < sizeof(prfx)) {
+		rcvd /= 1024;
+		rc /= 1024.;
+		j++;
+	}
+
+	while (diff > 1024 && k < sizeof(prfx)) {
+		diff /= 1024;
+		di /= 1024.;
+		k++;
+	}
+
+	di /= time;
+	printf("\rDownload status of %s: %.1lf %s over %.1lf %s at %.1lf %s/s",
+			filename, rc, prfx[j], to, prfx[i], di, prfx[k]);
+	fflush(stdout);
+}
+
+/*
  * Receive a file from a peer
  */
 static int download_file(struct client_dw *cd)
@@ -108,6 +151,7 @@ static int download_file(struct client_dw *cd)
 	char buf[DW_CHUNK];
 	bool ok = true;
 	size_t rcvd = 0;
+	size_t prev_rcvd = 0;
 	size_t r = 0;
 	struct timespec curr;
 	struct timespec last;
@@ -119,9 +163,8 @@ static int download_file(struct client_dw *cd)
 	clock_gettime(CLOCK_MONOTONIC, &last);
 	memcpy(&curr, &last, sizeof(struct timespec));
 	l = (double)last.tv_sec + NSEC_TO_SEC(last.tv_nsec);
-	printf("Downloading %s: %lu bytes downloaded over %lu bytes", cd->filename,
-			0UL, cd->file_size);
-	fflush(stdout);
+	printf("\n");
+	show_dw_status(0, cd->file_size, 0, 0, cd->filename);
 	while (rcvd < cd->file_size && ok) {
 		ok = receive_chunk(cd, buf, &r);
 		if (!ok && r != 0) {
@@ -133,9 +176,8 @@ static int download_file(struct client_dw *cd)
 		clock_gettime(CLOCK_MONOTONIC, &curr);
 		c = (double)curr.tv_sec + NSEC_TO_SEC(curr.tv_nsec);
 		if (c - l > 0.5) {
-			printf("\rDownloading %s: %lu bytes downloaded over %lu bytes",
-					cd->filename, rcvd, cd->file_size);
-			fflush(stdout);
+			show_dw_status(rcvd, cd->file_size, rcvd - prev_rcvd, c-l, cd->filename);
+			prev_rcvd = rcvd;
 			memcpy(&last, &curr, sizeof(struct timespec));
 		}
 
