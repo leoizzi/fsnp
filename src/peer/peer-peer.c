@@ -196,6 +196,7 @@ static int download_file(struct client_dw *cd)
 	} else {
 		printf("\nThe download ended due to an error\n");
 	}
+	
 	PRINT_PEER;
 	slog_debug(FILE_LEVEL, "download_file has done. Over %lu bytes to receive,"
 						" %lu were actually received from %s.", cd->file_size,
