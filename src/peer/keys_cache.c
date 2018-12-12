@@ -115,7 +115,7 @@ static int add_new_key(sha256_t key, const struct fsnp_peer *owner,
 	stringify_hash(sha_str, key);
 	addr.s_addr = htonl(owner->ip);
 	slog_info(FILE_LEVEL, "Added key %s, owner %s:%hu", sha_str,
-			inet_ntoa(addr), owner->port);
+			inet_ntoa(addr), dw_port);
 	list_set_free_value_callback(kc->owners, list_free_callback);
 	memcpy(kc->key, key, sizeof(sha256_t));
 	memcpy(o, owner, sizeof(struct fsnp_peer));
