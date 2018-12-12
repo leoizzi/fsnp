@@ -171,7 +171,7 @@ static int show_sp(const struct fsnp_peer *sp_list, uint8_t num_sp)
 {
 	int i = 0;
 	struct in_addr addr;
-	unsigned int choice = 0;
+	uint8_t choice = 0;
 	bool retry = false;
 
 	if (num_sp == 1) {
@@ -193,7 +193,7 @@ static int show_sp(const struct fsnp_peer *sp_list, uint8_t num_sp)
 		printf("Choice: (insert 0 to abort): ");
 		fflush(stdout);
 		block_stdin();
-		scanf("%u", &choice);
+		scanf("%hhu", &choice);
 		release_stdin();
 		if (choice == 0) {
 			slog_info(FILE_LEVEL, "User chose to not connect");

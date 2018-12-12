@@ -294,6 +294,13 @@ sha256_t *retrieve_all_keys(uint32_t *num)
 #define HT_DOESNT_EXIST 0
 #define HT_EXISTS 1
 
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wimplicit-fallthrough"
+#else
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+#endif
 bool key_exists(sha256_t key)
 {
 	int ret = 0;
@@ -318,6 +325,11 @@ bool key_exists(sha256_t key)
 			return false;
 	}
 }
+#ifdef __clang__
+#pragma clang diagnostic pop
+#else
+#pragma GCC diagnostic pop
+#endif
 
 #undef HT_ERROR
 #undef HT_DOESNT_EXIST
