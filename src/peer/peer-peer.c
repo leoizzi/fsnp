@@ -138,7 +138,7 @@ static void show_dw_status(size_t rcvd, size_t tot, size_t diff, double time,
 		k++;
 	}
 
-	printf("\rDownload status of %s: %.1lf %s over %.1lf %s at %.1lf %s/s",
+	printf("\r%s download status: %.1lf %s of %.1lf %s (%.1lf %s)/s",
 			filename, rc, prfx[j], to, prfx[i], di, prfx[k]);
 	fflush(stdout);
 }
