@@ -185,11 +185,16 @@ static void update_rcvd(struct fsnp_update *update, struct peer_info *info)
 	int ret = 0;
 
 	cache_rm_keys(&info->addr, info->dw_port);
-	ret = cache_add_keys(update->num_files, update->files_hash, &info->addr,
-			info->dw_port);
-	if (ret < 0) {
-		slog_error(FILE_LEVEL, "Unable to add the files of peer %s to the file"
-		                " cache after update", info->pretty_addr);
+	if (update->num_files > 0) {
+		ret = cache_add_keys(update->num_files, update->files_hash, &info->addr,
+		                     info->dw_port);
+		if (ret < 0) {
+			slog_error(FILE_LEVEL,
+			           "Unable to add the files of peer %s to the file"
+			           " cache after update", info->pretty_addr);
+		}
+	} else {
+		slog_info(FILE_LEVEL, "Peer %s is not sharing any file", info->pretty_addr);
 	}
 
 	send_ack(info); // don't care about errors here
@@ -262,7 +267,7 @@ static void read_sock_msg(struct peer_info *info, bool leaving,
 			break;
 
 		case UPDATE:
-			slog_info(FILE_LEVEL, "%Peer s sent an UPDATE msg. Timeouts before "
+			slog_info(FILE_LEVEL, "%Peer %s sent an UPDATE msg. Timeouts before "
 			                      "this: %u", info->pretty_addr, info->timeouts);
 			update_rcvd((struct fsnp_update *)msg, info);
 			info->timeouts = 0;

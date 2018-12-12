@@ -313,7 +313,7 @@ sha256_t *retrieve_all_keys(uint32_t *num)
 
 	list_destroy(sk_list);
 	list_destroy(dk_list);
-	*num = sn;
+	*num = n;
 
 	return keys;
 }

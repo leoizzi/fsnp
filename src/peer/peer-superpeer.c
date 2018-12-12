@@ -363,7 +363,7 @@ void file_res_rcvd(struct fsnp_file_res *file_res)
 	slog_info(FILE_LEVEL, "%hhu peers own the file searched", file_res->num_peers);
 	for (i = 0; i < file_res->num_peers; i++) {
 		addr.s_addr = htonl(file_res->peers[i].ip);
-		printf("Peer %hhu: %s:%hu\n", i, inet_ntoa(addr),
+		printf("Peer %hu: %s:%hu\n", (uint16_t)(i + 1), inet_ntoa(addr),
 				file_res->peers[i].port);
 		slog_info(FILE_LEVEL, "Peer %s:%hu", inet_ntoa(addr),
 				file_res->peers[i].port);
