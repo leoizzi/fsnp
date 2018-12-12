@@ -65,7 +65,7 @@ static bool store_chunk(const struct client_dw *cd, char buf[DW_CHUNK], size_t r
 		PRINT_PEER;
 		return false;
 	} else if (w == 0) {
-		slog_warn(STDOUT_LEVEL, "File %s unexpectedly closed");
+		slog_warn(STDOUT_LEVEL, "File %s unexpectedly closed", cd->filename);
 		PRINT_PEER;
 		return false;
 	} else {
