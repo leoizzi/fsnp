@@ -252,72 +252,6 @@ int key_copy_list_iterator(void *item, size_t idx, void *user)
 	return GO_AHEAD;
 }
 
-sha256_t *retrieve_all_keys(uint32_t *num)
-{
-	sha256_t *keys = NULL;
-	uint32_t sn = 0;
-	uint32_t dn = 0;
-	uint32_t n = 0;
-	linked_list_t *sk_list = NULL;
-	linked_list_t *dk_list = NULL;
-
-	sn = (uint32_t)ht_count(shared.hashtable);
-	dn = (uint32_t)ht_count(download.hashtable);
-	n = sn + dn;
-	if (n == 0) { // there's nothing to share
-		return NULL;
-	}
-
-	slog_debug(FILE_LEVEL, "Retrieving all keys (%u)", n);
-	if (sn > 0) {
-		slog_debug(FILE_LEVEL, "Retrieving the shared keys (%u)", sn);
-		sk_list = ht_get_all_keys(shared.hashtable);
-		if (!sk_list) {
-			slog_warn(FILE_LEVEL, "Unable to retrieve the keys");
-			return NULL;
-		}
-	}
-
-	if (dn > 0) {
-		slog_debug(FILE_LEVEL, "Retrieving the download keys (%u)", dn);
-		dk_list = ht_get_all_keys(download.hashtable);
-		if (!dk_list) {
-			slog_warn(FILE_LEVEL, "Unable to retrieve the keys");
-			if (sk_list) {
-				list_destroy(sk_list);
-			}
-			return NULL;
-		}
-	}
-
-	keys = malloc(sizeof(sha256_t) * n);
-	if (!keys) {
-		slog_error(FILE_LEVEL, "malloc. Error %d", errno);
-		if (sk_list) {
-			list_destroy(sk_list);
-		}
-
-		if (dk_list) {
-			list_destroy(dk_list);
-		}
-		return NULL;
-	}
-
-	if (sk_list) {
-		list_foreach_value(sk_list, key_copy_list_iterator, keys);
-	}
-
-	if (dk_list) {
-		list_foreach_value(dk_list, key_copy_list_iterator, keys + sn);
-	}
-
-	list_destroy(sk_list);
-	list_destroy(dk_list);
-	*num = n;
-
-	return keys;
-}
-
 #define HT_ERROR -1
 #define HT_DOESNT_EXIST 0
 #define HT_EXISTS 1
@@ -598,6 +532,76 @@ struct update_thr_data {
 };
 
 static struct update_thr_data utd;
+
+sha256_t *retrieve_all_keys(uint32_t *num)
+{
+	sha256_t *keys = NULL;
+	uint32_t sn = 0;
+	uint32_t dn = 0;
+	uint32_t n = 0;
+	linked_list_t *sk_list = NULL;
+	linked_list_t *dk_list = NULL;
+
+	sn = (uint32_t)ht_count(shared.hashtable);
+	dn = (uint32_t)ht_count(download.hashtable);
+	n = sn + dn;
+	if (n == 0) { // there's nothing to share
+		return NULL;
+	}
+
+	pthread_mutex_lock(&utd.mtx);
+	slog_debug(FILE_LEVEL, "Retrieving all keys (%u)", n);
+	if (sn > 0) {
+		slog_debug(FILE_LEVEL, "Retrieving the shared keys (%u)", sn);
+		sk_list = ht_get_all_keys(shared.hashtable);
+		if (!sk_list) {
+			slog_warn(FILE_LEVEL, "Unable to retrieve the keys");
+			return NULL;
+		}
+	}
+
+	if (dn > 0) {
+		slog_debug(FILE_LEVEL, "Retrieving the download keys (%u)", dn);
+		dk_list = ht_get_all_keys(download.hashtable);
+		if (!dk_list) {
+			slog_warn(FILE_LEVEL, "Unable to retrieve the keys");
+			if (sk_list) {
+				list_destroy(sk_list);
+			}
+			return NULL;
+		}
+	}
+
+	utd.changes = false;
+	pthread_mutex_unlock(&utd.mtx);
+
+	keys = malloc(sizeof(sha256_t) * n);
+	if (!keys) {
+		slog_error(FILE_LEVEL, "malloc. Error %d", errno);
+		if (sk_list) {
+			list_destroy(sk_list);
+		}
+
+		if (dk_list) {
+			list_destroy(dk_list);
+		}
+		return NULL;
+	}
+
+	if (sk_list) {
+		list_foreach_value(sk_list, key_copy_list_iterator, keys);
+	}
+
+	if (dk_list) {
+		list_foreach_value(dk_list, key_copy_list_iterator, keys + sn);
+	}
+
+	list_destroy(sk_list);
+	list_destroy(dk_list);
+	*num = n;
+
+	return keys;
+}
 
 #define SEC_TO_SLEEP 15
 
