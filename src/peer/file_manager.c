@@ -644,7 +644,7 @@ static void update_thread(void *data)
 		dw_n = (uint32_t)ht_count(download.hashtable);
 		if (!changes && dw_n != utd.dw_num) {
 			slog_debug(FILE_LEVEL, "Changes found in the download_dir. "
-						  " dw_n = %u, utd.dw_num = %u", dw_n, utd.dw_num);
+						  "dw_n = %u, utd.dw_num = %u", dw_n, utd.dw_num);
 			changes = true;
 		}
 
