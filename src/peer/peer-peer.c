@@ -191,7 +191,11 @@ static int download_file(struct client_dw *cd)
 	clock_gettime(CLOCK_MONOTONIC, &curr);
 	c = (double)curr.tv_sec + NSEC_TO_SEC(curr.tv_nsec);
 	show_dw_status(rcvd, cd->file_size, rcvd - prev_rcvd, c-l, cd->filename);
-	printf("\n");
+	if (rcvd == cd->file_size) {
+		printf("\nDownload completed\n");
+	} else {
+		printf("\nThe download ended due to an error\n");
+	}
 	PRINT_PEER;
 	slog_debug(FILE_LEVEL, "download_file has done. Over %lu bytes to receive,"
 						" %lu were actually received from %s.", cd->file_size,
