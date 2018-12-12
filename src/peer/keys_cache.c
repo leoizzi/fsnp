@@ -202,7 +202,7 @@ static int add_to_key(struct key_cached *kc, struct fsnp_peer *owner,
 
 
 	memcpy(o, owner, sizeof(struct fsnp_peer));
-	owner->port = dw_port;
+	o->port = dw_port;
 	slog_info(FILE_LEVEL, "Adding to %s's owners %s:%hu", sha_str, inet_ntoa(addr),
 			owner->port);
 	ret = list_push_value(kc->owners, o);
