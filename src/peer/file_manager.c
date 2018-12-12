@@ -580,6 +580,7 @@ struct update_thr_data {
 	pthread_cond_t cond;
 	bool run;
 	bool changes;
+	bool destroy;
 	uint32_t dw_num;
 	/*
 	 * dw_num is the number of items inside the download hashtable. It's used to
@@ -602,7 +603,7 @@ static struct update_thr_data utd;
 
 /*
  * Entry point for the update thread. Every 30 seconds go through all the
- * entries in the shared_dir for checking if something has changed.
+ * entries in the directories for checking if something has changed.
  */
 static void update_thread(void *data)
 {
@@ -661,8 +662,10 @@ static void update_thread(void *data)
 		}
 	}
 
-	pthread_mutex_destroy(&utd.mtx);
-	pthread_cond_destroy(&utd.cond);
+	if (utd.destroy) {
+		pthread_mutex_destroy(&utd.mtx);
+		pthread_cond_destroy(&utd.cond);
+	}
 }
 
 /*
@@ -682,21 +685,28 @@ static void launch_update_thread(bool first_launch)
 	}
 
 	utd.run = false;
-	ret = pthread_mutex_init(&utd.mtx, NULL);
-	if (ret) {
-		slog_error(FILE_LEVEL, "Unable to initialize the mutex. Error %d", ret);
-		slog_warn(STDOUT_LEVEL, "%s", update_err);
-		PRINT_PEER;
-		return;
-	}
+	if (first_launch) {
+		ret = pthread_mutex_init(&utd.mtx, NULL);
+		if (ret) {
+			slog_error(FILE_LEVEL, "Unable to initialize the mutex. Error %d",
+			           ret);
+			slog_warn(STDOUT_LEVEL, "%s", update_err);
+			PRINT_PEER;
+			return;
+		}
 
-	ret = pthread_cond_init(&utd.cond, NULL);
-	if (ret) {
-		pthread_mutex_destroy(&utd.mtx);
-		slog_error(FILE_LEVEL, "Unable to initialize the condition. Error %d",ret);
-		slog_warn(STDOUT_LEVEL, "%s", update_err);
-		PRINT_PEER;
-		return;
+		ret = pthread_cond_init(&utd.cond, NULL);
+		if (ret) {
+			pthread_mutex_destroy(&utd.mtx);
+			slog_error(FILE_LEVEL,
+			           "Unable to initialize the condition. Error %d", ret);
+			slog_warn(STDOUT_LEVEL, "%s", update_err);
+			PRINT_PEER;
+			return;
+		}
+
+		utd.destroy = false;
+		utd.dw_num = (uint32_t)ht_count(download.hashtable);
 	}
 
 	ret = start_new_thread(update_thread, NULL, "update-thread");
@@ -711,13 +721,17 @@ static void launch_update_thread(bool first_launch)
 	utd.run = true; // if we get here everything went ok with the update thread
 }
 
-static void stop_update_thread(void)
+static void stop_update_thread(bool quit_ex)
 {
 	if (utd.run) {
 		slog_info(FILE_LEVEL, "Telling to update_thread to stop");
 		// don't care about errors here
 		pthread_mutex_lock(&utd.mtx);
 		utd.run = false;
+		if (quit_ex) {
+			utd.destroy = true;
+		}
+
 		pthread_cond_signal(&utd.cond);
 		pthread_mutex_unlock(&utd.mtx);
 	}
@@ -753,13 +767,12 @@ bool check_for_updates(void)
 int set_shared_dir(const char *path)
 {
 	int ret = 0;
-	static bool first_launch = true;
 
 	if (!path) {
 		return -1;
 	}
 
-	stop_update_thread();
+	stop_update_thread(false);
 	if (shared.is_set) {
 		ht_clear(shared.hashtable);
 	}
@@ -778,10 +791,10 @@ int set_shared_dir(const char *path)
 
 	slog_info(STDOUT_LEVEL, "All the files were parsed. You're sharing %lu "
 	                        "files.", ht_count(shared.hashtable));
+	sleep(1);
 	slog_info(STDOUT_LEVEL, "New shared directory: \"%s\"", shared.path);
 	PRINT_PEER;
-	launch_update_thread(first_launch);
-	first_launch = false;
+	launch_update_thread(false);
 	shared.is_set = true;
 
 	return 0;
@@ -821,13 +834,14 @@ int init_file_manager(void)
 	set_download_dir(".\0"); // set the standard download path
 	download.is_set = true;
 
+	launch_update_thread(true);
 	slog_info(FILE_LEVEL, "init_file_manager initialized");
 	return 0;
 }
 
 void close_file_manager(void)
 {
-	stop_update_thread();
+	stop_update_thread(true);
 	ht_destroy(shared.hashtable);
 	ht_destroy(download.hashtable);
 	slog_info(FILE_LEVEL, "file_manager closed");
