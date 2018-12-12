@@ -138,7 +138,7 @@ static void show_dw_status(size_t rcvd, size_t tot, size_t diff, double time,
 		k++;
 	}
 
-	printf("\r%s download status: %.1lf %s of %.1lf %s (%.1lf %s)/s",
+	printf("\r%s download status: %.1lf %s of %.1lf %s (%.1lf %s/s)",
 			filename, rc, prfx[j], to, prfx[i], di, prfx[k]);
 	fflush(stdout);
 }
@@ -196,7 +196,7 @@ static int download_file(struct client_dw *cd)
 	} else {
 		printf("\nThe download ended due to an error\n");
 	}
-	
+
 	PRINT_PEER;
 	slog_debug(FILE_LEVEL, "download_file has done. Over %lu bytes to receive,"
 						" %lu were actually received from %s.", cd->file_size,
