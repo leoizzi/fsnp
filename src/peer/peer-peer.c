@@ -98,7 +98,7 @@ static bool receive_chunk(const struct client_dw *cd, char buf[DW_CHUNK], size_t
 	}
 }
 
-#define NSEC_TO_SEC(ns) ((double)(ns) / 1000000000.)
+#define NSEC_TO_SEC(ns) ((double)(ns) * 1000000000.)
 
 /*
  * Show on the stdout the status of the download
