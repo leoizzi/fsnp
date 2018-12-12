@@ -98,7 +98,7 @@ static bool receive_chunk(const struct client_dw *cd, char buf[DW_CHUNK], size_t
 	}
 }
 
-#define NSEC_TO_SEC(ns) ((double)(ns) * 1000000000.)
+#define NSEC_TO_SEC(ns) ((double)(ns) / 1000000000.)
 
 /*
  * Show on the stdout the status of the download
@@ -119,7 +119,7 @@ static void show_dw_status(size_t rcvd, size_t tot, size_t diff, double time,
 	unsigned j = 0;
 	unsigned k = 0;
 
-	while (to > 1024. > 0 && i < sizeof(prfx)) {
+	while (to > 1024. && i < sizeof(prfx)) {
 		to /= 1024.;
 		i++;
 	}
@@ -129,7 +129,10 @@ static void show_dw_status(size_t rcvd, size_t tot, size_t diff, double time,
 		j++;
 	}
 
-	di /= time;
+	if (time > 0) {
+		di /= time;
+	}
+
 	while (di > 1024. && k < sizeof(prfx)) {
 		di /= 1024.;
 		k++;
@@ -176,6 +179,7 @@ static int download_file(struct client_dw *cd)
 			show_dw_status(rcvd, cd->file_size, rcvd - prev_rcvd, c-l, cd->filename);
 			prev_rcvd = rcvd;
 			memcpy(&last, &curr, sizeof(struct timespec));
+			l = c;
 		}
 
 		ok = store_chunk(cd, buf, r);
@@ -184,6 +188,9 @@ static int download_file(struct client_dw *cd)
 		}
 	}
 
+	clock_gettime(CLOCK_MONOTONIC, &curr);
+	c = (double)curr.tv_sec + NSEC_TO_SEC(curr.tv_nsec);
+	show_dw_status(rcvd, cd->file_size, rcvd - prev_rcvd, c-l, cd->filename);
 	printf("\n");
 	PRINT_PEER;
 	slog_debug(FILE_LEVEL, "download_file has done. Over %lu bytes to receive,"
