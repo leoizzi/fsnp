@@ -27,6 +27,7 @@
 #include "peer/peer-peer.h"
 #include "peer/thread_manager.h"
 #include "peer/file_manager.h"
+#include "peer/stdin.h"
 
 #include "fsnp/fsnp.h"
 
@@ -97,6 +98,8 @@ static bool receive_chunk(const struct client_dw *cd, char buf[DW_CHUNK], size_t
 	}
 }
 
+#define NSEC_TO_SEC(ns) ((double)(ns) / 1000000000.)
+
 /*
  * Receive a file from a peer
  */
@@ -106,32 +109,57 @@ static int download_file(struct client_dw *cd)
 	bool ok = true;
 	size_t rcvd = 0;
 	size_t r = 0;
+	struct timespec curr;
+	struct timespec last;
+	double c = 0;
+	double l = 0;
 
 	slog_info(FILE_LEVEL, "The download is starting");
+	block_stdin();
+	clock_gettime(CLOCK_MONOTONIC, &last);
+	memcpy(&curr, &last, sizeof(struct timespec));
+	l = (double)last.tv_sec + NSEC_TO_SEC(last.tv_nsec);
+	printf("Downloading %s: %lu bytes downloaded over %lu bytes", cd->filename,
+			0UL, cd->file_size);
+	fflush(stdout);
 	while (rcvd < cd->file_size && ok) {
 		ok = receive_chunk(cd, buf, &r);
 		if (!ok && r != 0) {
 			break;
 		}
 
+		rcvd += r;
+
+		clock_gettime(CLOCK_MONOTONIC, &curr);
+		c = (double)curr.tv_sec + NSEC_TO_SEC(curr.tv_nsec);
+		if (c - l > 0.5) {
+			printf("\rDownloading %s: %lu bytes downloaded over %lu bytes",
+					cd->filename, rcvd, cd->file_size);
+			fflush(stdout);
+			memcpy(&last, &curr, sizeof(struct timespec));
+		}
+
 		ok = store_chunk(cd, buf, r);
 		if (!ok) {
 			break;
 		}
-
-		rcvd += r;
 	}
 
+	printf("\n");
+	PRINT_PEER;
 	slog_debug(FILE_LEVEL, "download_file has done. Over %lu bytes to receive,"
 						" %lu were actually received from %s.", cd->file_size,
 						rcvd, cd->pretty_addr);
 
+	release_stdin();
 	if (ok) {
 		return 0;
 	} else {
 		return -1;
 	}
 }
+
+#undef NSEC_TO_SEC
 
 /*
  * Wait for the peer response and return its type
