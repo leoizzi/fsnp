@@ -294,6 +294,7 @@ sha256_t *retrieve_all_keys(uint32_t *num)
 #define HT_DOESNT_EXIST 0
 #define HT_EXISTS 1
 
+// The warning is disabled since the fallthrough is wanted
 #ifdef __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wimplicit-fallthrough"
