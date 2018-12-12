@@ -119,25 +119,22 @@ static void show_dw_status(size_t rcvd, size_t tot, size_t diff, double time,
 	unsigned j = 0;
 	unsigned k = 0;
 
-	while (tot > 1024 > 0 && i < sizeof(prfx)) {
-		tot /= 1024;
+	while (to > 1024. > 0 && i < sizeof(prfx)) {
 		to /= 1024.;
 		i++;
 	}
 
-	while (rcvd > 1024 && j < sizeof(prfx)) {
-		rcvd /= 1024;
+	while (rc > 1024. && j < sizeof(prfx)) {
 		rc /= 1024.;
 		j++;
 	}
 
-	while (diff > 1024 && k < sizeof(prfx)) {
-		diff /= 1024;
+	di /= time;
+	while (di > 1024. && k < sizeof(prfx)) {
 		di /= 1024.;
 		k++;
 	}
 
-	di /= time;
 	printf("\rDownload status of %s: %.1lf %s over %.1lf %s at %.1lf %s/s",
 			filename, rc, prfx[j], to, prfx[i], di, prfx[k]);
 	fflush(stdout);
