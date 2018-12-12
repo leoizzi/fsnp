@@ -69,6 +69,13 @@ sha256_t *retrieve_all_keys(uint32_t *num);
 bool key_exists(sha256_t key);
 
 /*
+ * Delete 'key' from a hashtable.
+ * If dw is true the key will be deleted from the download hashtable, otherwise
+ * will be deleted from the shared hashtable
+ */
+void delete_key(sha256_t key);
+
+/*
  * Return the size of the file associated to key
  */
 size_t get_file_size(sha256_t key);

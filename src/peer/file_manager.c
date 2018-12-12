@@ -255,37 +255,65 @@ int key_copy_list_iterator(void *item, size_t idx, void *user)
 sha256_t *retrieve_all_keys(uint32_t *num)
 {
 	sha256_t *keys = NULL;
+	uint32_t sn = 0;
+	uint32_t dn = 0;
 	uint32_t n = 0;
-	linked_list_t *k_list = NULL;
+	linked_list_t *sk_list = NULL;
+	linked_list_t *dk_list = NULL;
 
-	if (!shared_dir_is_set()) { // there's nothing!
-		return NULL;
-	}
-
-	n = (uint32_t)ht_count(shared.hashtable);
-
-	if (n == 0) { // again, there's nothing to share
+	sn = (uint32_t)ht_count(shared.hashtable);
+	dn = (uint32_t)ht_count(download.hashtable);
+	n = sn + dn;
+	if (n == 0) { // there's nothing to share
 		return NULL;
 	}
 
 	slog_debug(FILE_LEVEL, "Retrieving all keys (%u)", n);
-	k_list = ht_get_all_keys(shared.hashtable);
-	if (!k_list) {
-		slog_warn(FILE_LEVEL, "Unable to retrieve the keys");
-		return NULL;
+	if (sn > 0) {
+		slog_debug(FILE_LEVEL, "Retrieving the shared keys (%u)", sn);
+		sk_list = ht_get_all_keys(shared.hashtable);
+		if (!sk_list) {
+			slog_warn(FILE_LEVEL, "Unable to retrieve the keys");
+			return NULL;
+		}
+	}
+
+	if (dn > 0) {
+		slog_debug(FILE_LEVEL, "Retrieving the download keys (%u)", dn);
+		dk_list = ht_get_all_keys(download.hashtable);
+		if (!dk_list) {
+			slog_warn(FILE_LEVEL, "Unable to retrieve the keys");
+			if (sk_list) {
+				list_destroy(sk_list);
+			}
+			return NULL;
+		}
 	}
 
 	keys = malloc(sizeof(sha256_t) * n);
 	if (!keys) {
 		slog_error(FILE_LEVEL, "malloc. Error %d", errno);
-		list_destroy(k_list);
+		if (sk_list) {
+			list_destroy(sk_list);
+		}
+
+		if (dk_list) {
+			list_destroy(dk_list);
+		}
 		return NULL;
 	}
 
-	list_foreach_value(k_list, key_copy_list_iterator, keys);
-	list_destroy(k_list);
+	if (sk_list) {
+		list_foreach_value(sk_list, key_copy_list_iterator, keys);
+	}
 
-	*num = n;
+	if (dk_list) {
+		list_foreach_value(dk_list, key_copy_list_iterator, keys + sn);
+	}
+
+	list_destroy(sk_list);
+	list_destroy(dk_list);
+	*num = sn;
 
 	return keys;
 }
@@ -302,15 +330,15 @@ sha256_t *retrieve_all_keys(uint32_t *num)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
 #endif
-bool key_exists(sha256_t key)
+
+/*
+ * Look for a key inside a hashtable
+ */
+static bool key_exists_into_hashtable(hashtable_t *ht, sha256_t key)
 {
 	int ret = 0;
 
-	if (!shared_dir_is_set()) {
-		return false;
-	}
-
-	ret = ht_exists(shared.hashtable, key, sizeof(sha256_t));
+	ret = ht_exists(ht, key, sizeof(sha256_t));
 	switch (ret) {
 		case HT_ERROR:
 			slog_error(FILE_LEVEL, "ht_exists has returned -1");
@@ -322,15 +350,53 @@ bool key_exists(sha256_t key)
 
 		default:
 			slog_error(FILE_LEVEL, "%d is an unexpected return value from"
-						  " ht_exists", ret);
+			                       " ht_exists", ret);
 			return false;
 	}
+}
+
+bool key_exists(sha256_t key)
+{
+	bool res = false;
+
+	if (shared_dir_is_set()) {
+		res = key_exists_into_hashtable(shared.hashtable, key);
+		if (res) {
+			return true;
+		}
+	}
+
+	res = key_exists_into_hashtable(download.hashtable, key);
+	return res;
 }
 #ifdef __clang__
 #pragma clang diagnostic pop
 #else
 #pragma GCC diagnostic pop
 #endif
+
+void delete_key(sha256_t key)
+{
+	int ret = 0;
+	char *d_str = "download";
+	char *s_str = "shared";
+	char *s = NULL;
+	char key_str[SHA256_STR_BYTES];
+
+	if (key_exists_into_hashtable(download.hashtable, key)) {
+		ret = ht_delete(download.hashtable, key, sizeof(sha256_t), NULL, NULL);
+		s = d_str;
+	} else {
+		ret = ht_delete(shared.hashtable, key, sizeof(sha256_t), NULL, NULL);
+		s = s_str;
+	}
+
+	if (ret < 0) {
+		stringify_hash(key_str, key);
+		slog_error(FILE_LEVEL, "Unable to download key %s from %s hashtable",
+				key_str, s);
+	}
+}
 
 #undef HT_ERROR
 #undef HT_DOESNT_EXIST
@@ -359,6 +425,30 @@ size_t get_file_size(sha256_t key)
 	return size;
 }
 
+/*
+ * Examinate errno value to detect if the file that was tried to open doesn't
+ * exists or can't be opened for any reason.
+ */
+static bool check_if_file_is_valid(void)
+{
+	switch (errno) {
+		case EACCES:
+		case EFAULT:
+		case EISDIR:
+		case ENAMETOOLONG:
+		case ENOENT:
+		case ENOSPC:
+		case EDQUOT:
+		case ENOTDIR:
+		case EOVERFLOW:
+		case EBADF:
+			return true;
+
+		default:
+			return false;
+	}
+}
+
 int get_file_desc(sha256_t key, bool read, char filename[FSNP_NAME_MAX])
 {
 	int fd = 0;
@@ -368,7 +458,10 @@ int get_file_desc(sha256_t key, bool read, char filename[FSNP_NAME_MAX])
 	if (read) {
 		entry = ht_get(shared.hashtable, key, sizeof(sha256_t), NULL);
 		if (!entry) {
-			return -1;
+			entry = ht_get(download.hashtable, key, sizeof(sha256_t), NULL);
+			if (!entry) {
+				return -1;
+			}
 		}
 
 		snprintf(path, PATH_MAX, "%s/%s", entry->path, entry->name);
@@ -381,6 +474,9 @@ int get_file_desc(sha256_t key, bool read, char filename[FSNP_NAME_MAX])
 	if (fd < 0) {
 		slog_error(FILE_LEVEL, "Error while opening %s. errno %d, strerror: %s",
 		           path, errno, strerror(errno));
+		if (check_if_file_is_valid()) {
+			delete_key(key);
+		}
 		return -1;
 	}
 
@@ -484,6 +580,20 @@ struct update_thr_data {
 	pthread_cond_t cond;
 	bool run;
 	bool changes;
+	uint32_t dw_num;
+	/*
+	 * dw_num is the number of items inside the download hashtable. It's used to
+	 * detect changes in that hashtable since using parse_dir would add also
+	 * items that weren't downloaded to it.
+	 *
+	 * For example, if the download_dir is the current working directory
+	 * parse_dir would add also the peer executable to the download.hashtable,
+	 * which is wrong. That's why it's used the numbers of items instead.
+	 *
+	 * B.T.W it's ok to use it also because the download dir is updated by the
+	 * peer itself when it find out that a file has been deleted or has been
+	 * added
+	 */
 };
 
 static struct update_thr_data utd;
@@ -500,6 +610,7 @@ static void update_thread(void *data)
 	struct timeval tod;
 	int ret = 0;
 	bool changes = false;
+	uint32_t dw_n = 0;
 
 	UNUSED(data);
 
@@ -529,6 +640,12 @@ static void update_thread(void *data)
 		}
 
 		changes = update_file_manager();
+		dw_n = (uint32_t)ht_count(download.hashtable);
+		if (!changes && dw_n != utd.dw_num) {
+			changes = true;
+		}
+
+		utd.dw_num = dw_n;
 		/*
 		 * If utd.changes is false is ok to set it to changes. If it's true
 		 * no one checked the field before and it would be wrong set it to
