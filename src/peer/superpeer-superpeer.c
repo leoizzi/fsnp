@@ -693,10 +693,15 @@ static void add_pending(linked_list_t *list, struct pending_msg *pm)
 /*
  * Add a next pending_msg to the list
  */
-static void add_pending_next(linked_list_t *list, const struct fsnp_peer *sp,
+static void add_pending_next(struct sp_udp_state *sus,
+                             const struct fsnp_peer *sp,
                              const struct fsnp_peer *old_next)
 {
 	struct pending_msg *pm = NULL;
+
+	if (cmp_next_against_self(sus->nb)) {
+		return;
+	}
 
 	pm = malloc(sizeof(struct pending_msg));
 	if (!pm) {
@@ -714,16 +719,24 @@ static void add_pending_next(linked_list_t *list, const struct fsnp_peer *sp,
 		memset(&pm->pfd.old_peer, 0, sizeof(struct fsnp_peer));
 	}
 
-	add_pending(list, pm);
+	add_pending(sus->pending_msgs, pm);
 }
 
 /*
  * Add a whohas pending_msg to the list
  */
-static void add_pending_whohas(linked_list_t *list, const struct fsnp_peer *sp,
-                               const struct fsnp_whohas *whohas, bool send_to_next)
+static void add_pending_whohas(struct sp_udp_state *sus,
+                               const struct fsnp_peer *sp,
+                               const struct fsnp_whohas *whohas,
+                               bool send_to_next)
 {
 	struct pending_msg *pm = NULL;
+
+	if (send_to_next) {
+		if (cmp_next_against_self(sus->nb)) {
+			return;
+		}
+	}
 
 	pm = malloc(sizeof(struct pending_msg));
 	if (!pm) {
@@ -737,7 +750,7 @@ static void add_pending_whohas(linked_list_t *list, const struct fsnp_peer *sp,
 	pm->f.whohas = send_whohas;
 	memcpy(&pm->pfd.pw.whohas, whohas, sizeof(struct fsnp_whohas));
 	pm->pfd.pw.send_to_next = send_to_next;
-	add_pending(list, pm);
+	add_pending(sus->pending_msgs, pm);
 }
 
 /*
@@ -943,7 +956,7 @@ static void next_msg_rcvd(struct sp_udp_state *sus, const struct fsnp_next *next
 		set_next(sus->nb, &next->old_next);
 		update_timespec(&sus->last);
 		send_next(sus, NULL);
-		add_pending_next(sus->pending_msgs, &sus->nb->next, NULL);
+		add_pending_next(sus, &sus->nb->next, NULL);
 	}
 
 	set_prev(sus->nb, &sender->addr);
@@ -964,7 +977,7 @@ static void promoted_msg_rcvd(struct sp_udp_state *sus,
 	set_next(sus->nb, &sender->addr);
 	update_timespec(&sus->last);
 	send_next(sus, &old_next);
-	add_pending_next(sus->pending_msgs, &sus->nb->next, &old_next);
+	add_pending_next(sus, &sus->nb->next, &old_next);
 }
 
 /*
@@ -1058,7 +1071,7 @@ static void whohas_msg_rcvd(struct sp_udp_state *sus,
 	if (n == 0) { // just send the message to the next
 		send_ack(sus, sender);
 		send_whohas(sus, whohas, send_to_next);
-		add_pending_whohas(sus->pending_msgs, &sus->nb->next, whohas, send_to_next);
+		add_pending_whohas(sus, &sus->nb->next, whohas, send_to_next);
 		return;
 	}
 
@@ -1078,9 +1091,9 @@ static void whohas_msg_rcvd(struct sp_udp_state *sus,
 	send_ack(sus, sender);
 	send_whohas(sus, whohas, send_to_next);
 	if (send_to_next) {
-		add_pending_whohas(sus->pending_msgs, &sus->nb->next, whohas, send_to_next);
+		add_pending_whohas(sus, &sus->nb->next, whohas, send_to_next);
 	} else {
-		add_pending_whohas(sus->pending_msgs, &whohas->sp, whohas, send_to_next);
+		add_pending_whohas(sus, &whohas->sp, whohas, send_to_next);
 	}
 }
 
@@ -1099,7 +1112,7 @@ static void leave_msg_rcvd(struct sp_udp_state *sus,
         set_next_as_snd_next(sus->nb);
         update_timespec(&sus->last);
         send_next(sus, NULL);
-        add_pending_next(sus->pending_msgs, &sus->nb->next, NULL);
+        add_pending_next(sus, &sus->nb->next, NULL);
         fsnp_init_whosnext(&whosnext, NULL);
         s.addr = sus->nb->next;
         memcpy(s.pretty_addr, sus->nb->next_pretty, sizeof(char) * 32);
@@ -1141,6 +1154,7 @@ int is_pending_iterator(void *item, size_t idx, void *user)
 		return GO_AHEAD;
 	}
 
+	slog_debug(FILE_LEVEL, "The message received was pending. Removing it");
 	return REMOVE_AND_STOP;
 }
 
@@ -1331,7 +1345,7 @@ static void pipe_whohas_rcvd(struct sp_udp_state *sus)
 		}
 
 		send_whohas(sus, &whohas, true);
-		add_pending_whohas(sus->pending_msgs, &sus->nb->next, &whohas, true);
+		add_pending_whohas(sus, &sus->nb->next, &whohas, true);
 	}
 }
 
@@ -1481,7 +1495,7 @@ static void check_if_next_alive(struct sp_udp_state *sus)
 		case INVALIDATED_YES_SND:
 			rm_dead_sp_from_server(&old_next);
 			send_next(sus, NULL);
-			add_pending_next(sus->pending_msgs, &sus->nb->next, NULL);
+			add_pending_next(sus, &sus->nb->next, NULL);
 			break;
 
 		default:
@@ -1611,10 +1625,10 @@ static void handle_pm_fail(struct sp_udp_state *sus, struct pending_msg *pm)
 				set_next_as_snd_next(sus->nb);
 				if (pm->pfd.old_peer.ip == 0 && pm->pfd.old_peer.port == 0) {
 					pm->f.next(sus, NULL);
-					add_pending_next(sus->pending_msgs, &sus->nb->next, NULL);
+					add_pending_next(sus, &sus->nb->next, NULL);
 				} else {
 					pm->f.next(sus, &pm->pfd.old_peer);
-					add_pending_next(sus->pending_msgs, &sus->nb->next,
+					add_pending_next(sus, &sus->nb->next,
 							&pm->pfd.old_peer);
 				}
 			} else {
@@ -1631,7 +1645,7 @@ static void handle_pm_fail(struct sp_udp_state *sus, struct pending_msg *pm)
 				rm_dead_sp_from_server(&sus->nb->next);
 				set_next_as_snd_next(sus->nb);
 				send_next(sus, NULL);
-				add_pending_next(sus->pending_msgs, &sus->nb->next, NULL);
+				add_pending_next(sus, &sus->nb->next, NULL);
 			}
 
 			break;
@@ -1824,10 +1838,22 @@ int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n)
 		return -1;
 	}
 
+	slog_info(FILE_LEVEL, "Initializing pending_msgs linklist");
+	sus->pending_msgs = list_create();
+	if (!sus->pending_msgs) {
+		slog_error(FILE_LEVEL, "Unable to create pending_msgs linklist");
+		ht_destroy(sus->reqs);
+		free(sus->nb);
+		free(sus);
+		return -1;
+	}
+
+	list_set_free_value_callback(sus->pending_msgs, free_pending_msg);
 	slog_info(FILE_LEVEL, "Creating superpeer's pipe");
 	ret = pipe(sus->r_pipe);
 	if (ret < 0) {
 		slog_error(FILE_LEVEL, "Pipe error %d", errno);
+		list_destroy(sus->pending_msgs);
 		ht_destroy(sus->reqs);
 		free(sus->nb);
 		free(sus);
@@ -1837,6 +1863,7 @@ int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n)
 	ret = pipe(sus->w_pipe);
 	if (ret < 0) {
 		slog_error(FILE_LEVEL, "Pipe error %d", errno);
+		list_destroy(sus->pending_msgs);
 		ht_destroy(sus->reqs);
 		free(sus->nb);
 		free(sus);
@@ -1849,6 +1876,7 @@ int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n)
 	ret = pthread_mutex_init(&stp.mtx, NULL);
 	if (ret < 0) {
 		slog_error(FILE_LEVEL, "pthread_mutex_init error %d", ret);
+		list_destroy(sus->pending_msgs);
 		ht_destroy(sus->reqs);
 		close(sus->r_pipe[READ_END]);
 		close(sus->r_pipe[WRITE_END]);
@@ -1893,6 +1921,7 @@ int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n)
 
 		default:
 			slog_error(FILE_LEVEL, "Wrong parameter: n can't be %u", n);
+			list_destroy(sus->pending_msgs);
 			ht_destroy(sus->reqs);
 			close(sus->r_pipe[READ_END]);
 			close(sus->r_pipe[WRITE_END]);
@@ -1909,6 +1938,7 @@ int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n)
 	ret = start_new_thread(sp_udp_thread, sus, "sp-udp-thread");
 	if (ret < 0) {
 		sus->sock = 0;
+		list_destroy(sus->pending_msgs);
 		ht_destroy(sus->reqs);
 		close(sus->r_pipe[READ_END]);
 		close(sus->r_pipe[WRITE_END]);
