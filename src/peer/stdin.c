@@ -404,11 +404,11 @@ static void print_peer_info(void)
 	in_port_t dw_port = get_dw_port();
 
 	ip.s_addr = htonl(get_peer_ip());
-	printf("IP address: %s\tDownload port: %hu", inet_ntoa(ip), dw_port);
+	printf("IP address: %s\nDownload port: %hu\n", inet_ntoa(ip), dw_port);
 	if (is_superpeer()) {
 		udp_sp_port = get_udp_sp_port();
 		tcp_sp_port = get_tcp_sp_port();
-		printf("\tSuperpeer UDP port: %hu\tSuperpeer TCP port: %hu\n",
+		printf("Superpeer UDP port: %hu\nSuperpeer TCP port: %hu\n",
 				udp_sp_port, tcp_sp_port);
 	}
 }
@@ -416,16 +416,16 @@ static void print_peer_info(void)
 static void show_help(void)
 {
 	printf("\n"
-		   "%-10s %-30s\n\n"
-	       "%-10s %-30s\n\n"
-	       "%-10s %-30s\n\n"
-	       "%-10s %-30s\n\n"
-	       "%-10s %-30s\n\n"
-	       "%-10s %-30s\n\n"
-	       "%-10s %-30s\n\n"
-	       "%-10s %-30s\n\n"
-	       "%-10s %-30s\n\n"
-	       "%-10s %-30s\n",
+		   "%-20s %-30s\n\n"
+	       "%-20s %-30s\n\n"
+	       "%-20s %-30s\n\n"
+	       "%-20s %-30s\n\n"
+	       "%-20s %-30s\n\n"
+	       "%-20s %-30s\n\n"
+	       "%-20s %-30s\n\n"
+	       "%-20s %-30s\n\n"
+	       "%-20s %-30s\n\n"
+	       "%-20s %-30s\n",
 	       "query_sp", "Contact the bootstrap server to get a list of superpeer",
 	       "join_sp", "Join a superpeer",
 	       "shared_dir", "Set the directory where are located the file to share."
