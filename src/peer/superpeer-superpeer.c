@@ -1649,12 +1649,6 @@ static void handle_pm_fail(struct sp_udp_state *sus, struct pending_msg *pm)
 					add_pending_next(sus, &sus->nb->next,
 							&pm->pfd.old_peer);
 				}
-			} else {
-				unset_all(sus->nb);
-				prepare_exit_sp_mode();
-				exit_sp_mode();
-				sus->should_exit = true;
-				sus->next_validated = false;
 			}
 
 			rm_dead_sp_from_server(&pm->sp);
