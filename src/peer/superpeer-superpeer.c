@@ -1486,7 +1486,7 @@ static void check_if_next_alive(struct sp_udp_state *sus)
 	struct fsnp_whosnext whosnext;
 	struct sender s;
 
-	if (cmp_next_against_self(sus->nb)) {
+	if (cmp_next_against_self(sus->nb) || !sus->next_validated) {
 		return;
 	}
 
