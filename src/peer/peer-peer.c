@@ -293,6 +293,8 @@ static void client_dw_thread(void *data)
 	int ret = 0;
 	fsnp_type_t type;
 
+	slog_info(STDOUT_LEVEL, "Preparing to download %s from %s...", cd->filename,
+			cd->pretty_addr):
 	sha256(cd->filename, strlen(cd->filename) + 1, cd->file_hash);
 	stringify_hash(cd->hash_str, cd->file_hash);
 	slog_debug(FILE_LEVEL, "client-dw-thread hash of file %s -> %s",
