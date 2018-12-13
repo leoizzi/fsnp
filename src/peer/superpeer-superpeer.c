@@ -900,8 +900,9 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 	}
 
 	if (msg->msg_type != ACK) {
-		slog_warn(FILE_LEVEL, "Wrong msg type received from sp %s: expected ACK "
-						"(%u), got %u", sus->nb->next_pretty, ACK, msg->msg_type);
+		slog_warn(FILE_LEVEL, "Wrong msg type received from sp %s: expected "
+						"ACK (%u), got %u", sus->nb->next_pretty, ACK,
+						msg->msg_type);
 	} else {
 		slog_info(FILE_LEVEL, "The next has sent an ACK msg. Next validated");
 	}
@@ -1506,6 +1507,7 @@ static void check_if_next_alive(struct sp_udp_state *sus)
 
 	clock_gettime(CLOCK_MONOTONIC, &curr);
 	ret = invalidate_next_if_needed(sus->nb, &sus->last, &curr, &old_next);
+	fsnp_init_whosnext(&whosnext, NULL);
 	switch (ret) {
 		case VALIDATED_NO_TIMEOUT:
 			break;
@@ -1513,7 +1515,6 @@ static void check_if_next_alive(struct sp_udp_state *sus)
 		case VALIDATED_TIMEOUT:
 			s.addr = sus->nb->next;
 			memcpy(s.pretty_addr, sus->nb->next_pretty, sizeof(char) * 32);
-			fsnp_init_whosnext(&whosnext, NULL);
 			send_whosnext(sus, &whosnext, &s);
 			break;
 
@@ -1528,6 +1529,9 @@ static void check_if_next_alive(struct sp_udp_state *sus)
 				// this means that only two superpeers are remain in the network
 				send_next(sus, NULL);
 				add_pending_next(sus, &sus->nb->next, NULL);
+				s.addr = sus->nb->next;
+				memcpy(s.pretty_addr, sus->nb->next_pretty, sizeof(char) * 32);
+				send_whosnext(sus, &whosnext, &s);
 			}
 
 			break;
@@ -1537,6 +1541,9 @@ static void check_if_next_alive(struct sp_udp_state *sus)
 			sus->next_validated = false;
 			send_next(sus, NULL);
 			add_pending_next(sus, &sus->nb->next, NULL);
+			s.addr = sus->nb->next;
+			memcpy(s.pretty_addr, sus->nb->next_pretty, sizeof(char) * 32);
+			send_whosnext(sus, &whosnext, &s);
 			break;
 
 		default:
