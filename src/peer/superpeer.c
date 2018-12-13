@@ -645,6 +645,7 @@ bool enter_sp_mode(struct fsnp_peer *sps, unsigned n)
 		return false;
 	}
 
+	slog_info(STDOUT_LEVEL, "You're a superpeer");
 	return true;
 }
 

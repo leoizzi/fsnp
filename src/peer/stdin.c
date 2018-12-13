@@ -366,6 +366,9 @@ static void download_handler(void)
 	dw_from_peer(&peer, filename);
 }
 
+/*
+ * Print the addresses of the superpeer's neighbors
+ */
 static void print_known_sp(void)
 {
 	int ret = 0;
@@ -390,10 +393,31 @@ static void print_known_sp(void)
 			sna.self, sna.prev, sna.next, sna.snd_next);
 }
 
+/*
+ * Print the peer's address and all the ports used to listen for connections
+ */
+static void print_peer_info(void)
+{
+	struct in_addr ip;
+	in_port_t udp_sp_port = 0;
+	in_port_t tcp_sp_port = 0;
+	in_port_t dw_port = get_dw_port();
+
+	ip.s_addr = htonl(get_peer_ip());
+	printf("IP address: %s\tDownload port: %hu", inet_ntoa(ip), dw_port);
+	if (is_superpeer()) {
+		udp_sp_port = get_udp_sp_port();
+		tcp_sp_port = get_tcp_sp_port();
+		printf("\tSuperpeer UDP port: %hu\tSuperpeer TCP port: %hu\n",
+				udp_sp_port, tcp_sp_port);
+	}
+}
+
 static void show_help(void)
 {
 	printf("\n"
 		   "%-10s %-30s\n\n"
+	       "%-10s %-30s\n\n"
 	       "%-10s %-30s\n\n"
 	       "%-10s %-30s\n\n"
 	       "%-10s %-30s\n\n"
@@ -416,6 +440,8 @@ static void show_help(void)
 	       "show_sp", "Show the others superpeers' addresses known by this"
 				      " superpeer. This command works only if this executable"
 		              " is a superpeer itself",
+	       "peer_info", "Show the peer's address and all the ports used to listen"
+					 "for connections",
 	       "quit", "Close the peer executable");
 }
 
@@ -432,6 +458,7 @@ static void parse_msg(const char *msg, size_t n)
 	const char who_has[] = "who_has\n";
 	const char download[] = "download\n";
 	const char show_sp[] = "show_sp\n";
+	const char show_peer_info[] = "peer_info\n";
 	const char help[] = "help\n";
 	const char quit[] = "quit\n";
 
@@ -451,6 +478,8 @@ static void parse_msg(const char *msg, size_t n)
 		download_handler();
 	} else if (!strncmp(msg, show_sp, n)) {
 		print_known_sp();
+	} else if (!strncmp(msg, show_peer_info, n)) {
+		print_peer_info();
 	} else if (!strncmp(msg, help, n)) {
 		show_help();
 	} else if (!strncmp(msg, quit, n)) {
