@@ -342,6 +342,7 @@ struct sp_udp_state {
 	struct timespec last;
 	hashtable_t *reqs; // key: sha256_t     value: request
 	linked_list_t *pending_msgs;
+	bool next_validated;
 	bool should_exit;
 };
 
@@ -886,6 +887,7 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 			slog_info(FILE_LEVEL, "Trying to contact for the %u time the next",
 					counter);
 			send_next(sus, old_next);
+			sus->next_validated = false;
 		}
 
 		if (!cmp_next(sus->nb, &p)) {
@@ -903,6 +905,8 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 	} else {
 		slog_info(FILE_LEVEL, "The next has sent an ACK msg. Next validated");
 	}
+
+	sus->next_validated = true;
 
 	free(msg);
 }
@@ -955,6 +959,7 @@ static void next_msg_rcvd(struct sp_udp_state *sus, const struct fsnp_next *next
 	if (next->old_next.ip != 0 && next->old_next.port) {
 		set_next(sus->nb, &next->old_next);
 		update_timespec(&sus->last);
+		sus->next_validated = false;
 		send_next(sus, NULL);
 		add_pending_next(sus, &sus->nb->next, NULL);
 	}
@@ -976,6 +981,7 @@ static void promoted_msg_rcvd(struct sp_udp_state *sus,
 	memcpy(&old_next, &sus->nb->next, sizeof(struct fsnp_peer));
 	set_next(sus->nb, &sender->addr);
 	update_timespec(&sus->last);
+	sus->next_validated = false;
 	send_next(sus, &old_next);
 	add_pending_next(sus, &sus->nb->next, &old_next);
 }
@@ -1110,6 +1116,7 @@ static void leave_msg_rcvd(struct sp_udp_state *sus,
 	if (cmp_next(sus->nb, &sender->addr)) {
 		slog_info(FILE_LEVEL, "next %s is leaving", sus->nb->next_pretty);
         set_next_as_snd_next(sus->nb);
+        sus->next_validated = false;
         update_timespec(&sus->last);
         send_next(sus, NULL);
         add_pending_next(sus, &sus->nb->next, NULL);
@@ -1129,6 +1136,7 @@ static void leave_msg_rcvd(struct sp_udp_state *sus,
 }
 
 struct is_pending_data {
+	struct sp_udp_state *sus;
 	struct fsnp_msg *msg;
 	struct sender *sender;
 };
@@ -1143,6 +1151,7 @@ int is_pending_iterator(void *item, size_t idx, void *user)
 	struct is_pending_data *pmd = (struct is_pending_data *)user;
 	struct fsnp_msg *msg = pmd->msg;
 	struct sender *sender = pmd->sender;
+	struct sp_udp_state *sus = pmd->sus;
 
 	UNUSED(idx);
 
@@ -1155,6 +1164,11 @@ int is_pending_iterator(void *item, size_t idx, void *user)
 	}
 
 	slog_debug(FILE_LEVEL, "The message received was pending. Removing it");
+	if (pm->type == NEXT) {
+		slog_info(FILE_LEVEL, "Next %s validated", sus->nb->next_pretty);
+		sus->next_validated = true;
+	}
+
 	return REMOVE_AND_STOP;
 }
 
@@ -1162,18 +1176,19 @@ int is_pending_iterator(void *item, size_t idx, void *user)
  * Look if the message received is pending. If so remove it from the list of
  * pending msgs.
  */
-static void is_pending(linked_list_t *list, struct fsnp_msg *msg,
+static void is_pending(struct sp_udp_state *sus, struct fsnp_msg *msg,
                        struct sender *sender)
 {
 	struct is_pending_data pmd;
 
-	if (list_count(list) == 0) {
+	if (list_count(sus->pending_msgs) == 0) {
 		return;
 	}
 
+	pmd.sus = sus;
 	pmd.msg = msg;
 	pmd.sender = sender;
-	list_foreach_value(list, is_pending_iterator, &pmd);
+	list_foreach_value(sus->pending_msgs, is_pending_iterator, &pmd);
 }
 
 /*
@@ -1196,7 +1211,7 @@ static void read_sock_msg(struct sp_udp_state *sus) {
 
 	stringify_sender(sus->nb, &sender);
 
-	is_pending(sus->pending_msgs, msg, &sender);
+	is_pending(sus, msg, &sender);
 	switch (msg->msg_type) {
 		case NEXT:
 			next_msg_rcvd(sus, (const struct fsnp_next *) msg, &sender);
@@ -1490,10 +1505,12 @@ static void check_if_next_alive(struct sp_udp_state *sus)
 
 		case INVALIDATED_NO_SND:
 			rm_dead_sp_from_server(&old_next);
+			sus->next_validated = false;
 			break;
 
 		case INVALIDATED_YES_SND:
 			rm_dead_sp_from_server(&old_next);
+			sus->next_validated = false;
 			send_next(sus, NULL);
 			add_pending_next(sus, &sus->nb->next, NULL);
 			break;
@@ -1623,6 +1640,7 @@ static void handle_pm_fail(struct sp_udp_state *sus, struct pending_msg *pm)
 		case NEXT:
 			if (!cmp_snd_next_against_self(sus->nb) && isset_snd_next(sus->nb)) {
 				set_next_as_snd_next(sus->nb);
+				sus->next_validated = false;
 				if (pm->pfd.old_peer.ip == 0 && pm->pfd.old_peer.port == 0) {
 					pm->f.next(sus, NULL);
 					add_pending_next(sus, &sus->nb->next, NULL);
@@ -1636,6 +1654,7 @@ static void handle_pm_fail(struct sp_udp_state *sus, struct pending_msg *pm)
 				prepare_exit_sp_mode();
 				exit_sp_mode();
 				sus->should_exit = true;
+				sus->next_validated = false;
 			}
 
 			break;
@@ -1645,6 +1664,7 @@ static void handle_pm_fail(struct sp_udp_state *sus, struct pending_msg *pm)
 				rm_dead_sp_from_server(&sus->nb->next);
 				set_next_as_snd_next(sus->nb);
 				send_next(sus, NULL);
+				sus->next_validated = false;
 				add_pending_next(sus, &sus->nb->next, NULL);
 			}
 
