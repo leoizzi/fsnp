@@ -956,6 +956,13 @@ static void next_msg_rcvd(struct sp_udp_state *sus, const struct fsnp_next *next
 		const struct sender *sender)
 {
 	slog_info(FILE_LEVEL, "NEXT msg received from sp %s", sender->pretty_addr);
+	if (cmp_prev(sus->nb, &sender->addr)) {
+		// a NEXT from this sp has already been received. Do nothing
+		slog_debug(FILE_LEVEL, "NEXT from sp %s already received",
+				sender->pretty_addr);
+		return;
+	}
+
 	if (next->old_next.ip != 0 && next->old_next.port) {
 		set_next(sus->nb, &next->old_next);
 		update_timespec(&sus->last);
@@ -978,6 +985,13 @@ static void promoted_msg_rcvd(struct sp_udp_state *sus,
 	UNUSED(promoted);
 
 	slog_info(FILE_LEVEL, "PROMOTED msg received from sp %s", sender->pretty_addr);
+	if (cmp_next(sus->nb, &sender->addr)) {
+		// a PROMOTED from this sp has already been received. Do nothing
+		slog_debug(FILE_LEVEL, "PROMOTED from sp %s already received",
+				sender->pretty_addr);
+		return;
+	}
+
 	memcpy(&old_next, &sus->nb->next, sizeof(struct fsnp_peer));
 	set_next(sus->nb, &sender->addr);
 	update_timespec(&sus->last);
