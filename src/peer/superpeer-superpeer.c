@@ -1518,7 +1518,7 @@ static void check_if_next_alive(struct sp_udp_state *sus)
 			break;
 
 		case INVALIDATED_NO_SND:
-			rm_dead_sp_from_server(&old_next);
+			rm_dead_sp_from_server(&old_next, SUPERPEER);
 			sus->next_validated = false;
 			if (cmp_prev(sus->nb, &old_next)) {
 				// the next was also the prev. Unset it as well
@@ -1537,7 +1537,7 @@ static void check_if_next_alive(struct sp_udp_state *sus)
 			break;
 
 		case INVALIDATED_YES_SND:
-			rm_dead_sp_from_server(&old_next);
+			rm_dead_sp_from_server(&old_next, SUPERPEER);
 			sus->next_validated = false;
 			send_next(sus, NULL);
 			add_pending_next(sus, &sus->nb->next, NULL);
@@ -1682,12 +1682,12 @@ static void handle_pm_fail(struct sp_udp_state *sus, struct pending_msg *pm)
 				}
 			}
 
-			rm_dead_sp_from_server(&pm->sp);
+			rm_dead_sp_from_server(&pm->sp, SUPERPEER);
 			break;
 
 		case WHOHAS:
 			if (pm->pfd.pw.send_to_next) {
-				rm_dead_sp_from_server(&sus->nb->next);
+				rm_dead_sp_from_server(&sus->nb->next, SUPERPEER);
 				set_next_as_snd_next(sus->nb);
 				send_next(sus, NULL);
 				sus->next_validated = false;

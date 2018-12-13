@@ -752,7 +752,7 @@ static void peer_tcp_thread(void *data)
 	} else {
 		if (!tcp_state.becoming_sp) {
 			if (!tcp_state.sp_is_leaving) {
-				rm_dead_sp_from_server(&tcp_state.sp_addr);
+				rm_dead_sp_from_server(&tcp_state.sp_addr, PEER);
 			}
 
 			get_server_addr(&s_addr);
@@ -843,7 +843,7 @@ void join_sp(const struct fsnp_query_res *query_res, bool auto_join)
 	if (sock < 0) {
 		slog_warn(STDOUT_LEVEL, "Unable to establish a connection with the "
 						  "superpeer");
-		rm_dead_sp_from_server(&query_res->sp_list[choice]);
+		rm_dead_sp_from_server(&query_res->sp_list[choice], PEER);
 		PRINT_PEER;
 		return;
 	}
