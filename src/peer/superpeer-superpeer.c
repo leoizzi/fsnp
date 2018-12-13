@@ -1653,6 +1653,20 @@ static int check_pm_timeout_iterator(void *item, size_t idx, void *user)
 
 	UNUSED(idx);
 
+	if (pm->type == WHOHAS) {
+		if (pm->pfd.pw.send_to_next) {
+			if (cmp_next(sus->nb, &pm->sp)) {
+				// If they don't match this pm is trash
+				return REMOVE_AND_GO;
+			}
+		}
+	} else if (pm->type == NEXT) {
+		if (!cmp_next(sus->nb, &pm->sp)) {
+			// If they don't match this pm is trash
+			return REMOVE_AND_GO;
+		}
+	}
+
 	last_time = (double)pm->last_send.tv_sec + NSEC_TO_SEC(pm->last_send.tv_nsec);
 	if (data->curr_time - last_time > PM_TIMEOUT) {
 		if (pm->retry < 4) {
