@@ -1657,6 +1657,7 @@ static void handle_pm_fail(struct sp_udp_state *sus, struct pending_msg *pm)
 				sus->next_validated = false;
 			}
 
+			rm_dead_sp_from_server(&pm->sp);
 			break;
 
 		case WHOHAS:
