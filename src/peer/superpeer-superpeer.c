@@ -911,6 +911,20 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 	free(msg);
 }
 
+/*
+ * Try to discover who's the snd_next
+ */
+static void discover_snd_next(struct sp_udp_state *sus)
+{
+	struct fsnp_whosnext whosnext;
+	struct sender s;
+
+	memcpy(&s.addr, &sus->nb->next, sizeof(struct fsnp_peer));
+	strncpy(s.pretty_addr, sus->nb->next_pretty, sizeof(char) * 32);
+	fsnp_init_whosnext(&whosnext, NULL);
+	send_whosnext(sus, &whosnext, &s);
+}
+
 #define POLLFD_NUM 2
 #define PIPE 0
 #define SOCK 1
@@ -1520,6 +1534,16 @@ static void check_if_next_alive(struct sp_udp_state *sus)
 		case INVALIDATED_NO_SND:
 			rm_dead_sp_from_server(&old_next);
 			sus->next_validated = false;
+			if (cmp_prev(sus->nb, &old_next)) {
+				// the next was also the prev. Unset it as well
+				slog_debug(FILE_LEVEL, "The next was also the prev. Unsetting it");
+				unset_prev(sus->nb);
+			} else if (!cmp_prev_against_self(sus->nb)) {
+				// this means that only two superpeers are remain in the network
+				send_next(sus, NULL);
+				add_pending_next(sus, &sus->nb->next, NULL);
+			}
+
 			break;
 
 		case INVALIDATED_YES_SND:
@@ -1774,7 +1798,7 @@ static void sp_udp_thread(void *data)
 	}
 
 	clock_gettime(CLOCK_MONOTONIC, &sus->last);
-
+	discover_snd_next(sus);
 	setup_poll(pollfd, sus);
 	slog_info(FILE_LEVEL, "Superpeers' overlay network successfully joined");
 	while (!sus->should_exit) {
