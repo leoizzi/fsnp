@@ -29,7 +29,7 @@ FSNP_BEGIN_DECL
  * Spawn a new thread for communicating with a server located in addr, asking
  * to it a list of superpeers
  */
-void launch_query_server_sp(const struct sockaddr_in *addr);
+void launch_query_server(const struct sockaddr_in *addr, bool auto_join);
 
 /*
  * Contact the server used by the peer to join the P2P network for ask to add

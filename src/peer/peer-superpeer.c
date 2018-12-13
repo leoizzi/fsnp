@@ -675,6 +675,8 @@ static void peer_tcp_thread(void *data)
 	struct fsnp_leave leave;
 	fsnp_err_t err;
 	struct fsnp_msg *msg = NULL;
+	struct sockaddr_in serv_addr;
+	struct fsnp_peer s_addr;
 
 	UNUSED(data);
 
@@ -706,9 +708,10 @@ static void peer_tcp_thread(void *data)
 		}
 	}
 
-	slog_info(STDOUT_LEVEL, "Leaving the superpeer...");
-	PRINT_PEER;
+	
 	if (tcp_state.send_leave_msg) {
+		slog_info(STDOUT_LEVEL, "Leaving the superpeer...");
+		PRINT_PEER;
 		fsnp_init_leave(&leave);
 		err = fsnp_send_tcp_leave(tcp_state.sock, &leave);
 		slog_info(FILE_LEVEL, "Sending an alive msg to the sp from the"
@@ -729,6 +732,11 @@ static void peer_tcp_thread(void *data)
 		}
 
 		free(msg);
+	} else {
+		get_server_addr(&s_addr);
+		serv_addr.sin_addr.s_addr = s_addr.ip;
+		serv_addr.sin_port = s_addr.port;
+		launch_query_server(&serv_addr, true);
 	}
 
 	close(tcp_state.sock);
@@ -777,7 +785,7 @@ static void launch_peer_thread(int sock, const struct fsnp_peer *sp)
 	}
 }
 
-void join_sp(const struct fsnp_query_res *query_res)
+void join_sp(const struct fsnp_query_res *query_res, bool auto_join)
 {
 	int choice = 0;
 	int sock = 0;
@@ -799,9 +807,13 @@ void join_sp(const struct fsnp_query_res *query_res)
 		return;
 	}
 
-	choice = show_sp(query_res->sp_list, query_res->num_sp);
-	if (choice < 0) {
-		return;
+	if (!auto_join) {
+		choice = show_sp(query_res->sp_list, query_res->num_sp);
+		if (choice < 0) {
+			return;
+		}
+	} else {
+		choice = (uint8_t)(rand() % query_res->num_sp);
 	}
 
 	sock = connect_to_sp(&query_res->sp_list[choice]);

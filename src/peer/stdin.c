@@ -177,7 +177,7 @@ static void query_sp_handler(void)
 		return;
 	}
 
-	launch_query_server_sp(&addr);
+	launch_query_server(&addr, false);
 }
 
 /*
@@ -202,7 +202,7 @@ static void join_sp_handler(void)
 		return;
 	}
 
-	join_sp(query_res);
+	join_sp(query_res, 0);
 	free(query_res);
 }
 

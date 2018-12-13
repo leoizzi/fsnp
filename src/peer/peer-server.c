@@ -132,7 +132,7 @@ static void first_peer(void)
  * Parse the server response, checking if the peer is the first one to contact
  * the server or not
  */
-static void parse_query_res(struct fsnp_query_res *query_res)
+static void parse_query_res(struct fsnp_query_res *query_res, bool auto_join)
 {
 	set_peer_ip(query_res->peer_addr);
 	if (query_res->num_sp == 1) {
@@ -142,8 +142,13 @@ static void parse_query_res(struct fsnp_query_res *query_res)
 		}
 	}
 
-	join_sp(query_res);
+	join_sp(query_res, auto_join);
 }
+
+struct query_server_data {
+	struct sockaddr_in addr;
+	bool auto_join;
+};
 
 /*
  * Entry point for the thread that will communicate with the server
@@ -151,7 +156,8 @@ static void parse_query_res(struct fsnp_query_res *query_res)
 static void query_server(void *data)
 {
 	int sock = 0;
-	struct sockaddr_in *addr = (struct sockaddr_in *)data;
+	struct query_server_data *qsd = (struct query_server_data *)data;
+	struct sockaddr_in *addr = &qsd->addr;
 	struct fsnp_query_res *query_res = NULL;
 	struct fsnp_peer server_addr;
 	char err_msg[] = "An error has occurred while contacting the superpeer. See"
@@ -183,7 +189,7 @@ static void query_server(void *data)
 	server_addr.port = addr->sin_port;
 	set_server_addr(&server_addr);
 
-	parse_query_res(query_res);
+	parse_query_res(query_res, qsd->auto_join);
 
 	free(query_res);
 }
@@ -298,18 +304,19 @@ void rm_dead_sp_from_server(const struct fsnp_peer *dead_sp)
 	close(sock);
 }
 
-void launch_query_server_sp(const struct sockaddr_in *addr)
+void launch_query_server(const struct sockaddr_in *addr, bool auto_join)
 {
-	struct sockaddr_in *addr_cp = NULL;
+	struct query_server_data *data = NULL;
 
-	addr_cp = malloc(sizeof(struct sockaddr_in));
-	if (!addr_cp) {
-		slog_error(FILE_LEVEL, "malloc. Error %d", errno);
+	data = malloc(sizeof(struct query_server_data));
+	if (!data) {
+		slog_error(FILE_LEVEL, "malloc error %d", errno);
 		printf("An internal error has occurred while contacting the server\n");
 		PRINT_PEER;
 		return;
 	}
 
-	memcpy(addr_cp, addr, sizeof(struct sockaddr_in));
-	start_new_thread(query_server, addr_cp, "query_server");
+	memcpy(&data->addr, addr, sizeof(struct sockaddr_in));
+	data->auto_join = auto_join;
+	start_new_thread(query_server, data, "query-server-thread");
 }

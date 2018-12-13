@@ -26,7 +26,7 @@ FSNP_BEGIN_DECL
 /*
  * Ask the user which superpeer he wants to join, then join him
  */
-void join_sp(const struct fsnp_query_res *query_res);
+void join_sp(const struct fsnp_query_res *query_res, bool auto_join);
 
 /*
  * Send a message to the thread who's talking with the superpeer to search for
