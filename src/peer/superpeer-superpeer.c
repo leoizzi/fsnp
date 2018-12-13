@@ -389,8 +389,8 @@ static void free_pending_msg(void *data)
 #define WRITE_END 1
 
 #define NSEC_TO_SEC(ns) ((double)(ns) / 1000000000.)
-#define INVALIDATE_NEXT_THRESHOLD 120.f // 2 minutes
-#define V_TIMEOUT 30.f // s
+#define INVALIDATE_NEXT_THRESHOLD 60 // 1 minute
+#define V_TIMEOUT INVALIDATE_NEXT_THRESHOLD / 4. // s
 
 #define VALIDATED_NO_TIMEOUT 0
 #define VALIDATED_TIMEOUT 1
@@ -461,7 +461,6 @@ static int invalidate_next_if_needed(struct neighbors *nb,
 #endif
 }
 
-#undef INVALIDATE_NEXT_THRESHOLD
 #undef V_TIMEOUT
 
 /*
@@ -1765,6 +1764,9 @@ struct sp_thread_pipe {
 
 static struct sp_thread_pipe stp;
 
+#define S_TO_MS(x) (x) / 1000
+#define SP_POLL_TIMEOUT INVALIDATE_NEXT_THRESHOLD / 4
+
 /*
  * Entry point for the superpeer's udp subsystem.
  */
@@ -1794,7 +1796,7 @@ static void sp_udp_thread(void *data)
 	setup_poll(pollfd, sus);
 	slog_info(FILE_LEVEL, "Superpeers' overlay network successfully joined");
 	while (!sus->should_exit) {
-		ret = poll(pollfd, POLLFD_NUM, FSNP_POLL_TIMEOUT);
+		ret = poll(pollfd, POLLFD_NUM, (timeout_t)S_TO_MS(SP_POLL_TIMEOUT));
 		invalidate_requests(sus);
 		if (ret > 0) {
 			if (pollfd[PIPE].revents) {
@@ -1826,6 +1828,8 @@ no_leave:
 	slog_info(FILE_LEVEL, "sp-udp-thread is leaving...");
 	slog_info(FILE_LEVEL, "Destroyng the request cache");
 	ht_destroy(sus->reqs);
+	slog_info(FILE_LEVEL, "Destroying the pending_msgs list");
+	list_destroy(sus->pending_msgs);
 	slog_info(FILE_LEVEL, "Unsetting al the neighbors");
 	unset_all(sus->nb);
 	free(sus->nb);
@@ -2168,3 +2172,5 @@ void exit_sp_network(void)
 #undef NSEC_TO_SEC
 #undef READ_END
 #undef WRITE_END
+#undef INVALIDATE_NEXT_THRESHOLD
+#undef SP_POLL_TIMEOUT
