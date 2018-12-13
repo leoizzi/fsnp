@@ -1526,6 +1526,7 @@ static void check_if_next_alive(struct sp_udp_state *sus)
 				unset_prev(sus->nb);
 			} else if (!cmp_prev_against_self(sus->nb)) {
 				// this means that only two superpeers are remain in the network
+				set_next(sus->nb, &sus->nb->prev);
 				send_next(sus, NULL);
 				add_pending_next(sus, &sus->nb->next, NULL);
 				s.addr = sus->nb->next;
