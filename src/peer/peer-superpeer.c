@@ -750,7 +750,7 @@ static void peer_tcp_thread(void *data)
 		if (!tcp_state.sp_is_leaving) {
 			rm_dead_sp_from_server(&tcp_state.sp_addr);
 		}
-		
+
 		get_server_addr(&s_addr);
 		serv_addr.sin_addr.s_addr = s_addr.ip;
 		serv_addr.sin_port = s_addr.port;
