@@ -284,6 +284,9 @@ void rm_dead_sp_from_server(struct fsnp_peer *dead_sp)
 		return;
 	}
 
+	ip.s_addr = htonl(dead_sp->ip);
+	slog_info(FILE_LEVEL, "Sending a RM_SP msg to the server for removing %s:%hu",
+			inet_ntoa(ip), dead_sp->port);
 	fsnp_init_rm_sp(&rm_sp, dead_sp, SUPERPEER);
 	err = fsnp_send_rm_sp(sock, &rm_sp);
 	if (err != E_NOERR) {
