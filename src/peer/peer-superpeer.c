@@ -335,6 +335,7 @@ struct peer_tcp_state {
 	bool send_leave_msg;
 	bool sp_is_leaving;
 	bool file_asked;
+	bool becoming_sp;
 	unsigned int timeouts;
 	struct fsnp_peer sp_addr;
 };
@@ -401,6 +402,7 @@ static void promote_rcvd(const struct fsnp_promote *promote)
 		tcp_state.quit_loop = true;
 	}
 
+	tcp_state.becoming_sp = true;
 	enter_sp_mode(sps, n, serv_sock);
 }
 
@@ -700,6 +702,7 @@ static void peer_tcp_thread(void *data)
 	tcp_state.send_leave_msg = false;
 	tcp_state.file_asked = false;
 	tcp_state.sp_is_leaving = false;
+	tcp_state.becoming_sp = false;
 
 	slog_info(FILE_LEVEL, "Entering the event loop for the peer_tcp_thread");
 	while (!tcp_state.quit_loop) {
@@ -747,14 +750,16 @@ static void peer_tcp_thread(void *data)
 
 		free(msg);
 	} else {
-		if (!tcp_state.sp_is_leaving) {
-			rm_dead_sp_from_server(&tcp_state.sp_addr);
-		}
+		if (!tcp_state.becoming_sp) {
+			if (!tcp_state.sp_is_leaving) {
+				rm_dead_sp_from_server(&tcp_state.sp_addr);
+			}
 
-		get_server_addr(&s_addr);
-		serv_addr.sin_addr.s_addr = s_addr.ip;
-		serv_addr.sin_port = s_addr.port;
-		launch_query_server(&serv_addr, true);
+			get_server_addr(&s_addr);
+			serv_addr.sin_addr.s_addr = s_addr.ip;
+			serv_addr.sin_port = s_addr.port;
+			launch_query_server(&serv_addr, true);
+		}
 	}
 
 	close(tcp_state.sock);
