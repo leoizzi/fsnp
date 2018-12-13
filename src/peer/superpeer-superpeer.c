@@ -911,20 +911,6 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 	free(msg);
 }
 
-/*
- * Try to discover who's the snd_next
- */
-static void discover_snd_next(struct sp_udp_state *sus)
-{
-	struct fsnp_whosnext whosnext;
-	struct sender s;
-
-	memcpy(&s.addr, &sus->nb->next, sizeof(struct fsnp_peer));
-	strncpy(s.pretty_addr, sus->nb->next_pretty, sizeof(char) * 32);
-	fsnp_init_whosnext(&whosnext, NULL);
-	send_whosnext(sus, &whosnext, &s);
-}
-
 #define POLLFD_NUM 2
 #define PIPE 0
 #define SOCK 1
@@ -1798,7 +1784,6 @@ static void sp_udp_thread(void *data)
 	}
 
 	clock_gettime(CLOCK_MONOTONIC, &sus->last);
-	discover_snd_next(sus);
 	setup_poll(pollfd, sus);
 	slog_info(FILE_LEVEL, "Superpeers' overlay network successfully joined");
 	while (!sus->should_exit) {
