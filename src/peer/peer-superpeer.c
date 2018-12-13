@@ -35,6 +35,7 @@
 #include "peer/thread_manager.h"
 #include "peer/superpeer.h"
 #include "peer/pipe_macro.h"
+#include "peer/peer-server.h"
 
 #include "slog/slog.h"
 
@@ -807,6 +808,7 @@ void join_sp(const struct fsnp_query_res *query_res)
 	if (sock < 0) {
 		slog_warn(STDOUT_LEVEL, "Unable to establish a connection with the "
 						  "superpeer");
+		rm_dead_sp_from_server(&query_res->sp_list[choice]);
 		PRINT_PEER;
 		return;
 	}

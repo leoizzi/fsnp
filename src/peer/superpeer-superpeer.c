@@ -1669,7 +1669,7 @@ static int check_pm_timeout_iterator(void *item, size_t idx, void *user)
 
 	if (pm->type == WHOHAS) {
 		if (pm->pfd.pw.send_to_next) {
-			if (cmp_next(sus->nb, &pm->sp)) {
+			if (!cmp_next(sus->nb, &pm->sp)) {
 				// If they don't match this pm is trash
 				return REMOVE_AND_GO;
 			}

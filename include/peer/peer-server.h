@@ -46,7 +46,7 @@ void rm_sp_from_server(void);
 /*
  * Establish a connection with the boot_server to remove a dead superpeer
  */
-void rm_dead_sp_from_server(struct fsnp_peer *dead_sp);
+void rm_dead_sp_from_server(const struct fsnp_peer *dead_sp);
 
 FSNP_END_DECL
 

@@ -268,7 +268,7 @@ void rm_sp_from_server(void)
 	close(sock);
 }
 
-void rm_dead_sp_from_server(struct fsnp_peer *dead_sp)
+void rm_dead_sp_from_server(const struct fsnp_peer *dead_sp)
 {
 	int sock = 0;
 	struct fsnp_peer serv;
