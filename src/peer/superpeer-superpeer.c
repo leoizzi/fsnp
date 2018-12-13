@@ -390,7 +390,7 @@ static void free_pending_msg(void *data)
 
 #define NSEC_TO_SEC(ns) ((double)(ns) / 1000000000.)
 #define INVALIDATE_NEXT_THRESHOLD 60 // 1 minute
-#define V_TIMEOUT INVALIDATE_NEXT_THRESHOLD / 4. // s
+#define V_TIMEOUT ((double)INVALIDATE_NEXT_THRESHOLD / 4.) // s
 
 #define VALIDATED_NO_TIMEOUT 0
 #define VALIDATED_TIMEOUT 1
@@ -432,7 +432,7 @@ static int invalidate_next_if_needed(struct neighbors *nb,
 	double delta = 0;
 
 	delta = calculate_timespec_delta(last, curr);
-	if (delta < INVALIDATE_NEXT_THRESHOLD) {
+	if (delta < (double)INVALIDATE_NEXT_THRESHOLD) {
 		if (delta > V_TIMEOUT) {
 			return VALIDATED_TIMEOUT;
 		} else {
