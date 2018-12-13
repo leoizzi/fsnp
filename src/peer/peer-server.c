@@ -84,11 +84,9 @@ static struct fsnp_query_res *read_res(int sock)
 /*
  * Add the peer to the server superpeer list
  */
-static void first_peer(void)
+static void first_peer(int serv_sock)
 {
 	struct fsnp_add_sp add_sp;
-	struct fsnp_peer server;
-	struct in_addr ip;
 	fsnp_err_t err;
 	bool ret = false;
 	int sock = 0;
@@ -98,14 +96,6 @@ static void first_peer(void)
 		slog_warn(FILE_LEVEL, "This peer is already a superpeer and the server"
 				  " doesn't know about it. Sending a request to add us to its "
 	              "list");
-		get_server_addr(&server);
-		ip.s_addr = server.ip;
-		sock = fsnp_create_connect_tcp_sock(ip, server.port);
-		if (sock < 0) {
-			slog_error(FILE_LEVEL, "fsnp_create_connect_tcp_sock error %d", errno);
-			return;
-		}
-
 		fsnp_init_add_sp(&add_sp, get_tcp_sp_port(), get_udp_sp_port());
 		err = fsnp_send_add_sp(sock, &add_sp);
 		if (err != E_NOERR) {
@@ -116,7 +106,7 @@ static void first_peer(void)
 
 		close(sock);
 	} else {
-		ret = enter_sp_mode(NULL, NO_SP);
+		ret = enter_sp_mode(NULL, NO_SP, serv_sock);
 		if (ret == false) {
 			slog_error(STDOUT_LEVEL, "Unable to enter the sp_mode");
 			PRINT_PEER;
@@ -132,14 +122,18 @@ static void first_peer(void)
  * Parse the server response, checking if the peer is the first one to contact
  * the server or not
  */
-static void parse_query_res(struct fsnp_query_res *query_res, bool auto_join)
+static void parse_query_res(int sock, struct fsnp_query_res *query_res, bool auto_join)
 {
 	set_peer_ip(query_res->peer_addr);
 	if (query_res->num_sp == 1) {
 		if (query_res->sp_list[0].ip == 0 && query_res->sp_list[0].port == 0) {
-			first_peer();
+			first_peer(sock);
 			return;
+		} else {
+			close(sock);
 		}
+	} else {
+		close(sock);
 	}
 
 	join_sp(query_res, auto_join);
@@ -184,55 +178,35 @@ static void query_server(void *data)
 		return;
 	}
 
-	close(sock);
 	server_addr.ip = addr->sin_addr.s_addr;
 	server_addr.port = addr->sin_port;
 	set_server_addr(&server_addr);
 
-	parse_query_res(query_res, qsd->auto_join);
+	parse_query_res(sock, query_res, qsd->auto_join);
 
 	free(query_res);
 }
 
-int add_sp_to_server(void)
+int add_sp_to_server(int serv_sock)
 {
-	int sock;
-	struct fsnp_peer server_addr;
-	struct in_addr ip;
 	struct fsnp_add_sp add_sp;
 	fsnp_err_t err;
 	in_port_t sp_port;
 	in_port_t p_port;
-
-	get_server_addr(&server_addr);
-	if (server_addr.ip == 0 && server_addr.port == 0) {
-		// if the peer doesn't know any server how is possible that we are here?
-		slog_panic(FILE_LEVEL, "The peer doesn't know a server, yet it's "
-		                       "becoming an sp");
-		return -1;
-	}
-
-	ip.s_addr = server_addr.ip;
-	slog_info(FILE_LEVEL, "Connecting with the server");
-	sock = fsnp_create_connect_tcp_sock(ip, server_addr.port);
-	if (sock < 0) {
-		slog_error(FILE_LEVEL, "Unable to contact the server");
-		return -1;
-	}
 
 	sp_port = get_udp_sp_port();
 	p_port = get_tcp_sp_port();
 	fsnp_init_add_sp(&add_sp, p_port, sp_port);
 	slog_info(FILE_LEVEL, "Sending an add_sp msg with 'sp port: %hu', 'peer "
 	                      "port: %hu'", sp_port, p_port);
-	err = fsnp_send_add_sp(sock, &add_sp);
+	err = fsnp_send_add_sp(serv_sock, &add_sp);
 	if (err != E_NOERR) {
 		fsnp_log_err_msg(err, false);
-		close(sock);
+		close(serv_sock);
 		return -1;
 	}
 
-	close(sock);
+	close(serv_sock);
 	return 0;
 }
 

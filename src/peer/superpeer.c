@@ -253,7 +253,7 @@ static void create_fake_peer_info(void)
 /*
  * Create the superpeer's sockets and enter the overlay network
  */
-static bool initialize_sp(struct fsnp_peer *sps, unsigned n)
+static bool initialize_sp(struct fsnp_peer *sps, unsigned n, int serv_sock)
 {
 	int udp = 0;
 	int tcp = 0;
@@ -327,7 +327,7 @@ bool print_peer = false;
 		return false;
 	}
 
-	ret = add_sp_to_server();
+	ret = add_sp_to_server(serv_sock);
 	if (ret < 0) {
 		fprintf(stderr, "Unable to contact the server for add this superpeer to"
 		                " its list. Please join again a superpeer");
@@ -612,7 +612,7 @@ void rm_peer_from_list(struct fsnp_peer *peer)
 	list_foreach_value(known_peers, rm_peer_callback, peer);
 }
 
-bool enter_sp_mode(struct fsnp_peer *sps, unsigned n)
+bool enter_sp_mode(struct fsnp_peer *sps, unsigned n, int serv_sock)
 {
 	bool ret = false;
 	char err_msg[] = "Unable to enter the sp_mode";
@@ -636,7 +636,7 @@ bool enter_sp_mode(struct fsnp_peer *sps, unsigned n)
 	}
 
 	accept_conn = true;
-	ret = initialize_sp(sps, n);
+	ret = initialize_sp(sps, n, serv_sock);
 	if (!ret) {
 		close_keys_cache();
 		list_destroy(known_peers);

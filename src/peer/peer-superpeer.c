@@ -333,6 +333,7 @@ struct peer_tcp_state {
 	int sock;
 	bool quit_loop;
 	bool send_leave_msg;
+	bool sp_is_leaving;
 	bool file_asked;
 	unsigned int timeouts;
 	struct fsnp_peer sp_addr;
@@ -377,6 +378,9 @@ static void promote_rcvd(const struct fsnp_promote *promote)
 {
 	struct fsnp_peer sps[2];
 	unsigned n = 0;
+	int serv_sock = 0;
+	struct fsnp_peer serv_addr;
+	struct in_addr a;
 
 	memset(sps, 0, sizeof(struct fsnp_peer) * 2);
 	if (promote->sp_port) {
@@ -389,7 +393,15 @@ static void promote_rcvd(const struct fsnp_promote *promote)
 		}
 	}
 
-	enter_sp_mode(sps, n);
+	get_server_addr(&serv_addr);
+	a.s_addr = serv_addr.ip;
+	serv_sock = fsnp_create_connect_tcp_sock(a, serv_addr.port);
+	if (serv_sock < 0) {
+		slog_error(FILE_LEVEL, "Unable to connect with the server");
+		tcp_state.quit_loop = true;
+	}
+
+	enter_sp_mode(sps, n, serv_sock);
 }
 
 /*
@@ -489,6 +501,7 @@ static void read_sock_msg(void)
 			fsnp_send_tcp_ack(tcp_state.sock, &ack);
 			slog_info(FILE_LEVEL, "Ack sent to the superpeer");
 			tcp_state.quit_loop = true;
+			tcp_state.sp_is_leaving = true;
 			break;
 
 		default:
@@ -686,6 +699,7 @@ static void peer_tcp_thread(void *data)
 	tcp_state.quit_loop = false;
 	tcp_state.send_leave_msg = false;
 	tcp_state.file_asked = false;
+	tcp_state.sp_is_leaving = false;
 
 	slog_info(FILE_LEVEL, "Entering the event loop for the peer_tcp_thread");
 	while (!tcp_state.quit_loop) {
@@ -733,7 +747,10 @@ static void peer_tcp_thread(void *data)
 
 		free(msg);
 	} else {
-		rm_dead_sp_from_server(&tcp_state.sp_addr);
+		if (!tcp_state.sp_is_leaving) {
+			rm_dead_sp_from_server(&tcp_state.sp_addr);
+		}
+		
 		get_server_addr(&s_addr);
 		serv_addr.sin_addr.s_addr = s_addr.ip;
 		serv_addr.sin_port = s_addr.port;

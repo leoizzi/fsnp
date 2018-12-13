@@ -49,8 +49,9 @@ struct peer_info {
 /*
  * Enter the superpeer mode.
  * Here will be done all the initializations steps needed for being a superpeer
+ * Please note that serv_sock will be closed by this function
  */
-bool enter_sp_mode(struct fsnp_peer *sps, unsigned n);
+bool enter_sp_mode(struct fsnp_peer *sps, unsigned n, int serv_sock);
 
 /*
  * Exit the superpeer mode, freeing all the resources previously allocated.

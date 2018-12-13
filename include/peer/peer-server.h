@@ -36,7 +36,7 @@ void launch_query_server(const struct sockaddr_in *addr, bool auto_join);
  * this superpeer to its list.
  * Return 0 on success, -1 otherwise
  */
-int add_sp_to_server(void);
+int add_sp_to_server(int serv_sock);
 
 /*
  * Remove this superpeer from the server's list
