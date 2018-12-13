@@ -708,7 +708,7 @@ static void peer_tcp_thread(void *data)
 		}
 	}
 
-	
+
 	if (tcp_state.send_leave_msg) {
 		slog_info(STDOUT_LEVEL, "Leaving the superpeer...");
 		PRINT_PEER;
@@ -733,6 +733,7 @@ static void peer_tcp_thread(void *data)
 
 		free(msg);
 	} else {
+		rm_dead_sp_from_server(&tcp_state.sp_addr);
 		get_server_addr(&s_addr);
 		serv_addr.sin_addr.s_addr = s_addr.ip;
 		serv_addr.sin_port = s_addr.port;
