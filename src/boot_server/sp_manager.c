@@ -74,6 +74,7 @@ struct user_rm_sp_iterator {
 	struct fsnp_peer *sp;
 	fsnp_peer_type_t type;
 	uint64_t pos;
+	bool found;
 };
 
 static int list_rm_sp_iterator(void *item, size_t idx, void *user)
@@ -88,6 +89,7 @@ static int list_rm_sp_iterator(void *item, size_t idx, void *user)
 	if (ursi->type == PEER) {
 		if (ursi->sp->port == ssp->p_port) {
 			ursi->pos = idx;
+			ursi->found = true;
 			return STOP;
 		} else {
 			return GO_AHEAD;
@@ -95,6 +97,7 @@ static int list_rm_sp_iterator(void *item, size_t idx, void *user)
 	} else { // ursi->type == SUPERPEER
 		if (ursi->sp->port == ssp->sp_port) {
 			ursi->pos = idx;
+			ursi->found = true;
 			return STOP;
 		} else {
 			return GO_AHEAD;
@@ -109,8 +112,13 @@ struct fsnp_server_sp *rm_sp(struct fsnp_peer *sp, fsnp_peer_type_t type)
 	user.sp = sp;
 	user.type = type;
 	user.pos = 0;
+	user.found = false;
 	list_foreach_value(sp_list, list_rm_sp_iterator, &user);
-	return list_fetch_value(sp_list, user.pos);
+	if (user.found) {
+		return list_fetch_value(sp_list, user.pos);
+	} else {
+		return NULL;
+	}
 }
 
 /*
