@@ -391,7 +391,7 @@ static void free_pending_msg(void *data)
 
 #define NSEC_TO_SEC(ns) ((double)(ns) / 1000000000.)
 #define INVALIDATE_NEXT_THRESHOLD 60.f // 1 minute
-#define V_TIMEOUT INVALIDATE_NEXT_THRESHOLD / 4. // s
+#define V_TIMEOUT INVALIDATE_NEXT_THRESHOLD / 4.
 
 #define VALIDATED_NO_TIMEOUT 0
 #define VALIDATED_TIMEOUT 1
@@ -863,6 +863,7 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 	bool prev_asked_next = false;
 	struct fsnp_whosnext whosnext;
 	struct sender s;
+	struct in_addr a;
 
 	if (!isset_next(sus->nb)) {
 		return;
@@ -894,17 +895,16 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 		}
 
 		if (!cmp_next(sus->nb, &p)) {
-			slog_warn(FILE_LEVEL, "UDP msg received from another sp while"
-						 " waiting for an ACK");
-			if (msg) {
-				if (cmp_prev(sus->nb, &p) && msg->msg_type == WHOSNEXT) {
-					slog_debug(FILE_LEVEL, "WHOSNEXT rcvd from prev deferred");
-					prev_asked_next = true;
-				}
-
-				free(msg);
+			a.s_addr = htonl(p.ip);
+			slog_warn(FILE_LEVEL, "UDP msg of type %u received from another sp "
+						 "(%s:%hu) while waiting for an ACK", msg->msg_type,
+						 inet_ntoa(a), p.port);
+			if (cmp_prev(sus->nb, &p) && msg->msg_type == WHOSNEXT) {
+				slog_debug(FILE_LEVEL, "WHOSNEXT rcvd from prev deferred");
+				prev_asked_next = true;
 			}
 
+			free(msg);
 			continue;
 		} else {
 			break;
@@ -1147,6 +1147,10 @@ static void leave_msg_rcvd(struct sp_udp_state *sus,
     struct fsnp_whosnext whosnext;
     struct sender s;
 
+    if (cmp_snd_next(sus->nb, &sender->addr)) {
+    	unset_snd_next(sus->nb);
+    }
+
 	if (cmp_next(sus->nb, &sender->addr)) {
 		slog_info(FILE_LEVEL, "next %s is leaving", sus->nb->next_pretty);
         set_next_as_snd_next(sus->nb);
@@ -1202,11 +1206,12 @@ int is_pending_iterator(void *item, size_t idx, void *user)
 	slog_debug(FILE_LEVEL, "The message received was pending. Removing it");
 	if (pm->type == NEXT) {
 		slog_info(FILE_LEVEL, "Next %s validated", sus->nb->next_pretty);
-		send_ack(sus, sender);
+		// send_ack(sus, sender); is this needed?
+		// TODO: send to the prev the new next, ask to the next who is his next
 		sus->next_validated = true;
 		s.addr = sus->nb->next;
 		strncpy(s.pretty_addr, sus->nb->next_pretty, sizeof(char) * 32);
-		fsnp_init_whosnext(&whosnext, NULL);
+		fsnp_init_whosnext(&whosnext, NULL); // ask to the next who's after him
 		send_whosnext(sus, &whosnext, sender);
 	}
 
@@ -1698,7 +1703,6 @@ static void handle_pm_fail(struct sp_udp_state *sus, struct pending_msg *pm)
 		case NEXT:
 			if (!cmp_snd_next_against_self(sus->nb) && isset_snd_next(sus->nb)) {
 				set_next_as_snd_next(sus->nb);
-				sus->next_validated = false;
 				if (pm->pfd.old_peer.ip == 0 && pm->pfd.old_peer.port == 0) {
 					pm->f.next(sus, NULL);
 					add_pending_next(sus, &sus->nb->next, NULL);
