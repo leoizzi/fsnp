@@ -894,9 +894,11 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 		}
 
 		if (!cmp_next(sus->nb, &p)) {
-			slog_warn(FILE_LEVEL, "UDP msg received from another sp while waiting for an ACK");
+			slog_warn(FILE_LEVEL, "UDP msg received from another sp while"
+						 " waiting for an ACK");
 			if (msg) {
 				if (cmp_prev(sus->nb, &p) && msg->msg_type == WHOSNEXT) {
+					slog_debug(FILE_LEVEL, "WHOSNEXT rcvd from prev deferred");
 					prev_asked_next = true;
 				}
 
@@ -922,6 +924,7 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 		s.addr = sus->nb->prev;
 		strncpy(s.pretty_addr, sus->nb->prev_pretty, sizeof(char) * 32);
 		fsnp_init_whosnext(&whosnext, &sus->nb->next);
+		slog_debug(FILE_LEVEL, "Sending deferred WHOSNEXT");
 		send_whosnext(sus, &whosnext, &s);
 	}
 
