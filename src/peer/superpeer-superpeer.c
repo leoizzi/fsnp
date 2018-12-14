@@ -1209,10 +1209,12 @@ int is_pending_iterator(void *item, size_t idx, void *user)
 		// send_ack(sus, sender); is this needed?
 		// TODO: send to the prev the new next, ask to the next who is his next
 		sus->next_validated = true;
-		s.addr = sus->nb->next;
-		strncpy(s.pretty_addr, sus->nb->next_pretty, sizeof(char) * 32);
-		fsnp_init_whosnext(&whosnext, NULL); // ask to the next who's after him
-		send_whosnext(sus, &whosnext, sender);
+		s.addr = sus->nb->prev;
+		strncpy(s.pretty_addr, sus->nb->prev_pretty, sizeof(char) * 32);
+		fsnp_init_whosnext(&whosnext, &sus->nb->next);
+		send_whosnext(sus, &whosnext, &s); // tell the prev who's the new next
+		fsnp_init_whosnext(&whosnext, NULL);
+		send_whosnext(sus, &whosnext, sender); // ask to the next who's after him
 	}
 
 	return REMOVE_AND_STOP;
