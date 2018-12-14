@@ -342,6 +342,7 @@ struct sp_udp_state {
 	struct timespec last;
 	hashtable_t *reqs; // key: sha256_t     value: request
 	linked_list_t *pending_msgs;
+	bool wait_snd_res;
 	bool next_validated;
 	bool should_exit;
 };
@@ -859,6 +860,9 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 	struct fsnp_peer p;
 	fsnp_err_t err;
 	unsigned counter = 0;
+	bool prev_asked_next = false;
+	struct fsnp_whosnext whosnext;
+	struct sender s;
 
 	if (!isset_next(sus->nb)) {
 		return;
@@ -891,7 +895,14 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 
 		if (!cmp_next(sus->nb, &p)) {
 			slog_warn(FILE_LEVEL, "UDP msg received from another sp while waiting for an ACK");
-			free(msg);
+			if (msg) {
+				if (cmp_prev(sus->nb, &p) && msg->msg_type == WHOSNEXT) {
+					prev_asked_next = true;
+				}
+
+				free(msg);
+			}
+
 			continue;
 		} else {
 			break;
@@ -907,6 +918,12 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 	}
 
 	sus->next_validated = true;
+	if (prev_asked_next) {
+		s.addr = sus->nb->prev;
+		strncpy(s.pretty_addr, sus->nb->prev_pretty, sizeof(char) * 32);
+		fsnp_init_whosnext(&whosnext, &sus->nb->next);
+		send_whosnext(sus, &whosnext, &s);
+	}
 
 	free(msg);
 }
@@ -1166,6 +1183,8 @@ int is_pending_iterator(void *item, size_t idx, void *user)
 	struct fsnp_msg *msg = pmd->msg;
 	struct sender *sender = pmd->sender;
 	struct sp_udp_state *sus = pmd->sus;
+	struct sender s;
+	struct fsnp_whosnext whosnext;
 
 	UNUSED(idx);
 
@@ -1180,7 +1199,12 @@ int is_pending_iterator(void *item, size_t idx, void *user)
 	slog_debug(FILE_LEVEL, "The message received was pending. Removing it");
 	if (pm->type == NEXT) {
 		slog_info(FILE_LEVEL, "Next %s validated", sus->nb->next_pretty);
+		send_ack(sus, sender);
 		sus->next_validated = true;
+		s.addr = sus->nb->next;
+		strncpy(s.pretty_addr, sus->nb->next_pretty, sizeof(char) * 32);
+		fsnp_init_whosnext(&whosnext, NULL);
+		send_whosnext(sus, &whosnext, sender);
 	}
 
 	return REMOVE_AND_STOP;
@@ -1779,6 +1803,8 @@ static void sp_udp_thread(void *data)
 	struct sp_udp_state *sus = (struct sp_udp_state *)data;
 	struct pollfd pollfd[POLLFD_NUM];
 	int ret = 0;
+	struct fsnp_whosnext whosnext;
+	struct sender s;
 
 	//sleep(10); // so we're sure to have left the sp
 	//slog_debug(FILE_LEVEL, "sp-udp-thread is awake");
@@ -1797,6 +1823,10 @@ static void sp_udp_thread(void *data)
 	}
 
 	clock_gettime(CLOCK_MONOTONIC, &sus->last);
+	s.addr = sus->nb->next;
+	strncpy(s.pretty_addr, sus->nb->next_pretty, sizeof(char) * 32);
+	fsnp_init_whosnext(&whosnext, NULL);
+	send_whosnext(sus, &whosnext, &s);
 	setup_poll(pollfd, sus);
 	slog_info(FILE_LEVEL, "Superpeers' overlay network successfully joined");
 	while (!sus->should_exit) {
