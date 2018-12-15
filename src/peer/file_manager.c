@@ -38,8 +38,6 @@
 
 #include "slog/slog.h"
 
-// TODO: look for files also in the dw directory
-
 struct directory {
 	char path[PATH_MAX]; // the root path
 	hashtable_t *hashtable;

@@ -28,6 +28,7 @@
 #include "peer/thread_manager.h"
 #include "peer/file_manager.h"
 #include "peer/stdin.h"
+#include "peer/timespec.h"
 
 #include "fsnp/fsnp.h"
 
@@ -98,8 +99,6 @@ static bool receive_chunk(const struct client_dw *cd, char buf[DW_CHUNK], size_t
 	}
 }
 
-#define NSEC_TO_SEC(ns) ((double)(ns) / 1000000000.)
-
 /*
  * Show on the stdout the status of the download
  */
@@ -160,7 +159,7 @@ static int download_file(struct client_dw *cd)
 
 	slog_info(FILE_LEVEL, "The download is starting");
 	block_stdin();
-	clock_gettime(CLOCK_MONOTONIC, &last);
+	update_timespec(&last);
 	memcpy(&curr, &last, sizeof(struct timespec));
 	l = (double)last.tv_sec + NSEC_TO_SEC(last.tv_nsec);
 	printf("\n");
@@ -173,7 +172,7 @@ static int download_file(struct client_dw *cd)
 
 		rcvd += r;
 
-		clock_gettime(CLOCK_MONOTONIC, &curr);
+		update_timespec(&curr);
 		c = (double)curr.tv_sec + NSEC_TO_SEC(curr.tv_nsec);
 		if (c - l > 0.5) {
 			show_dw_status(rcvd, cd->file_size, rcvd - prev_rcvd, c-l, cd->filename);

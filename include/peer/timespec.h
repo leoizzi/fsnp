@@ -15,20 +15,33 @@
  *  along with fsnp. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef FSNP_PIPE_MACRO_H
-#define FSNP_PIPE_MACRO_H
+#ifndef FSNP_TIMESPEC_H
+#define FSNP_TIMESPEC_H
 
-enum pipe_macro {
-	PIPE_WHOHAS = 0,
-	PIPE_QUIT,
-	PIPE_PROMOTE,
-	PIPE_FILE_RES,
-	PIPE_ERROR,
-	PIPE_GET_PREV,
-	PIPE_ADDRESSES
-};
+#include <time.h>
 
-#define READ_END 0
-#define WRITE_END 1
+/*
+ * Update 't' to the current time
+ */
+static inline void update_timespec(struct timespec *t)
+{
+	clock_gettime(CLOCK_MONOTONIC, t);
+}
 
-#endif //FSNP_PIPE_MACRO_H
+#define NSEC_TO_SEC(ns) ((double)(ns) / 1000000000.)
+
+/*
+ * Calculate the delta of two timespecs (b - a)
+ */
+static inline double calculate_timespec_delta(const struct timespec *a,
+                                              const struct timespec *b)
+{
+	double aa = 0;
+	double bb = 0;
+
+	aa = (double)a->tv_sec + NSEC_TO_SEC(a->tv_nsec);
+	bb = (double)b->tv_sec + NSEC_TO_SEC(b->tv_nsec);
+	return bb - aa;
+}
+
+#endif //FSNP_TIMESPEC_H

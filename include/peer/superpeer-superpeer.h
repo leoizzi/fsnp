@@ -22,10 +22,33 @@
 
 #include "compiler.h"
 
+#include "peer/neighbors.h"
+
 #include "fsnp/fsnp_types.h"
 #include "fsnp/sha-256.h"
 
+#include "struct/linklist.h"
+#include "struct/hashtable.h"
+
 FSNP_BEGIN_DECL
+
+struct sp_udp_state {
+	int sock;
+	int r_pipe[2];
+	int w_pipe[2];
+	struct neighbors *nb;
+	struct timespec last;
+	hashtable_t *reqs; // key: sha256_t     value: request
+	linked_list_t *pending_msgs;
+	bool wait_snd_res;
+	bool next_validated;
+	bool should_exit;
+};
+
+struct sender {
+	struct fsnp_peer addr;
+	char pretty_addr[32];
+};
 
 /*
  * Enter the superpeers' overlay network with the 'udp' socket.
@@ -37,6 +60,26 @@ FSNP_BEGIN_DECL
  * Return 0 on success, -1 otherwise
  */
 int enter_sp_network(int udp, const struct fsnp_peer *sps, unsigned n);
+
+/*
+ * Send a NEXT msg to the next sp. Pass NULL in 'old' if the next doesn't have
+ * to change its next.
+ */
+void send_next(const struct sp_udp_state *sus, const struct fsnp_peer *old);
+
+/*
+ * Send a WHOHAS msg.
+ * If next is true this message will be sent to the next, otherwise will be sent
+ * to the peer who has started the request.
+ */
+void send_whohas(const struct sp_udp_state *sus,const struct fsnp_whohas *whohas,
+                 bool next);
+
+/*
+ * Send a WHOSNEXT msg to s
+ */
+void send_whosnext(const struct sp_udp_state *sus,
+                   const struct fsnp_whosnext *whosnext, const struct sender *s);
 
 /*
  * Ask in the overlay network who has a file

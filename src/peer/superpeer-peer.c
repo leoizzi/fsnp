@@ -32,9 +32,6 @@
 
 #include "slog/slog.h"
 
-#define READ_END 0
-#define WRITE_END 1
-
 #define SOCK 0
 #define PIPE 1
 
@@ -74,7 +71,7 @@ static int send_ack(const struct peer_info *info)
 }
 
 /*
- * Senf a FILE_RES msg to the peer
+ * Send a FILE_RES msg to the peer
  */
 static void send_file_res(const struct peer_info *info,
 						  const struct fsnp_file_res *file_res)
@@ -551,8 +548,6 @@ void sp_tcp_thread(void *data)
     */
 }
 
-#undef READ_END
-#undef WRITE_END
 #undef SOCK
 #undef PIPE
 #undef POLLFD_NUM

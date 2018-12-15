@@ -273,7 +273,7 @@ static int send_join_msg(int sock)
 /*
  * Read the superpeer's answer
  */
-static int read_join_res(int sock)
+static int read_join_res(int sock, bool auto_join)
 {
 	struct fsnp_msg *msg;
 	ssize_t r = 0;
@@ -296,7 +296,12 @@ static int read_join_res(int sock)
 	}
 
 	free(msg);
-	slog_info(STDOUT_LEVEL, "Superpeer joined successfully.");
+	if (auto_join) {
+		slog_info(STDOUT_LEVEL, "Superpeer changed");
+	} else {
+		slog_info(STDOUT_LEVEL, "Superpeer joined successfully.");
+	}
+
 	PRINT_PEER;
 
 #ifndef FSNP_MEM_DEBUG
@@ -324,9 +329,6 @@ static int read_join_res(int sock)
 #endif // FSNP_MEM_DEBUG
 	return 0;
 }
-
-#define READ_END 0
-#define WRITE_END 1
 
 struct peer_tcp_state {
 	int pipe_fd[2];
@@ -531,7 +533,7 @@ static void sock_event(short revents)
 	}
 }
 
-#define FILENAME_SIZE 256
+#define FILENAME_SIZE FSNP_NAME_MAX
 
 /*
  *  Send a who_has message to the superpeer
@@ -543,9 +545,7 @@ static void send_file_req(void)
 	sha256_t file_hash;
 	ssize_t r = 0;
 	struct fsnp_msg *fm = NULL;
-#ifdef FSNP_DEBUG
 	char key_str[SHA256_STR_BYTES];
-#endif
 
 	r = fsnp_timed_read(tcp_state.pipe_fd[READ_END], file_hash, sizeof(sha256_t),
 	                    FSNP_TIMEOUT, &err);
@@ -565,10 +565,9 @@ static void send_file_req(void)
 	}
 
 	fsnp_init_file_req(&file_req, file_hash);
-#ifdef FSNP_DEBUG
 	stringify_hash(key_str, file_hash);
-	slog_debug(FILE_LEVEL, "SHA-256 of the file searched: %s", key_str);
-#endif
+	slog_info(FILE_LEVEL, "SHA-256 of the file searched: %s", key_str);
+	printf("Asking for file %s...", key_str);
 	err = fsnp_send_file_req(tcp_state.sock, &file_req);
 	slog_info(FILE_LEVEL, "Sending a file_req to the superpeer");
 	if (err != E_NOERR) {
@@ -750,6 +749,11 @@ static void peer_tcp_thread(void *data)
 
 		free(msg);
 	} else {
+		if (tcp_state.file_asked) {
+			slog_warn(FILE_LEVEL, "Due to changes into the network you have to "
+						 "ask again who has the file you're looking for");
+		}
+
 		if (!tcp_state.becoming_sp) {
 			if (!tcp_state.sp_is_leaving) {
 				rm_dead_sp_from_server(&tcp_state.sp_addr, PEER);
@@ -856,7 +860,7 @@ void join_sp(const struct fsnp_query_res *query_res, bool auto_join)
 		return;
 	}
 
-	ret = read_join_res(sock);
+	ret = read_join_res(sock, auto_join);
 	if (ret < 0) {
 		slog_warn(STDOUT_LEVEL, "Unable to join the superpeer");
 		PRINT_PEER;
@@ -920,10 +924,5 @@ void leave_sp(void)
 	}
 }
 
-#undef READ_END
-#undef WRITE_END
 #undef SOCK
 #undef PIPE
-#undef PIPE_QUIT
-#undef PIPE_DOWNLOAD
-#undef PIPE_WHO_HAS

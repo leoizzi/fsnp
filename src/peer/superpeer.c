@@ -34,6 +34,7 @@
 #include "peer/superpeer-peer.h"
 #include "peer/superpeer-superpeer.h"
 #include "peer/stdin.h"
+#include "peer/fake_peer.h"
 
 #include "fsnp/fsnp.h"
 
@@ -42,9 +43,6 @@
 #include "slog/slog.h"
 
 #define SP_BACKLOG 128
-
-#define READ_END 0
-#define WRITE_END 1
 
 /*
  * This list doesn't have a free callback because it shares the content with
@@ -57,198 +55,6 @@ static linked_list_t *known_peers = NULL;
  * network
  */
 static struct peer_info *fake_peer = NULL;
-
-/*
- * Handler called when a PIPE_FILE_RES msg is read from the pipe
- */
-static void fake_peer_file_res_rcvd(bool *already_asked, bool *should_exit)
-{
-	ssize_t r = 0;
-	fsnp_err_t err;
-	struct fsnp_whohas whohas;
-	struct fsnp_file_res *file_res = NULL;
-
-	r = fsnp_timed_read(fake_peer->pipefd[READ_END], &whohas,
-	                    sizeof(struct fsnp_whohas), FSNP_TIMEOUT, &err);
-	if (r < 0) {
-		slog_error(FILE_LEVEL, "fake-peer unable to read whohas msg from the "
-						 "pipe");
-		fsnp_log_err_msg(err, false);
-		*should_exit = true;
-		return;
-	}
-
-	file_res = fsnp_create_file_res(whohas.num_peers, whohas.owners);
-	if (!file_res) {
-		slog_error(FILE_LEVEL, "Unable to create fsnp_file_res");
-		return;
-	}
-
-	file_res_rcvd(file_res);
-	*already_asked = false;
-	free(file_res);
-}
-
-/*
- * Handler called when a PIPE_WHOHAS msg is read from the pipe
- */
-static void fake_peer_whohas_rcvd(bool *already_asked, bool *should_exit)
-{
-	ssize_t r = 0;
-	fsnp_err_t err;
-	sha256_t file_hash;
-	int ret = 0;
-
-	r = fsnp_timed_read(fake_peer->pipefd[READ_END], file_hash, sizeof(sha256_t),
-			FSNP_TIMEOUT, &err);
-	if (r < 0) {
-		slog_error(FILE_LEVEL, "Unable to read file_hash from the pipe");
-		fsnp_log_err_msg(err, false);
-		*should_exit = true;
-	}
-
-	if (*already_asked == true) {
-		slog_warn(STDOUT_LEVEL, "You're already searching for a file. Wait for"
-		                        " its response before searching for another one");
-		PRINT_PEER;
-		return;
-	}
-
-
-	ret = ask_whohas(file_hash, &fake_peer->addr);
-	if (ret < 0) {
-		slog_error(FILE_LEVEL, "Unable to ask into the overlay network a file");
-		*should_exit = true;
-		return;
-	}
-
-	*already_asked = true;
-}
-
-/*
- * Read a msg from the pipe and call the right handler
- */
-static void fake_peer_read_pipe_msg(bool *already_asked, bool *should_exit)
-{
-	int msg = 0;
-	ssize_t r = 0;
-
-	r = fsnp_read(fake_peer->pipefd[READ_END], &msg, sizeof(int));
-	if (r < 0) {
-		slog_error(FILE_LEVEL, "fsnp_read error %d while reading from the pipe",
-				errno);
-		*should_exit = true;
-		return;
-	}
-
-	switch (msg) {
-		case PIPE_WHOHAS:
-			fake_peer_whohas_rcvd(already_asked, should_exit);
-			break;
-
-		case PIPE_FILE_RES:
-			fake_peer_file_res_rcvd(already_asked, should_exit);
-			break;
-
-		case PIPE_QUIT:
-			slog_info(FILE_LEVEL, "fake peer has received pipe_quit");
-			*should_exit = true;
-			break;
-
-		default:
-			slog_error(FILE_LEVEL, "Unexpected pipe msg: %d", msg);
-			break;
-	}
-}
-
-/*
- * handler called when an event on the pipe occurs
- */
-static void fake_peer_pipe_event(short revents, bool *already_asked,
-								 bool *should_exit)
-{
-	if (revents & POLLIN || revents & POLLPRI || revents & POLLRDBAND) {
-		fake_peer_read_pipe_msg(already_asked, should_exit);
-	} else {
-		slog_error(FILE_LEVEL, "pipe revents: %d", revents);
-		*should_exit = true;
-	}
-}
-
-/*
- * Entry point for the fake peer_info thread
- */
-static void fake_peer_info_thread(void *data)
-{
-	bool should_exit = false;
-	bool already_asked = false;
-	struct pollfd fd;
-	int ret = 0;
-
-	UNUSED(data);
-
-	fd.fd = fake_peer->pipefd[READ_END];
-	fd.events = POLLIN | POLLPRI;
-	fd.revents = 0;
-
-	slog_info(FILE_LEVEL, "fake-peer-info-thread is successfully initialized");
-	while (!should_exit) {
-		ret = poll(&fd, 1, -1);
-		if (ret > 0) {
-			if (fd.revents) {
-				fake_peer_pipe_event(fd.revents, &already_asked, &should_exit);
-			}
-		} else {
-			should_exit = true;
-		}
-	}
-
-	slog_info(FILE_LEVEL, "fake-peer-info-thread is exiting...");
-	close(fake_peer->pipefd[READ_END]);
-	close(fake_peer->pipefd[WRITE_END]);
-	free(fake_peer);
-	fake_peer = NULL;
-}
-
-/*
- * Create a fake peer_info
- */
-static void create_fake_peer_info(void)
-{
-	int ret = 0;
-	struct in_addr a;
-
-	fake_peer = malloc(sizeof(struct peer_info));
-	if (!fake_peer) {
-		slog_error(FILE_LEVEL, "malloc error %d", errno);
-		return;
-	}
-
-	fake_peer->sock = -1;
-	fake_peer->addr.ip = get_peer_ip();
-	fake_peer->addr.port = get_tcp_sp_port();
-	fake_peer->joined = fake_peer;
-	fake_peer->timeouts = 0;
-	ret = pipe(fake_peer->pipefd);
-	if (ret < 0) {
-		slog_error(FILE_LEVEL, "Unable to create a pipe for the fake thread");
-		free(fake_peer);
-		fake_peer = NULL;
-		return;
-	}
-
-	a.s_addr = htonl(fake_peer->addr.ip);
-	snprintf(fake_peer->pretty_addr, sizeof(char) * 32, "%s:%hu", inet_ntoa(a),
-			fake_peer->addr.port);
-	ret = start_new_thread(fake_peer_info_thread, NULL, "fake-peer-info-thread");
-	if (ret < 0) {
-		slog_error(FILE_LEVEL, "Unable to start fake-peer-info thread");
-		close(fake_peer->pipefd[WRITE_END]);
-		close(fake_peer->pipefd[READ_END]);
-		free(fake_peer);
-		fake_peer = NULL;
-	}
-}
 
 /*
  * Create the superpeer's sockets and enter the overlay network
@@ -339,7 +145,16 @@ bool print_peer = false;
 		return false;
 	}
 
-	create_fake_peer_info();
+	fake_peer = create_fake_peer_info();
+	ret = start_new_thread(fake_peer_info_thread, fake_peer,
+			"fake-peer-info-thread");
+	if (ret < 0) {
+		slog_error(FILE_LEVEL, "Unable to start fake-peer-info thread");
+		close(fake_peer->pipefd[WRITE_END]);
+		close(fake_peer->pipefd[READ_END]);
+		free(fake_peer);
+		fake_peer = NULL;
+	}
 	add_poll_sp_sock(tcp);
 	return true;
 }
@@ -691,23 +506,22 @@ void prepare_exit_sp_mode(void)
 	quit_fake_peer_info_thread();
 	slog_info(FILE_LEVEL, "Removing the sp from the server");
 	rm_sp_from_server();
+	slog_info(FILE_LEVEL, "Extiting the sp network");
+	exit_sp_network();
+	slog_info(FILE_LEVEL, "Removing the sp_sock from the main poll");
+	rm_poll_sp_sock();
 }
 
 void exit_sp_mode(void)
 {
 	slog_info(FILE_LEVEL, "Exiting the sp mode...");
-	slog_info(FILE_LEVEL, "Extiting the sp network");
-	exit_sp_network();
 	slog_info(FILE_LEVEL, "Closing the keys_cache");
 	close_keys_cache();
-	slog_info(FILE_LEVEL, "Removing the sp_sock from the main poll");
-	rm_poll_sp_sock();
 	slog_info(FILE_LEVEL, "Destroying the known_peers list");
 	list_destroy(known_peers);
 	known_peers = NULL;
+	fake_peer = NULL;
 	slog_info(STDOUT_LEVEL, "You're no longer a superpeer");
 }
 
-#undef READ_END
-#undef WRITE_END
 #undef SP_BACKLOG

@@ -32,6 +32,16 @@ FSNP_BEGIN_DECL
 void launch_query_server(const struct sockaddr_in *addr, bool auto_join);
 
 /*
+ * Send a fsnp_query message to the server
+ */
+bool send_query(int sock);
+
+/*
+ * Read the fsnp_query_res sent by the server
+ */
+struct fsnp_query_res *read_res(int sock);
+
+/*
  * Contact the server used by the peer to join the P2P network for ask to add
  * this superpeer to its list.
  * Return 0 on success, -1 otherwise

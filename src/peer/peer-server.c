@@ -34,10 +34,7 @@
 
 #include "slog/slog.h"
 
-/*
- * Send a fsnp_query message to the server
- */
-static bool send_query(int sock)
+bool send_query(int sock)
 {
 	struct fsnp_query query;
 	fsnp_err_t err;
@@ -53,10 +50,7 @@ static bool send_query(int sock)
 	return true;
 }
 
-/*
- * Read the fsnp_query_res sent by the server
- */
-static struct fsnp_query_res *read_res(int sock)
+struct fsnp_query_res *read_res(int sock)
 {
 	fsnp_err_t err;
 	ssize_t t = 0;

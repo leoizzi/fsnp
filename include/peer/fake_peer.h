@@ -15,20 +15,19 @@
  *  along with fsnp. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef FSNP_PIPE_MACRO_H
-#define FSNP_PIPE_MACRO_H
+#include "peer/superpeer.h"
 
-enum pipe_macro {
-	PIPE_WHOHAS = 0,
-	PIPE_QUIT,
-	PIPE_PROMOTE,
-	PIPE_FILE_RES,
-	PIPE_ERROR,
-	PIPE_GET_PREV,
-	PIPE_ADDRESSES
-};
+#ifndef FSNP_FAKE_PEER_H
+#define FSNP_FAKE_PEER_H
 
-#define READ_END 0
-#define WRITE_END 1
+/*
+ * Create the fake peer.
+ */
+struct peer_info *create_fake_peer_info(void);
 
-#endif //FSNP_PIPE_MACRO_H
+/*
+ * Entry point for the fake-peer-info thread
+ */
+void fake_peer_info_thread(void *data);
+
+#endif //FSNP_FAKE_PEER_H

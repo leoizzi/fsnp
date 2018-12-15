@@ -30,6 +30,11 @@
 #include "peer/peer.h"
 #include "peer/keys_cache.h"
 #include "peer/peer-server.h"
+#include "peer/pipe_macro.h"
+#include "peer/request.h"
+#include "peer/timespec.h"
+#include "peer/neighbors.h"
+#include "peer/pending_msg.h"
 
 #include "fsnp/fsnp.h"
 
@@ -37,359 +42,6 @@
 
 #include "slog/slog.h"
 
-struct neighbors_flag {
-	uint8_t next_set : 1;
-	uint8_t snd_next_set : 1;
-	uint8_t prev_set : 1;
-};
-
-struct neighbors {
-	struct fsnp_peer next;
-	struct fsnp_peer snd_next;
-	struct fsnp_peer prev;
-	struct neighbors_flag flags;
-	char next_pretty[32];
-	char snd_next_pretty[32];
-	char prev_pretty[32];
-};
-
-#define SET_NEXT(flags) (flags).next_set = 1
-#define GET_NEXT(flags) (flags).next_set
-#define UNSET_NEXT(flags) (flags).next_set = 0
-
-#define SET_SND_NEXT(flags) (flags).snd_next_set = 1
-#define GET_SND_NEXT(flags) (flags).snd_next_set
-#define UNSET_SND_NEXT(flags) (flags).snd_next_set = 0
-
-#define SET_PREV(flags) (flags).prev_set = 1
-#define GET_PREV(flags) (flags).prev_set
-#define UNSET_PREV(flags) (flags).prev_set = 0
-
-/*
- * Set the next sp as 'addr'
- */
-static inline void set_next(struct neighbors *nb, const struct fsnp_peer *addr)
-{
-	struct in_addr a;
-
-    memcpy(&nb->next, (addr), sizeof(struct fsnp_peer));
-    memset(&nb->next_pretty, 0, sizeof(char) * 32);
-    SET_NEXT(nb->flags);
-    a.s_addr = htonl((addr)->ip);
-    snprintf(nb->next_pretty, sizeof(char) * 32, "%s:%hu", inet_ntoa(a),
-    		(addr)->port);
-    slog_info(FILE_LEVEL, "Setting next sp to %s", nb->next_pretty);
-}
-
-/*
- * Return true if the next sp is known, false otherwise
- */
-static always_inline bool isset_next(const struct neighbors *nb)
-{
-	return GET_NEXT(nb->flags) ? true : false;
-}
-
-/*
- * Compare a fsnp_peer with the next. If they match return true, false otherwise
- */
-static inline bool cmp_next(const struct neighbors *nb, const struct fsnp_peer *p)
-{
-	if (nb->next.ip == p->ip) {
-		if (nb->next.port == p->port) {
-			return true;
-		}
-	}
-
-	return false;
-}
-
-/*
- * Compare the address stored as next against the address of this superpeer.
- * If they match return true, false otherwise
- */
-static inline bool cmp_next_against_self(const struct neighbors *nb)
-{
-	struct fsnp_peer self;
-
-	self.ip = get_peer_ip();
-	self.port = get_udp_sp_port();
-
-	return cmp_next(nb, &self);
-}
-
-/*
- * Remove the next sp
- */
-static inline void unset_next(struct neighbors *nb)
-{
-	struct fsnp_peer self;
-
-	memset(&nb->next, 0, sizeof(struct fsnp_peer));
-    memset(nb->next_pretty, 0, sizeof(char) * 32);
-    UNSET_NEXT(nb->flags);
-    slog_info(FILE_LEVEL, "next sp unset. Setting it to self");
-	self.ip = get_peer_ip();
-	self.port = get_udp_sp_port();
-	set_next(nb, &self);
-}
-
-/*
- * Set the snd_next sp as 'addr'
- */
-static inline void set_snd_next(struct neighbors *nb,
-		const struct fsnp_peer *addr)
-{
-	struct in_addr a;
-
-	memcpy(&nb->snd_next, (addr), sizeof(struct fsnp_peer));
-	memset(&nb->snd_next_pretty, 0, sizeof(char) * 32);
-	SET_SND_NEXT(nb->flags);
-	a.s_addr = htonl((addr)->ip);
-    snprintf(nb->snd_next_pretty, sizeof(char) * 32, "%s:%hu", inet_ntoa(a),
-    		(addr)->port);
-    slog_info(FILE_LEVEL, "Setting snd_next sp to %s", nb->snd_next_pretty);
-}
-
-/*
- * Return true if the snd_next sp is known, false otherwise
- */
-static always_inline int isset_snd_next(const struct neighbors *nb)
-{
-	return GET_SND_NEXT(nb->flags) ? true : false;
-}
-
-/*
- * Compare a fsnp_peer with the snd_next. If they match return true, false
- * otherwise
- */
-static inline bool cmp_snd_next(const struct neighbors *nb,
-		const struct fsnp_peer *p)
-{
-	if (nb->snd_next.ip == p->ip) {
-		if (nb->snd_next.port == p->port) {
-			return true;
-		}
-	}
-
-	return false;
-}
-
-/*
- * Compare the address stored as snd_next against the address of this superpeer.
- * If they match return true, false otherwise
- */
-static inline bool cmp_snd_next_against_self(const struct neighbors *nb)
-{
-	struct fsnp_peer self;
-
-	self.ip = get_peer_ip();
-	self.port = get_udp_sp_port();
-
-	return cmp_snd_next(nb, &self);
-}
-
-/*
- * Remove the snd_next sp
- */
-static inline void unset_snd_next(struct neighbors *nb)
-{
-	struct fsnp_peer self;
-
-	memset(&nb->snd_next, 0, sizeof(struct fsnp_peer));
-    memset(nb->snd_next_pretty, 0, sizeof(char) * 32);
-    UNSET_SND_NEXT(nb->flags);
-    slog_info(FILE_LEVEL, "snd_next sp unset. Setting it to self");
-	self.ip = get_peer_ip();
-	self.port = get_udp_sp_port();
-	set_snd_next(nb, &self);
-}
-
-/*
- * Set the snd_next as next, then unset the snd_next
- */
-static inline void set_next_as_snd_next(struct neighbors *nb)
-{
-	unset_next(nb);
-	set_next(nb, &nb->snd_next);
-	unset_snd_next(nb);
-}
-
-/*
- * Set the prev sp as 'addr'
- */
-static inline void set_prev(struct neighbors *nb, const struct fsnp_peer *addr)
-{
-	struct in_addr a;
-
-    memcpy(&nb->prev, addr, sizeof(struct fsnp_peer));
-	memset(&nb->prev_pretty, 0, sizeof(char) * 32);
-   SET_PREV(nb->flags);
-    a.s_addr = htonl(addr->ip);
-    snprintf(nb->prev_pretty, sizeof(char) * 32, "%s:%hu", inet_ntoa(a),
-    		addr->port);
-    slog_info(FILE_LEVEL, "Setting prev sp to %s", nb->prev_pretty);
-}
-
-/*
- * Return true if the prev sp is known, false otherwise
- */
-static always_inline int isset_prev(const struct neighbors *nb)
-{
-	return GET_PREV(nb->flags) ? true : false;
-}
-
-/*
- * Compare a fsnp_peer with the prev. If they match return true, false otherwise
- */
-static inline bool cmp_prev(const struct neighbors *nb, const struct fsnp_peer *p)
-{
-	if (nb->prev.ip == p->ip) {
-		if (nb->prev.port == p->port) {
-			return true;
-		}
-	}
-
-	return false;
-}
-
-/*
- * Compare the address stored as prev against the address of this superpeer.
- * If they match return true, false otherwise
- */
-static inline bool cmp_prev_against_self(const struct neighbors *nb)
-{
-	struct fsnp_peer self;
-
-	self.ip = get_peer_ip();
-	self.port = get_udp_sp_port();
-
-	return cmp_prev(nb, &self);
-}
-
-/*
- * Remove the prev sp
- */
-static inline void unset_prev(struct neighbors *nb)
-{
-	struct fsnp_peer self;
-
-	memset(&nb->prev, 0, sizeof(struct fsnp_peer));
-    memset(nb->prev_pretty, 0, sizeof(char) * 32);
-    UNSET_PREV(nb->flags);
-    slog_info(FILE_LEVEL, "prev sp unset. Setting it to self");
-	self.ip = get_peer_ip();
-	self.port = get_udp_sp_port();
-	set_prev(nb, &self);
-}
-
-/*
- * Clear every entry in the neighbors struct
- */
-static void unset_all(struct neighbors *nb)
-{
-	if (isset_next(nb)) {
-		unset_next(nb);
-	}
-
-	if (isset_snd_next(nb)) {
-		unset_snd_next(nb);
-	}
-
-	if (isset_prev(nb)) {
-		unset_prev(nb);
-	}
-}
-
-#undef SET_NEXT
-#undef GET_NEXT
-#undef UNSET_NEXT
-#undef SET_SND_NEXT
-#undef GET_SND_NEXT
-#undef UNSET_SND_NEXT
-#undef SET_PREV
-#undef GET_PREV
-#undef UNSET_PREV
-
-/*
- * Update 't' to the current time
- */
-static inline void update_timespec(struct timespec *t)
-{
-	clock_gettime(CLOCK_MONOTONIC, t);
-}
-
-struct request {
-	struct timespec creation_time;
-	sha256_t file_hash;
-	bool sent_by_me;
-	struct fsnp_peer requester; // this field has a mean only if sent_by_me is true
-};
-
-/*
- * Free callback for the reqs hashtable
- */
-static void reqs_free_callback(void *data)
-{
-	struct request *r = (struct request *)data;
-	free(r);
-}
-
-struct sp_udp_state {
-	int sock;
-	int r_pipe[2];
-	int w_pipe[2];
-	struct neighbors *nb;
-	struct timespec last;
-	hashtable_t *reqs; // key: sha256_t     value: request
-	linked_list_t *pending_msgs;
-	bool wait_snd_res;
-	bool next_validated;
-	bool should_exit;
-};
-
-#define PM_TIMEOUT 15.f // s
-
-union pending_func {
-	void (*next)(const struct sp_udp_state *sus, const struct fsnp_peer *next);
-	void (*whohas)(const struct sp_udp_state *sus, const struct fsnp_whohas *whohas,
-			bool next);
-};
-
-struct pending_whohas {
-	struct fsnp_whohas whohas;
-	bool send_to_next;
-};
-
-union pending_func_data {
-	struct fsnp_peer old_peer; // if set to 0 will be considered as NULL
-	struct pending_whohas pw;
-};
-
-struct pending_msg {
-	fsnp_type_t type; // type of the msg sent
-	fsnp_type_t expected; // type expected of the msg sent by the sp
-	struct fsnp_peer sp;
-	char pretty_addr[32];
-	struct timespec last_send;
-	unsigned retry;
-	union pending_func f;
-	union pending_func_data pfd;
-};
-
-/*
- * Free callback for pending_msgs linked list
- */
-static void free_pending_msg(void *data)
-{
-	struct pending_msg *pm = (struct pending_msg *)data;
-
-	free(pm);
-}
-
-#define READ_END 0
-#define WRITE_END 1
-
-#define NSEC_TO_SEC(ns) ((double)(ns) / 1000000000.)
 #define INVALIDATE_NEXT_THRESHOLD 60.f // 1 minute
 #define V_TIMEOUT INVALIDATE_NEXT_THRESHOLD / 4.
 
@@ -397,20 +49,6 @@ static void free_pending_msg(void *data)
 #define VALIDATED_TIMEOUT 1
 #define INVALIDATED_NO_SND 2
 #define INVALIDATED_YES_SND 3
-
-/*
- * Calculate the delta of two timespecs (b - a)
- */
-static inline double calculate_timespec_delta(const struct timespec *a,
-											  const struct timespec *b)
-{
-	double aa = 0;
-	double bb = 0;
-
-	aa = (double)a->tv_sec + NSEC_TO_SEC(a->tv_nsec);
-	bb = (double)b->tv_sec + NSEC_TO_SEC(b->tv_nsec);
-	return bb - aa;
-}
 
 /*
  * Invalidate the next field if needed. In case it's needed the swap with the
@@ -488,12 +126,7 @@ static void send_promoted(const struct sp_udp_state *sus)
 	}
 }
 
-/*
- * Send a NEXT msg to the next sp. Pass NULL in 'old' if the next doesn't have
- * to change its next.
- */
-static void send_next(const struct sp_udp_state *sus,
-		const struct fsnp_peer *old)
+void send_next(const struct sp_udp_state *sus, const struct fsnp_peer *old)
 {
 	struct fsnp_next next;
 	fsnp_err_t err;
@@ -522,11 +155,6 @@ static void send_next(const struct sp_udp_state *sus,
 		fsnp_log_err_msg(err, false);
 	}
 }
-
-struct sender {
-	struct fsnp_peer addr;
-	char pretty_addr[32];
-};
 
 /*
  * Compare sender against this superpeer address. If they match return true,
@@ -565,11 +193,8 @@ static void send_ack(const struct sp_udp_state *sus, const struct sender *s)
 	}
 }
 
-/*
- * Send a WHOSNEXT msg to s
- */
-static void send_whosnext(const struct sp_udp_state *sus,
-		const struct fsnp_whosnext *whosnext, const struct sender *s)
+void send_whosnext(const struct sp_udp_state *sus,
+				   const struct fsnp_whosnext *whosnext, const struct sender *s)
 {
 	fsnp_err_t err;
 
@@ -598,13 +223,8 @@ static void send_whosnext(const struct sp_udp_state *sus,
 	}
 }
 
-/*
- * Send a WHOHAS msg.
- * If next is true this message will be sent to the next, otherwise will be sent
- * to the peer who has started the request.
- */
-static void send_whohas(const struct sp_udp_state *sus,
-		const struct fsnp_whohas *whohas, bool next)
+void send_whohas(const struct sp_udp_state *sus,const struct fsnp_whohas *whohas,
+		bool next)
 {
 	struct fsnp_peer self;
 	struct in_addr a;
@@ -666,92 +286,6 @@ static void send_leave(const struct sp_udp_state *sus, bool next)
 	if (err != E_NOERR) {
 		fsnp_log_err_msg(err, false);
 	}
-}
-
-/*
- * finish the initialization of a pending_msg and add it to the list
- */
-static void add_pending(linked_list_t *list, struct pending_msg *pm)
-{
-	struct in_addr a;
-	int ret = 0;
-
-	memset(pm->pretty_addr, 0, sizeof(char) * 32);
-	a.s_addr = htonl(pm->sp.ip);
-	snprintf(pm->pretty_addr, sizeof(char) * 32, "%s:%hu", inet_ntoa(a), pm->sp.port);
-	update_timespec(&pm->last_send);
-	pm->retry = 0;
-	slog_info(FILE_LEVEL, "Adding pending_msg of type %u for sp %s", pm->type,
-	          pm->pretty_addr);
-
-	ret = list_push_value(list, pm);
-	if (ret < 0) {
-		slog_warn(FILE_LEVEL, "Unable to push pending_msg");
-		free(pm);
-	}
-}
-
-/*
- * Add a next pending_msg to the list
- */
-static void add_pending_next(struct sp_udp_state *sus,
-                             const struct fsnp_peer *sp,
-                             const struct fsnp_peer *old_next)
-{
-	struct pending_msg *pm = NULL;
-
-	if (cmp_next_against_self(sus->nb)) {
-		return;
-	}
-
-	pm = malloc(sizeof(struct pending_msg));
-	if (!pm) {
-		slog_warn(FILE_LEVEL, "Unable to create pending_msg for NEXT msg")
-		return;
-	}
-
-	memcpy(&pm->sp, sp, sizeof(struct fsnp_peer));
-	pm->type = NEXT;
-	pm->expected = ACK;
-	pm->f.next = send_next;
-	if (old_next) {
-		memcpy(&pm->pfd.old_peer, old_next, sizeof(struct fsnp_peer));
-	} else {
-		memset(&pm->pfd.old_peer, 0, sizeof(struct fsnp_peer));
-	}
-
-	add_pending(sus->pending_msgs, pm);
-}
-
-/*
- * Add a whohas pending_msg to the list
- */
-static void add_pending_whohas(struct sp_udp_state *sus,
-                               const struct fsnp_peer *sp,
-                               const struct fsnp_whohas *whohas,
-                               bool send_to_next)
-{
-	struct pending_msg *pm = NULL;
-
-	if (send_to_next) {
-		if (cmp_next_against_self(sus->nb)) {
-			return;
-		}
-	}
-
-	pm = malloc(sizeof(struct pending_msg));
-	if (!pm) {
-		slog_warn(FILE_LEVEL, "Unable to create pending_msg for WHOHAS msg")
-		return;
-	}
-
-	memcpy(&pm->sp, sp, sizeof(struct fsnp_peer));
-	pm->type = WHOHAS;
-	pm->expected = ACK;
-	pm->f.whohas = send_whohas;
-	memcpy(&pm->pfd.pw.whohas, whohas, sizeof(struct fsnp_whohas));
-	pm->pfd.pw.send_to_next = send_to_next;
-	add_pending(sus->pending_msgs, pm);
 }
 
 /*
@@ -931,23 +465,6 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 	free(msg);
 }
 
-#define POLLFD_NUM 2
-#define PIPE 0
-#define SOCK 1
-
-/*
- * Setup the pollfd structures
- */
-static void setup_poll(struct pollfd *pollfd, const struct sp_udp_state *sus)
-{
-	memset(pollfd, 0, sizeof(struct pollfd) * POLLFD_NUM);
-
-	pollfd[PIPE].fd = sus->r_pipe[READ_END];
-	pollfd[PIPE].events = POLLIN | POLLPRI;
-	pollfd[SOCK].fd = sus->sock;
-	pollfd[SOCK].events = POLLIN | POLLPRI;
-}
-
 /*
  * Write into sender.pretty_addr the string representation of sender's addr
  */
@@ -1081,11 +598,11 @@ static void whohas_msg_rcvd(struct sp_udp_state *sus,
 	stringify_hash(key_str, whohas->req_id);
 	slog_info(FILE_LEVEL, "WHOHAS msg received from sp %s. req_id = %s",
 	          sender->pretty_addr, key_str);
-	req = ht_get(sus->reqs, whohas->req_id, sizeof(sha256_t), NULL);
+	req = get_request(whohas->req_id, sus->reqs);
 	if (req) {
 		if (req->sent_by_me) {
 			communicate_whohas_result_to_peer(whohas, &req->requester);
-			ht_delete(sus->reqs, whohas->req_id, sizeof(sha256_t), NULL, NULL);
+			rm_request_from_table(whohas->req_id, sus->reqs);
 		} else {
 			slog_info(FILE_LEVEL, "Request %s is already in cache", key_str);
 		}
@@ -1095,16 +612,11 @@ static void whohas_msg_rcvd(struct sp_udp_state *sus,
 	}
 
 	slog_info(FILE_LEVEL, "Adding request %s to the cache", key_str);
-	req = malloc(sizeof(struct request));
+	req = create_request(whohas->file_hash, false, NULL);
 	if (!req) {
 		slog_error(FILE_LEVEL, "malloc error %d", errno);
 	} else {
-		update_timespec(&req->creation_time);
-		req->sent_by_me = false;
-		memcpy(req->file_hash, whohas->file_hash, sizeof(sha256_t));
-		memset(&req->requester, 0, sizeof(struct fsnp_peer));
-		ht_set(sus->reqs, whohas->req_id, sizeof(sha256_t), req,
-				sizeof(struct request));
+		add_request_to_table(whohas->req_id, req, sus->reqs);
 	}
 
 	get_peers_for_key(whohas->file_hash, peers, &n);
@@ -1171,72 +683,6 @@ static void leave_msg_rcvd(struct sp_udp_state *sus,
 	}
 
 	send_ack(sus, sender);
-}
-
-struct is_pending_data {
-	struct sp_udp_state *sus;
-	struct fsnp_msg *msg;
-	struct sender *sender;
-};
-
-/*
- * Iterate over all the pending messages. If the msg received was pending remove
- * it from the list
- */
-int is_pending_iterator(void *item, size_t idx, void *user)
-{
-	struct pending_msg *pm = (struct pending_msg *)item;
-	struct is_pending_data *pmd = (struct is_pending_data *)user;
-	struct fsnp_msg *msg = pmd->msg;
-	struct sender *sender = pmd->sender;
-	struct sp_udp_state *sus = pmd->sus;
-	struct sender s;
-	struct fsnp_whosnext whosnext;
-
-	UNUSED(idx);
-
-	if (pm->expected != msg->msg_type) {
-		return GO_AHEAD;
-	}
-
-	if (pm->sp.ip != sender->addr.ip || pm->sp.port != sender->addr.port) {
-		return GO_AHEAD;
-	}
-
-	slog_debug(FILE_LEVEL, "The message received was pending. Removing it");
-	if (pm->type == NEXT) {
-		slog_info(FILE_LEVEL, "Next %s validated", sus->nb->next_pretty);
-		// send_ack(sus, sender); is this needed?
-		// TODO: send to the prev the new next, ask to the next who is his next
-		sus->next_validated = true;
-		s.addr = sus->nb->prev;
-		strncpy(s.pretty_addr, sus->nb->prev_pretty, sizeof(char) * 32);
-		fsnp_init_whosnext(&whosnext, &sus->nb->next);
-		send_whosnext(sus, &whosnext, &s); // tell the prev who's the new next
-		fsnp_init_whosnext(&whosnext, NULL);
-		send_whosnext(sus, &whosnext, sender); // ask to the next who's after him
-	}
-
-	return REMOVE_AND_STOP;
-}
-
-/*
- * Look if the message received is pending. If so remove it from the list of
- * pending msgs.
- */
-static void is_pending(struct sp_udp_state *sus, struct fsnp_msg *msg,
-                       struct sender *sender)
-{
-	struct is_pending_data pmd;
-
-	if (list_count(sus->pending_msgs) == 0) {
-		return;
-	}
-
-	pmd.sus = sus;
-	pmd.msg = msg;
-	pmd.sender = sender;
-	list_foreach_value(sus->pending_msgs, is_pending_iterator, &pmd);
 }
 
 /*
@@ -1356,7 +802,7 @@ static void pipe_whohas_rcvd(struct sp_udp_state *sus)
 	struct request *req = NULL;
 	struct fsnp_peer peers[MAX_KNOWN_PEER];
 	uint8_t n = 0;
-	int ret = 0;
+	add_req_status_t ret = 0;
 
 	r = fsnp_read(sus->r_pipe[READ_END], &whohas_msg, sizeof(struct pipe_whohas_msg));
 	if (r < 0) {
@@ -1364,25 +810,20 @@ static void pipe_whohas_rcvd(struct sp_udp_state *sus)
 		return;
 	}
 
-	req = malloc(sizeof(struct request));
+	req = create_request(whohas_msg.file_hash, true, &whohas_msg.requester);
 	if (!req) {
 		slog_error(FILE_LEVEL, "malloc error %d", errno);
 		return;
 	}
 
 	generate_req_id(&whohas_msg.requester, whohas_msg.file_hash, req_id);
-	memcpy(&req->requester, &whohas_msg.requester, sizeof(struct fsnp_peer));
-	memcpy(req->file_hash, whohas_msg.file_hash, sizeof(sha256_t));
-	update_timespec(&req->creation_time);
-	req->sent_by_me = true;
-	ret = ht_set_if_not_exists(sus->reqs, req_id, sizeof(sha256_t), req,
-			sizeof(struct request));
-	if (ret == 1) {
+	ret = add_request_to_table(req_id, req, sus->reqs);
+	if (ret == ALREADY_ADDED) {
 		slog_warn(FILE_LEVEL, "This request is already set");
 		communicate_error_to_peer(&req->requester);
 		free(req);
 		return;
-	} else if (ret == -1) {
+	} else if (ret == NOT_ADDED) {
 		free(req);
 		slog_error(FILE_LEVEL, "Unable to set the request");
 		return;
@@ -1399,12 +840,12 @@ static void pipe_whohas_rcvd(struct sp_udp_state *sus)
 
 	if (n >= FSNP_MAX_OWNERS) {
 		communicate_whohas_result_to_peer(&whohas, &whohas_msg.requester);
-		ht_delete(sus->reqs, req_id, sizeof(sha256_t), NULL, NULL);
+		rm_request_from_table(req_id, sus->reqs);
 	} else {
 		if (cmp_next_against_self(sus->nb)) {
 			// there's no other sp in the network. Just send the response
 			communicate_whohas_result_to_peer(&whohas, &whohas_msg.requester);
-			ht_delete(sus->reqs, req_id, sizeof(sha256_t), NULL, NULL);
+			rm_request_from_table(req_id, sus->reqs);
 		}
 
 		send_whohas(sus, &whohas, true);
@@ -1568,6 +1009,7 @@ static void check_if_next_alive(struct sp_udp_state *sus)
 				send_whosnext(sus, &whosnext, &s);
 			}
 
+			// TODO: re enter the network if needed
 			break;
 
 		case INVALIDATED_YES_SND:
@@ -1586,210 +1028,6 @@ static void check_if_next_alive(struct sp_udp_state *sus)
 	}
 }
 
-struct invalidate_req_data {
-	struct sp_udp_state *sus;
-	struct timespec curr;
-};
-
-#define INVALIDATE_REQ_THRESHOLD 60.0f // 1 minutes
-
-/*
- * Iterate over all the keys, removing that ones that are expired
- */
-static int invalidate_requests_iterator(void *item, size_t idx, void *user)
-{
-	hashtable_key_t *key = (hashtable_key_t *)item;
-	struct invalidate_req_data *data = (struct invalidate_req_data *)user;
-	struct request *req = NULL;
-	double delta = 0;
-	char key_str[SHA256_STR_BYTES];
-	uint8_t *p = NULL;
-	struct fsnp_whohas whohas;
-	struct fsnp_peer self;
-
-	UNUSED(idx);
-
-	req = ht_get(data->sus->reqs, key->data, key->len, NULL);
-	if (!req) {
-		slog_warn(FILE_LEVEL, "Request iterator key not present in the hashtable");
-		return GO_AHEAD;
-	}
-
-	delta = calculate_timespec_delta(&req->creation_time, &data->curr);
-	if (delta > INVALIDATE_REQ_THRESHOLD) {
-		p = key->data;
-		if (req->sent_by_me) {
-			// Tell to the peer that nothing was found
-			self.ip = get_peer_ip();
-			self.port = get_udp_sp_port();
-			fsnp_init_whohas(&whohas, &self, p, req->file_hash, 0, NULL);
-			communicate_whohas_result_to_peer(&whohas, &req->requester);
-		}
-
-		stringify_hash(key_str, p);
-		slog_info(FILE_LEVEL, "Invalidating request %s", key_str);
-		ht_delete(data->sus->reqs, key->data, key->len, NULL, NULL);
-	}
-
-	return GO_AHEAD;
-}
-
-#undef INVALIDATE_REQ_THRESHOLD
-
-/*
- * Invalidate any request that has expired
- */
-static void invalidate_requests(struct sp_udp_state *sus)
-{
-	linked_list_t *l = NULL;
-	struct invalidate_req_data data;
-
-	if (ht_count(sus->reqs) == 0) {
-		return;
-	}
-
-	l = ht_get_all_keys(sus->reqs);
-	if (!l) {
-		slog_error(FILE_LEVEL, "Unable to get all the reqs keys");
-		return;
-	}
-
-	update_timespec(&data.curr);
-	data.sus = sus;
-	list_foreach_value(l, invalidate_requests_iterator, &data);
-	list_destroy(l);
-}
-
-struct check_pm_timeout_data
-{
-	struct sp_udp_state *sus;
-	double curr_time;
-};
-
-/*
- * Try to send again a pending msg
- */
-static void resend(struct sp_udp_state *sus, struct pending_msg *pm)
-{
-	slog_info(FILE_LEVEL, "Trying to send again pending_msg of type %u for peer"
-					   " %s", pm->expected, pm->pretty_addr);
-	switch (pm->type) {
-		case NEXT:
-			if (pm->pfd.old_peer.ip == 0 && pm->pfd.old_peer.port == 0) {
-				pm->f.next(sus, NULL);
-			} else {
-				pm->f.next(sus, &pm->pfd.old_peer);
-			}
-			break;
-
-		case WHOHAS:
-			pm->f.whohas(sus, &pm->pfd.pw.whohas, pm->pfd.pw.send_to_next);
-			break;
-
-		default:
-			break;
-	}
-
-	pm->retry++;
-	update_timespec(&pm->last_send);
-}
-
-/*
- * React to a pending_msg fail by its type
- */
-static void handle_pm_fail(struct sp_udp_state *sus, struct pending_msg *pm)
-{
-	slog_warn(FILE_LEVEL, "pending_msg of type %u for peer %s has failed",
-			pm->expected, pm->pretty_addr);
-	switch (pm->type) {
-		case NEXT:
-			if (!cmp_snd_next_against_self(sus->nb) && isset_snd_next(sus->nb)) {
-				set_next_as_snd_next(sus->nb);
-				if (pm->pfd.old_peer.ip == 0 && pm->pfd.old_peer.port == 0) {
-					pm->f.next(sus, NULL);
-					add_pending_next(sus, &sus->nb->next, NULL);
-				} else {
-					pm->f.next(sus, &pm->pfd.old_peer);
-					add_pending_next(sus, &sus->nb->next,
-							&pm->pfd.old_peer);
-				}
-			}
-
-			rm_dead_sp_from_server(&pm->sp, SUPERPEER);
-			break;
-
-		case WHOHAS:
-			if (pm->pfd.pw.send_to_next) {
-				rm_dead_sp_from_server(&sus->nb->next, SUPERPEER);
-				set_next_as_snd_next(sus->nb);
-				send_next(sus, NULL);
-				sus->next_validated = false;
-				add_pending_next(sus, &sus->nb->next, NULL);
-			}
-
-			break;
-		default:
-			break;
-	}
-}
-
-/*
- * Iterate over all the values of pending_msgs to check if a pending message
- * has timed out
- */
-static int check_pm_timeout_iterator(void *item, size_t idx, void *user)
-{
-	struct pending_msg *pm = (struct pending_msg *)item;
-	struct check_pm_timeout_data *data = (struct check_pm_timeout_data *)user;
-	struct sp_udp_state *sus = data->sus;
-	double last_time = 0;
-
-	UNUSED(idx);
-
-	if (pm->type == WHOHAS) {
-		if (pm->pfd.pw.send_to_next) {
-			if (!cmp_next(sus->nb, &pm->sp)) {
-				// If they don't match this pm is trash
-				return REMOVE_AND_GO;
-			}
-		}
-	} else if (pm->type == NEXT) {
-		if (!cmp_next(sus->nb, &pm->sp)) {
-			// If they don't match this pm is trash
-			return REMOVE_AND_GO;
-		}
-	}
-
-	last_time = (double)pm->last_send.tv_sec + NSEC_TO_SEC(pm->last_send.tv_nsec);
-	if (data->curr_time - last_time > PM_TIMEOUT) {
-		if (pm->retry < 4) {
-			resend(sus, pm);
-			return GO_AHEAD;
-		} else {
-			handle_pm_fail(sus, pm);
-			return REMOVE_AND_GO;
-		}
-	} else {
-		return GO_AHEAD;
-	}
-}
-
-/*
- * Look if a pending_request has timed out. If has timeout less than 4 times try
- * to send the message again, otherwise remove it from the list and handle this
- * failure accordingly to its time
- */
-static void check_pm_timeout(struct sp_udp_state *sus)
-{
-	struct check_pm_timeout_data data;
-	struct timespec curr;
-
-	update_timespec(&curr);
-	data.curr_time = (double)curr.tv_sec + NSEC_TO_SEC(curr.tv_nsec);
-	data.sus = sus;
-	list_foreach_value(sus->pending_msgs, check_pm_timeout_iterator, &data);
-}
-
 struct sp_thread_pipe {
 	int r_pipe[2];
 	int w_pipe[2];
@@ -1797,6 +1035,23 @@ struct sp_thread_pipe {
 };
 
 static struct sp_thread_pipe stp;
+
+#define POLLFD_NUM 2
+#define PIPE 0
+#define SOCK 1
+
+/*
+ * Setup the pollfd structures
+ */
+static void setup_poll(struct pollfd *pollfd, const struct sp_udp_state *sus)
+{
+	memset(pollfd, 0, sizeof(struct pollfd) * POLLFD_NUM);
+
+	pollfd[PIPE].fd = sus->r_pipe[READ_END];
+	pollfd[PIPE].events = POLLIN | POLLPRI;
+	pollfd[SOCK].fd = sus->sock;
+	pollfd[SOCK].events = POLLIN | POLLPRI;
+}
 
 #ifndef FSNP_INF_TIMEOUT
 #define SP_POLL_TIMEOUT 15000
@@ -1831,7 +1086,7 @@ static void sp_udp_thread(void *data)
 		goto prev_leave;
 	}
 
-	clock_gettime(CLOCK_MONOTONIC, &sus->last);
+	update_timespec(&sus->last);
 	s.addr = sus->nb->next;
 	strncpy(s.pretty_addr, sus->nb->next_pretty, sizeof(char) * 32);
 	fsnp_init_whosnext(&whosnext, NULL);
@@ -1840,7 +1095,7 @@ static void sp_udp_thread(void *data)
 	slog_info(FILE_LEVEL, "Superpeers' overlay network successfully joined");
 	while (!sus->should_exit) {
 		ret = poll(pollfd, POLLFD_NUM, SP_POLL_TIMEOUT);
-		invalidate_requests(sus);
+		invalidate_requests(sus->reqs);
 		if (ret > 0) {
 			if (pollfd[PIPE].revents) {
 				pipe_event(sus, pollfd[PIPE].revents);
@@ -2211,9 +1466,5 @@ void exit_sp_network(void)
 	}
 }
 
-#undef PM_TIMEOUT
-#undef NSEC_TO_SEC
-#undef READ_END
-#undef WRITE_END
 #undef INVALIDATE_NEXT_THRESHOLD
 #undef SP_POLL_TIMEOUT
