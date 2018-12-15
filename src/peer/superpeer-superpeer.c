@@ -347,7 +347,7 @@ struct sp_udp_state {
 	bool should_exit;
 };
 
-#define PM_TIMEOUT 30.f // s
+#define PM_TIMEOUT 15.f // s
 
 union pending_func {
 	void (*next)(const struct sp_udp_state *sus, const struct fsnp_peer *next);
@@ -1591,7 +1591,7 @@ struct invalidate_req_data {
 	struct timespec curr;
 };
 
-#define INVALIDATE_REQ_THRESHOLD 120.0f // 2 minutes
+#define INVALIDATE_REQ_THRESHOLD 60.0f // 1 minutes
 
 /*
  * Iterate over all the keys, removing that ones that are expired
