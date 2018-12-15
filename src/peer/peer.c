@@ -337,6 +337,7 @@ int peer_main(bool localhost)
 {
 	int ret = 0;
 	int s = 0;
+	bool was_sp = false;
 
 	slog_info(STDOUT_LEVEL, "Initializing the peer...");
 
@@ -390,7 +391,8 @@ int peer_main(bool localhost)
 	}
 
 	slog_info(STDOUT_LEVEL, "Quitting...");
-	if (is_superpeer()) {
+	was_sp = is_superpeer();
+	if (was_sp) {
 		slog_info(FILE_LEVEL, "Preparing the exit_sp_mode");
 		prepare_exit_sp_mode();
 	} else if (get_peer_sock() != 0) {
@@ -402,7 +404,7 @@ int peer_main(bool localhost)
 	close_file_manager();
 	slog_info(STDOUT_LEVEL, "De-initializing the stdin subsystem");
 	close_stdin();
-	if (is_superpeer()) {
+	if (was_sp) {
 		exit_sp_mode();
 	}
 
