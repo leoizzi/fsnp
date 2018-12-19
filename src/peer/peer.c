@@ -237,6 +237,9 @@ void quit_peer(void)
 	state.should_exit = true;
 }
 
+/*
+ * Handler for SIGINT signal
+ */
 static void termination_handler(int signum)
 {
 	UNUSED(signum);
@@ -244,20 +247,38 @@ static void termination_handler(int signum)
 }
 
 /*
- * Configure the server for handling the Ctrl-C signal.
+ * Configure the peer for handling the Ctrl-C signal.
  */
 static void setup_signal_handler(void)
 {
-	int err = 0;
+	int ret = 0;
 	struct sigaction s;
 
 	sigemptyset(&s.sa_mask);
 	s.sa_handler = termination_handler;
 	s.sa_flags = SA_RESTART;
-	err = sigaction(SIGINT, &s, NULL);
-	if (err < 0) {
+	ret = sigaction(SIGINT, &s, NULL);
+	if (ret < 0) {
 		slog_warn(STDOUT_LEVEL, "Unable to set up the signal handler for ^C. "
 		       "You can still exit by entering 'quit' from the command line.");
+	}
+}
+
+/*
+ * Tell to the OS that we want to ignore SIGPIPE
+ */
+static void mask_sigpipe(void)
+{
+	sigset_t s;
+	int ret = 0;
+
+	sigemptyset(&s);
+	sigaddset(&s, SIGPIPE);
+	ret = sigprocmask(SIG_BLOCK, &s, NULL);
+	if (ret < 0) {
+		slog_warn(STDOUT_LEVEL, "Unable to mask SIGPIPE. If a peer will drop"
+						  "unexpectedly the connection is likely that this peer"
+						  "will crash.");
 	}
 }
 
@@ -363,7 +384,7 @@ int peer_main(bool localhost)
 		exit(EXIT_FAILURE);
 	}
 
-	slog_info(STDOUT_LEVEL, "Setting up the ^C signal handler...");
+	slog_info(STDOUT_LEVEL, "Setting up the signal handlers...");
 	setup_signal_handler();
 	slog_info(STDOUT_LEVEL, "Initializing the stdin subsystem...");
 	init_stdin();
