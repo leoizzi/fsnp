@@ -41,7 +41,7 @@ FSNP_BEGIN_DECL
  *
  * Why the protocol doesn't limit the packet size to 508 bytes then?
  * Because it's useless! The biggest packet that the protocol would send over
- * UDP is a
+ * UDP is a WHOHAS, which is composed by 163 bytes in the standard configuration
  */
 #define MAX_UDP_PKT_SIZE 256
 

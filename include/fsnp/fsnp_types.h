@@ -33,7 +33,7 @@ FSNP_BEGIN_DECL
  *
  * 2) QUERY_RES: server's response to the QUERY message
  *
- * 3) ADD_PEER: tell to the server to add a new superpeer to its list
+ * 3) ADD_SP: tell to the server to add a new superpeer to its list
  *
  * 4) RM_SP: tell the server to remove a superpeer from its list
  *
