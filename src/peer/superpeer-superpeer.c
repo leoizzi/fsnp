@@ -530,6 +530,7 @@ static void promoted_msg_rcvd(struct sp_udp_state *sus,
 	}
 
 	memcpy(&old_next, &sus->nb->next, sizeof(struct fsnp_peer));
+	set_snd_next(sus->nb, &sus->nb->next);
 	set_next(sus->nb, &sender->addr);
 	update_timespec(&sus->last);
 	sus->next_validated = false;
