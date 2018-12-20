@@ -26,6 +26,8 @@
 
 #include "fsnp/fsnp.h"
 
+#include "slog/slog.h"
+
 /*
  * HOW TO RUN
  *
@@ -191,7 +193,9 @@ int main(int argc, char **argv)
 	UNUSED(argc);
 	UNUSED(argv);
 
+	slog_init("peer_join_update_test_log", NULL, MAX_LOG_STDOUT_LEVEL, 1);
 	connect_to_server();
 	wait_for_peer();
 	read_messages();
+	slog_close();
 }

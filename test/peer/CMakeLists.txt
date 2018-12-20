@@ -1,2 +1,2 @@
 add_executable(peer_join_update_test peer_join_update_test.c)
-target_link_libraries(peer_join_update_test PUBLIC fsnp struct)
+target_link_libraries(peer_join_update_test PUBLIC fsnp struct slog)
