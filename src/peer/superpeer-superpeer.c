@@ -628,6 +628,7 @@ static void whohas_msg_rcvd(struct sp_udp_state *sus,
 	if (n == 0) { // just send the message to the next
 		send_ack(sus, sender);
 		send_whohas(sus, whohas, send_to_next);
+		update_request(sus->reqs, whohas->req_id, whohas);
 		add_pending_whohas(sus, &sus->nb->next, whohas, send_to_next);
 		return;
 	}
@@ -647,6 +648,7 @@ static void whohas_msg_rcvd(struct sp_udp_state *sus,
 
 	send_ack(sus, sender);
 	send_whohas(sus, whohas, send_to_next);
+	update_request(sus->reqs, whohas->req_id, whohas);
 	if (send_to_next) {
 		add_pending_whohas(sus, &sus->nb->next, whohas, send_to_next);
 	} else {
