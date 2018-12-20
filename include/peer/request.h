@@ -31,6 +31,7 @@ struct request {
 	sha256_t file_hash;
 	bool sent_by_me;
 	struct fsnp_peer requester; // this field has a mean only if sent_by_me is true
+	struct fsnp_whohas whohas;
 };
 
 
@@ -57,6 +58,12 @@ int add_request_to_table(sha256_t key, struct request *req, hashtable_t *ht);
  * Get a request from hashtable
  */
 struct request *get_request(sha256_t key, hashtable_t *ht);
+
+/*
+ * Add to the request cached the result of the research
+ */
+void
+update_request(hashtable_t *ht, sha256_t key, const struct fsnp_whohas *whohas);
 
 /*
  * Remove req

@@ -142,6 +142,18 @@ struct request *get_request(sha256_t key, hashtable_t *ht)
 	return ht_get(ht, key, sizeof(sha256_t), NULL);
 }
 
+void update_request(hashtable_t *ht, sha256_t key, const struct fsnp_whohas *whohas)
+{
+	struct request *req = NULL;
+
+	req = get_request(key, ht);
+	if (!req) {
+		return;
+	}
+
+	memcpy(&req->whohas, whohas, sizeof(struct fsnp_whohas));
+}
+
 void rm_request_from_table(sha256_t key, hashtable_t *ht)
 {
 	ht_delete(ht, key, sizeof(sha256_t), NULL, NULL);

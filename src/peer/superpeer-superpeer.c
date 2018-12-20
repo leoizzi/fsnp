@@ -602,9 +602,14 @@ static void whohas_msg_rcvd(struct sp_udp_state *sus,
 	if (req) {
 		if (req->sent_by_me) {
 			communicate_whohas_result_to_peer(whohas, &req->requester);
-			rm_request_from_table(whohas->req_id, sus->reqs);
+			update_request(sus->reqs, whohas->req_id, whohas);
 		} else {
 			slog_info(FILE_LEVEL, "Request %s is already in cache", key_str);
+			if (cmp_next(sus->nb, &sender->addr)) {
+				send_whohas(sus, &req->whohas, true);
+			} else {
+				send_whohas(sus, &req->whohas, false);
+			}
 		}
 
 		send_ack(sus, sender);
@@ -840,12 +845,12 @@ static void pipe_whohas_rcvd(struct sp_udp_state *sus)
 
 	if (n >= FSNP_MAX_OWNERS) {
 		communicate_whohas_result_to_peer(&whohas, &whohas_msg.requester);
-		rm_request_from_table(req_id, sus->reqs);
+		update_request(sus->reqs, req_id, &whohas);
 	} else {
 		if (cmp_next_against_self(sus->nb)) {
 			// there's no other sp in the network. Just send the response
 			communicate_whohas_result_to_peer(&whohas, &whohas_msg.requester);
-			rm_request_from_table(req_id, sus->reqs);
+			update_request(sus->reqs, req_id, &whohas);
 		}
 
 		send_whohas(sus, &whohas, true);
