@@ -606,11 +606,6 @@ static void whohas_msg_rcvd(struct sp_udp_state *sus,
 			update_request(sus->reqs, whohas->req_id, whohas);
 		} else {
 			slog_info(FILE_LEVEL, "Request %s is already in cache", key_str);
-			if (cmp_next(sus->nb, &sender->addr)) {
-				send_whohas(sus, &req->whohas, true);
-			} else {
-				send_whohas(sus, &req->whohas, false);
-			}
 		}
 
 		send_ack(sus, sender);
@@ -828,12 +823,18 @@ static void pipe_whohas_rcvd(struct sp_udp_state *sus)
 	ret = add_request_to_table(req_id, req, sus->reqs);
 	if (ret == ALREADY_ADDED) {
 		slog_warn(FILE_LEVEL, "This request is already set");
-		communicate_error_to_peer(&req->requester);
 		free(req);
+		req = get_request(&whohas_msg.file_hash, sus->reqs);
+		if (!req) {
+			return;
+		}
+
+		communicate_whohas_result_to_peer(&req->whohas, &whohas_msg.requester);
 		return;
 	} else if (ret == NOT_ADDED) {
 		free(req);
 		slog_error(FILE_LEVEL, "Unable to set the request");
+		communicate_error_to_peer(&req->requester);
 		return;
 	}
 
