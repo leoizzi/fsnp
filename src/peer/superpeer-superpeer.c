@@ -824,7 +824,7 @@ static void pipe_whohas_rcvd(struct sp_udp_state *sus)
 	if (ret == ALREADY_ADDED) {
 		slog_warn(FILE_LEVEL, "This request is already set");
 		free(req);
-		req = get_request(whohas_msg.file_hash, sus->reqs);
+		req = get_request(req_id, sus->reqs);
 		if (!req) {
 			return;
 		}

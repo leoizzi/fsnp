@@ -406,7 +406,7 @@ int get_file_desc(sha256_t key, bool read, char filename[FSNP_NAME_MAX])
 	if (fd < 0) {
 		slog_error(FILE_LEVEL, "Error while opening %s. errno %d, strerror: %s",
 		           path, errno, strerror(errno));
-		if (check_if_file_is_valid()) {
+		if (check_if_file_is_valid() && key != NULL) {
 			delete_key(key);
 		}
 		return -1;
