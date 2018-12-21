@@ -295,11 +295,15 @@ int rm_entries_by_peer(void *item, size_t idx, void *user)
 void cache_rm_keys(struct fsnp_peer *owner, uint16_t dw_port)
 {
 	linked_list_t *list = NULL;
+#ifdef FSNP_DEBUG
 	struct in_addr addr;
+#endif
 	uint16_t port = 0;
 
+#ifdef FSNP_DEBUG
 	addr.s_addr = htonl(owner->ip);
 	slog_debug(FILE_LEVEL, "Removing files for peer %s:%hu", inet_ntoa(addr), owner->port);
+#endif
 	if (!cache) {
 		// avoid segfault if the cache was closed before a thread call this func
 		return;
