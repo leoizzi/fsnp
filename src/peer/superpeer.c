@@ -272,26 +272,7 @@ void sp_tcp_sock_event(short revents)
 
 void sp_ask_file(const char *filename, size_t size)
 {
-	int msg = PIPE_WHOHAS;
-	sha256_t key;
-	fsnp_err_t err;
-	ssize_t w = 0;
-
-	w = fsnp_timed_write(fake_peer->pipefd[WRITE_END], &msg, sizeof(int),
-			FSNP_TIMEOUT, &err);
-	if (w < 0) {
-		slog_error(FILE_LEVEL, "Unable to write PIPE_WHOHAS into fake-peer's pipe");
-		fsnp_log_err_msg(err, false);
-		return;
-	}
-
-	sha256(filename, size, key);
-	w = fsnp_timed_write(fake_peer->pipefd[WRITE_END], key, sizeof(sha256_t),
-			FSNP_TIMEOUT, &err);
-	if (w < 0) {
-		slog_error(FILE_LEVEL, "Unable to write into fake-peer's pipe the file hash");
-		fsnp_log_err_msg(err, false);
-	}
+	fake_peer_ask_file(fake_peer, filename, size);
 }
 
 /*

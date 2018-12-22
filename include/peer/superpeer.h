@@ -64,8 +64,7 @@ void exit_sp_mode(void);
 void sp_tcp_sock_event(short revents);
 
 /*
- * Send a message to the thread who's in charge
- * In filename put the name of the file, in size the size of filename
+ * Search for a file inside the overlay network
  */
 void sp_ask_file(const char *filename, size_t size);
 

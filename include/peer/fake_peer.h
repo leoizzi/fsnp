@@ -30,4 +30,12 @@ struct peer_info *create_fake_peer_info(void);
  */
 void fake_peer_info_thread(void *data);
 
+/*
+ * Tell to the fake peer thread that the user wants to search for a file
+ *
+ * In filename put the name of the file, in size the size of filename
+ */
+void fake_peer_ask_file(struct peer_info *fake_peer, const char *filename,
+                        size_t size);
+
 #endif //FSNP_FAKE_PEER_H

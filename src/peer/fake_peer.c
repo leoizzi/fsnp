@@ -179,6 +179,31 @@ void fake_peer_info_thread(void *data)
 	close(fake_peer->pipefd[WRITE_END]);
 }
 
+void fake_peer_ask_file(struct peer_info *fake_peer, const char *filename,
+                        size_t size)
+{
+	int msg = PIPE_WHOHAS;
+	sha256_t key;
+	fsnp_err_t err;
+	ssize_t w = 0;
+
+	w = fsnp_timed_write(fake_peer->pipefd[WRITE_END], &msg, sizeof(int),
+	                     FSNP_TIMEOUT, &err);
+	if (w < 0) {
+		slog_error(FILE_LEVEL, "Unable to write PIPE_WHOHAS into fake-peer's pipe");
+		fsnp_log_err_msg(err, false);
+		return;
+	}
+
+	sha256(filename, size, key);
+	w = fsnp_timed_write(fake_peer->pipefd[WRITE_END], key, sizeof(sha256_t),
+	                     FSNP_TIMEOUT, &err);
+	if (w < 0) {
+		slog_error(FILE_LEVEL, "Unable to write into fake-peer's pipe the file hash");
+		fsnp_log_err_msg(err, false);
+	}
+}
+
 
 struct peer_info *create_fake_peer_info(void)
 {
