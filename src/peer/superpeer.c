@@ -252,7 +252,6 @@ static void accept_peer(void)
 		}
 
 		free(peer_info);
-		PRINT_PEER;
 	}
 
 	num_peers = list_count(known_peers);

@@ -229,7 +229,6 @@ int set_download_dir(const char *path)
 	}
 
 	slog_info(STDOUT_LEVEL, "New download directory: \"%s\"", download.path);
-	PRINT_PEER;
 	return 0;
 }
 

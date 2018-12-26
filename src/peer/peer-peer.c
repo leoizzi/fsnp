@@ -63,11 +63,9 @@ static bool store_chunk(const struct client_dw *cd, char buf[DW_CHUNK], size_t r
 		slog_warn(STDOUT_LEVEL, "Error %d has occurred while writing on disk"
 						  " the file wich is being downloaded from %s.",
 						  errno, cd->pretty_addr);
-		PRINT_PEER;
 		return false;
 	} else if (w == 0) {
 		slog_warn(STDOUT_LEVEL, "File %s unexpectedly closed", cd->filename);
-		PRINT_PEER;
 		return false;
 	} else {
 		return true;
@@ -87,7 +85,6 @@ static bool receive_chunk(const struct client_dw *cd, char buf[DW_CHUNK], size_t
 		slog_warn(STDOUT_LEVEL, "An error has occurred while downloading"
 		                        " the file from %s", cd->pretty_addr);
 		fsnp_log_err_msg(err, true);
-		PRINT_PEER;
 		*r = 1; // so the if statement in download_file get triggered
 		return false;
 	} else if (rt == 0) {

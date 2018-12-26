@@ -425,7 +425,6 @@ static void is_alive(void)
 		slog_warn(STDOUT_LEVEL, "This peer has not received any sign of life"
 						  " from the superpeer for more then 2 minutes."
 						  " Join another one please.");
-		PRINT_PEER;
 		tcp_state.quit_loop = true;
 		return;
 	}
@@ -437,7 +436,6 @@ static void is_alive(void)
 	if (err == E_PEER_DISCONNECTED) {
 		slog_warn(STDOUT_LEVEL, "The superpeer has disconnected itself. Join"
 						  " another one please");
-		PRINT_PEER;
 		tcp_state.quit_loop = true;
 	}
 }
@@ -726,8 +724,11 @@ static void peer_tcp_thread(void *data)
 
 
 	if (tcp_state.send_leave_msg) {
-		slog_info(STDOUT_LEVEL, "Leaving the superpeer...");
-		PRINT_PEER;
+		if (!tcp_state.becoming_sp) {
+			slog_info(STDOUT_LEVEL, "Leaving the superpeer...");
+			PRINT_PEER;
+		}
+
 		fsnp_init_leave(&leave);
 		err = fsnp_send_tcp_leave(tcp_state.sock, &leave);
 		slog_info(FILE_LEVEL, "Sending an alive msg to the sp from the"
@@ -752,6 +753,7 @@ static void peer_tcp_thread(void *data)
 		if (tcp_state.file_asked) {
 			slog_warn(FILE_LEVEL, "Due to changes into the network you have to "
 						 "ask again who has the file you're looking for");
+			PRINT_PEER;
 		}
 
 		if (!tcp_state.becoming_sp) {
