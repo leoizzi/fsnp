@@ -97,6 +97,7 @@ enum fsnp_type {
 	WHOHAS
 };
 typedef enum fsnp_type fsnp_type_t;
+
 #ifdef FSNP_INF_TIMEOUT
 typedef short timeout_t;
 #define FSNP_POLL_TIMEOUT -1

@@ -40,6 +40,7 @@ struct request *create_request(const sha256_t file_hash, bool sent_by_me,
 
 	update_timespec(&req->creation_time);
 	req->sent_by_me = sent_by_me;
+	req->answered = false;
 	memcpy(req->file_hash, file_hash, sizeof(sha256_t));
 	if (!requester) {
 		memset(&req->requester, 0, sizeof(struct fsnp_peer));
@@ -84,10 +85,12 @@ static int invalidate_requests_iterator(void *item, size_t idx, void *user)
 		p = key->data;
 		if (req->sent_by_me) {
 			// Tell to the peer that nothing was found
-			self.ip = get_peer_ip();
-			self.port = get_udp_sp_port();
-			fsnp_init_whohas(&whohas, &self, p, req->file_hash, 0, NULL);
-			communicate_whohas_result_to_peer(&whohas, &req->requester);
+			if (!req->answered) {
+				self.ip = get_peer_ip();
+				self.port = get_udp_sp_port();
+				fsnp_init_whohas(&whohas, &self, p, req->file_hash, 0, NULL);
+				communicate_whohas_result_to_peer(&whohas, &req->requester);
+			}
 		}
 
 		stringify_hash(key_str, p);
@@ -151,6 +154,7 @@ void update_request(hashtable_t *ht, sha256_t key, const struct fsnp_whohas *who
 		return;
 	}
 
+	req->answered = true;
 	memcpy(&req->whohas, whohas, sizeof(struct fsnp_whohas));
 }
 

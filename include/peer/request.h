@@ -30,6 +30,7 @@ struct request {
 	struct timespec creation_time;
 	sha256_t file_hash;
 	bool sent_by_me;
+	bool answered;
 	struct fsnp_peer requester; // this field has a mean only if sent_by_me is true
 	struct fsnp_whohas whohas;
 };

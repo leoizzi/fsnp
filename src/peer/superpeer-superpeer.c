@@ -1018,7 +1018,6 @@ static void check_if_next_alive(struct sp_udp_state *sus)
 				send_whosnext(sus, &whosnext, &s);
 			}
 
-			// TODO: re enter the network if needed
 			break;
 
 		case INVALIDATED_YES_SND:

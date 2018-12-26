@@ -173,6 +173,7 @@ static void query_sp_handler(void)
 	struct sockaddr_in addr;
 
 	memset(&addr, 0, sizeof(addr));
+	printf("Insert the address of the boot server.\n");
 	if (!request_user_ip_port(&addr)) {
 		return;
 	}
@@ -187,8 +188,17 @@ static void join_sp_handler(void)
 {
 	struct sockaddr_in addr;
 	struct fsnp_peer peer;
+	struct fsnp_peer server;
 	struct fsnp_query_res *query_res;
 
+	get_server_addr(&server);
+	if (server.ip == 0 && server.port == 0) {
+		slog_warn(STDOUT_LEVEL, "You cannot contact a superpeer if you haven't"
+						  " contacted a boot server before!");
+		return;
+	}
+
+	printf("Insert the address of the superpeer.\n");
 	if (!request_user_ip_port(&addr)) {
 		return;
 	}
@@ -341,6 +351,7 @@ static void download_handler(void)
 		return;
 	}
 
+	printf("Insert the address of the peer.\n");
 	ok = request_user_ip_port(&addr);
 	if (!ok) {
 		slog_warn(FILE_LEVEL, "Unable to read peer's address");
@@ -485,7 +496,6 @@ static void parse_msg(const char *msg, size_t n)
 	} else if (!strncmp(msg, quit, n)) {
 		quit_peer();
 	} else {
-		printf("?\n");
 		slog_debug(FILE_LEVEL, "Unknown message received");
 	}
 }
