@@ -340,7 +340,7 @@ static void ensure_prev_conn(struct sp_udp_state *sus)
 			send_promoted(sus);
 		}
 
-		if (!cmp_prev(sus->nb, &p)) {
+		if (!cmp_prev(sus->nb, &p) && msg) {
 			struct in_addr a;
 			a.s_addr = htonl(p.ip);
 			slog_warn(FILE_LEVEL, "UDP msg received from another sp (%s:%hu) while waiting for a NEXT", inet_ntoa(a), p.port);
@@ -428,7 +428,7 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 			sus->next_validated = false;
 		}
 
-		if (!cmp_next(sus->nb, &p)) {
+		if (!cmp_next(sus->nb, &p) && msg) {
 			a.s_addr = htonl(p.ip);
 			slog_warn(FILE_LEVEL, "UDP msg of type %u received from another sp "
 						 "(%s:%hu) while waiting for an ACK", msg->msg_type,
