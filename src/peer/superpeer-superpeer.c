@@ -332,15 +332,16 @@ static void ensure_prev_conn(struct sp_udp_state *sus)
 				exit_sp_mode();
 				return;
 			}
-		} else if (!msg && counter < 4){
+		} else if (!msg && counter < 4) {
 			fsnp_log_err_msg(err, false);
 			counter++;
 			slog_info(FILE_LEVEL, "Trying to contact for the %d time the sp",
 			          counter);
 			send_promoted(sus);
+			continue;
 		}
 
-		if (!cmp_prev(sus->nb, &p) && msg) {
+		if (!cmp_prev(sus->nb, &p)) {
 			struct in_addr a;
 			a.s_addr = htonl(p.ip);
 			slog_warn(FILE_LEVEL, "UDP msg received from another sp (%s:%hu) while waiting for a NEXT", inet_ntoa(a), p.port);
@@ -426,15 +427,22 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 					counter);
 			send_next(sus, old_next);
 			sus->next_validated = false;
+			continue;
 		}
 
-		if (!cmp_next(sus->nb, &p) && msg) {
+		if (!cmp_next(sus->nb, &p)) {
 			a.s_addr = htonl(p.ip);
 			slog_warn(FILE_LEVEL, "UDP msg of type %u received from another sp "
 						 "(%s:%hu) while waiting for an ACK", msg->msg_type,
 						 inet_ntoa(a), p.port);
 			if (cmp_prev(sus->nb, &p) && msg->msg_type == WHOSNEXT) {
 				slog_debug(FILE_LEVEL, "WHOSNEXT rcvd from prev deferred");
+				s.addr = sus->nb->prev;
+				strncpy(s.pretty_addr, sus->nb->prev_pretty, sizeof(char) * 32);
+				// the sp doesn't know yet its next, but it need to tell to its
+				// prev that it's alive... sending an ACK is perfect in this case
+				send_ack(sus, &s);
+				memset(&s, 0, sizeof(struct sender));
 				prev_asked_next = true;
 			}
 
