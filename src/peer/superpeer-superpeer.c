@@ -302,6 +302,9 @@ static void ensure_prev_conn(struct sp_udp_state *sus)
 	struct sender s;
 	fsnp_err_t err;
 	unsigned counter = 0;
+	struct timespec l;
+	struct timespec c;
+	double delta = 0;
 
 	if (!isset_prev(sus->nb)) {
 		return;
@@ -311,6 +314,7 @@ static void ensure_prev_conn(struct sp_udp_state *sus)
 		return;
 	}
 
+	update_timespec(&l);
 	while (true) {
 		slog_info(FILE_LEVEL, "Waiting a NEXT msg from the prev");
 		msg = fsnp_timed_recvfrom(sus->sock, 0, &p, &err);
@@ -318,6 +322,7 @@ static void ensure_prev_conn(struct sp_udp_state *sus)
 			slog_warn(FILE_LEVEL, "Unable to receive a NEXT msg from the prev sp");
 			unset_prev(sus->nb);
 			fsnp_log_err_msg(err, false);
+			update_timespec(&l);
 			if (isset_snd_next(sus->nb)) {
 				counter = 0;
 				set_prev(sus->nb, &sus->nb->snd_next);
@@ -333,6 +338,7 @@ static void ensure_prev_conn(struct sp_udp_state *sus)
 				return;
 			}
 		} else if (!msg && counter < 4) {
+			update_timespec(&l);
 			fsnp_log_err_msg(err, false);
 			counter++;
 			slog_info(FILE_LEVEL, "Trying to contact for the %d time the sp",
@@ -346,6 +352,13 @@ static void ensure_prev_conn(struct sp_udp_state *sus)
 			a.s_addr = htonl(p.ip);
 			slog_warn(FILE_LEVEL, "UDP msg received from another sp (%s:%hu) while waiting for a NEXT", inet_ntoa(a), p.port);
 			free(msg);
+			update_timespec(&c);
+			delta = calculate_timespec_delta(&c, &l);
+			if (delta > (double)FSNP_TIMEOUT) {
+				counter++;
+				update_timespec(&l);
+			}
+
 			continue;
 		} else {
 			break;
@@ -399,6 +412,9 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 	struct fsnp_whosnext whosnext;
 	struct sender s;
 	struct in_addr a;
+	struct timespec l;
+	struct timespec c;
+	double delta = 0;
 
 	if (!isset_next(sus->nb)) {
 		return;
@@ -408,6 +424,7 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 		return;
 	}
 
+	update_timespec(&l);
 	while (true) {
 		slog_info(FILE_LEVEL, "Waiting an ACK for validating the next...");
 		msg = fsnp_timed_recvfrom(sus->sock, 0, &p, &err);
@@ -420,7 +437,8 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 			exit_sp_mode();
 			sus->should_exit = true;
 			return;
-		} else if (!msg && counter < 4){
+		} else if (!msg && counter < 4) {
+			update_timespec(&l);
 			fsnp_log_err_msg(err, false);
 			counter++;
 			slog_info(FILE_LEVEL, "Trying to contact for the %u time the next",
@@ -435,6 +453,13 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 			slog_warn(FILE_LEVEL, "UDP msg of type %u received from another sp "
 						 "(%s:%hu) while waiting for an ACK", msg->msg_type,
 						 inet_ntoa(a), p.port);
+			update_timespec(&c);
+			delta = calculate_timespec_delta(&c, &l);
+			if (delta > (double)FSNP_TIMEOUT) {
+				counter++;
+				update_timespec(&l);
+			}
+			
 			if (cmp_prev(sus->nb, &p) && msg->msg_type == WHOSNEXT) {
 				slog_debug(FILE_LEVEL, "WHOSNEXT rcvd from prev deferred");
 				s.addr = sus->nb->prev;
