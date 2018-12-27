@@ -318,7 +318,7 @@ static void ensure_prev_conn(struct sp_udp_state *sus)
 	while (true) {
 		slog_info(FILE_LEVEL, "Waiting a NEXT msg from the prev");
 		msg = fsnp_timed_recvfrom(sus->sock, 0, &p, &err);
-		if (!msg && counter >= 4) {
+		if ((!msg && counter >= 4) || counter >= 4) {
 			slog_warn(FILE_LEVEL, "Unable to receive a NEXT msg from the prev sp");
 			unset_prev(sus->nb);
 			fsnp_log_err_msg(err, false);
@@ -428,7 +428,7 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 	while (true) {
 		slog_info(FILE_LEVEL, "Waiting an ACK for validating the next...");
 		msg = fsnp_timed_recvfrom(sus->sock, 0, &p, &err);
-		if (!msg && counter >= 4) {
+		if ((!msg && counter >= 4) || counter >= 4) {
 			slog_warn(FILE_LEVEL, "Unable to ensure next's connection");
 			fsnp_log_err_msg(err, false);
 			slog_warn(STDOUT_LEVEL, "Please join the network again");
