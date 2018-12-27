@@ -353,8 +353,8 @@ static void ensure_prev_conn(struct sp_udp_state *sus)
 			slog_warn(FILE_LEVEL, "UDP msg received from another sp (%s:%hu) while waiting for a NEXT", inet_ntoa(a), p.port);
 			free(msg);
 			update_timespec(&c);
-			delta = calculate_timespec_delta(&c, &l);
-			if (delta > (double)FSNP_TIMEOUT) {
+			delta = calculate_timespec_delta(&l, &c);
+			if (delta > MSEC_TO_SEC(FSNP_TIMEOUT)) {
 				counter++;
 				update_timespec(&l);
 			}
@@ -454,8 +454,8 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 						 "(%s:%hu) while waiting for an ACK", msg->msg_type,
 						 inet_ntoa(a), p.port);
 			update_timespec(&c);
-			delta = calculate_timespec_delta(&c, &l);
-			if (delta > (double)FSNP_TIMEOUT) {
+			delta = calculate_timespec_delta(&l, &c);
+			if (delta > MSEC_TO_SEC(FSNP_TIMEOUT)) {
 				counter++;
 				update_timespec(&l);
 			}
@@ -482,6 +482,12 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 		slog_warn(FILE_LEVEL, "Wrong msg type received from sp %s: expected "
 						"ACK (%u), got %u", sus->nb->next_pretty, ACK,
 						msg->msg_type);
+		if (msg->msg_type == LEAVE) {
+			prepare_exit_sp_mode();
+			exit_sp_mode();
+			sus->next_validated = false;
+			sus->should_exit = true;
+		}
 	} else {
 		slog_info(FILE_LEVEL, "The next has sent an ACK msg. Next validated");
 	}

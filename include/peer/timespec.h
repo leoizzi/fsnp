@@ -29,6 +29,7 @@ static inline void update_timespec(struct timespec *t)
 }
 
 #define NSEC_TO_SEC(ns) ((double)(ns) / 1000000000.)
+#define MSEC_TO_SEC(ms) ((double)ms / 1000.)
 
 /*
  * Calculate the delta of two timespecs (b - a)
