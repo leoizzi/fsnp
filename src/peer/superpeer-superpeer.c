@@ -459,7 +459,7 @@ static void ensure_next_conn(struct sp_udp_state *sus,
 				counter++;
 				update_timespec(&l);
 			}
-			
+
 			if (cmp_prev(sus->nb, &p) && msg->msg_type == WHOSNEXT) {
 				slog_debug(FILE_LEVEL, "WHOSNEXT rcvd from prev deferred");
 				s.addr = sus->nb->prev;
